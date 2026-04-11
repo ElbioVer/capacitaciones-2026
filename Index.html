@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan de Capacitación 2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;min-height:100vh;color:#1a1a1a}
+.app{max-width:560px;margin:0 auto;background:#f4f4f2;min-height:100vh;display:flex;flex-direction:column}
+.header{background:#fff;border-bottom:1px solid #e5e5e0;padding:14px 16px;position:sticky;top:0;z-index:20}
+.header-row{display:flex;align-items:center;justify-content:space-between}
+.header-title{font-size:18px;font-weight:600;color:#111}
+.header-sub{font-size:12px;color:#777;margin-top:2px;display:flex;align-items:center;gap:5px}
+.sync-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#1D9E75;flex-shrink:0}
+.sync-dot.syncing{background:#EF9F27;animation:pulse 1s infinite}
+.sync-dot.error{background:#E24B4A}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.btn-green{background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-green:hover{background:#0F6E56}
+.btn-green:disabled{background:#aaa;cursor:not-allowed}
+.btn-gray{background:#f4f4f2;color:#555;border:1px solid #ddd;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer}
+.btn-gray:hover{background:#e8e8e4}
+.filter-bar{background:#fff;border-bottom:1px solid #e5e5e0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filter-bar label{font-size:11px;color:#888;white-space:nowrap}
+.filter-bar select{font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;cursor:pointer;max-width:140px}
+.filter-bar select:focus{outline:none;border-color:#1D9E75}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e5e0}
+.stat{background:#f4f4f2;border-radius:8px;padding:8px;text-align:center}
+.stat-num{font-size:20px;font-weight:600;color:#111}
+.stat-lbl{font-size:10px;color:#888;margin-top:1px}
+.stat-num.ok{color:#0F6E56}.stat-num.pend{color:#BA7517}.stat-num.miss{color:#A32D2D}
+.tabs{display:flex;background:#fff;border-bottom:1px solid #e5e5e0;padding:0 16px;overflow-x:auto;position:sticky;top:72px;z-index:19}
+.tab{flex-shrink:0;padding:11px 14px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:#888;white-space:nowrap}
+.tab.active{color:#1D9E75;border-bottom-color:#1D9E75}
+.content{flex:1;padding:12px 16px}
+.cap-card{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:13px;margin-bottom:9px;cursor:pointer;transition:border-color .15s}
+.cap-card:hover{border-color:#aaa}
+.cap-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:7px}
+.cap-title{font-size:13px;font-weight:600;color:#111;flex:1}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.badge.realizada{background:#E1F5EE;color:#085041}
+.badge.pendiente{background:#FAEEDA;color:#854F0B}
+.badge.vencida{background:#FCEBEB;color:#A32D2D}
+.badge.programada{background:#E6F1FB;color:#185FA5}
+.badge.admin{background:#EEEDFE;color:#3C3489}
+.badge.visor{background:#f4f4f2;color:#555}
+.cap-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:#777;margin-bottom:8px}
+.chip-bim{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:500;background:#E6F1FB;color:#185FA5}
+.progress-bar{height:4px;background:#eee;border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;border-radius:99px;background:#1D9E75;transition:width .3s}
+.progress-fill.warn{background:#EF9F27}
+.progress-fill.danger{background:#E24B4A}
+.progress-fill.purple{background:#7F77DD}
+.cap-asist{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+.asist-nums{font-size:11px;color:#777}
+.asist-pct{font-size:12px;font-weight:600;color:#1D9E75}
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f4f2;padding:24px}
+.login-card{background:#fff;border-radius:16px;border:1px solid #e5e5e0;padding:32px 28px;width:100%;max-width:360px}
+.login-logo{text-align:center;margin-bottom:24px}
+.login-logo-icon{width:56px;height:56px;background:#E1F5EE;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:26px}
+.login-title{font-size:20px;font-weight:600;color:#111;text-align:center}
+.login-sub{font-size:13px;color:#888;text-align:center;margin-top:4px}
+.login-form{margin-top:24px}
+.login-group{margin-bottom:14px}
+.login-label{font-size:12px;color:#666;margin-bottom:5px;display:block;font-weight:500}
+.login-input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;color:#111;font-family:inherit;background:#fff}
+.login-input:focus{outline:none;border-color:#1D9E75;box-shadow:0 0 0 3px rgba(29,158,117,.1)}
+.login-btn{width:100%;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
+.login-btn:hover{background:#0F6E56}
+.login-btn:disabled{background:#aaa;cursor:not-allowed}
+.login-error{background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:10px 12px;font-size:13px;margin-top:12px;text-align:center;display:none}
+.rol-badge{display:inline-flex;align-items:center;gap:5px;background:#E1F5EE;color:#085041;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600}
+.rol-badge.visor{background:#f4f4f2;color:#555}
+.user-info{display:flex;align-items:center;gap:8px}
+.user-avatar{width:30px;height:30px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#085041;flex-shrink:0}
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:16px 16px 0 0;padding:18px 16px 36px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto}
+.modal-handle{width:32px;height:3px;background:#ccc;border-radius:99px;margin:0 auto 14px}
+.form-group{margin-bottom:12px}
+.form-label{font-size:11px;color:#777;margin-bottom:4px;display:block}
+.form-input{width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;font-size:13px;font-family:inherit}
+.form-input:focus{outline:none;border-color:#1D9E75}
+select.form-input{cursor:pointer}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.btn-row{display:flex;gap:8px;margin-top:16px}
+.btn-prim{flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-prim:hover{background:#0F6E56}
+.btn-prim:disabled{background:#aaa;cursor:not-allowed}
+.btn-sec{flex:1;background:#fff;color:#666;border:1px solid #ddd;border-radius:8px;padding:11px;font-size:13px;cursor:pointer}
+.btn-sec:hover{background:#f4f4f2}
+.btn-del{background:#FCEBEB;color:#A32D2D;border:1px solid #F09595;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}
+.btn-del:hover{background:#F7C1C1}
+.btn-export{background:#E6F1FB;color:#185FA5;border:1px solid #85B7EB;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500}
+.btn-export:hover{background:#B5D4F4}
+.detail-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0f0ec;font-size:13px}
+.detail-row:last-child{border-bottom:none}
+.detail-key{color:#777}
+.detail-val{color:#111;font-weight:500;text-align:right;max-width:60%}
+.section-title{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px}
+.legajo-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.legajo-table th{text-align:left;padding:6px 8px;background:#f4f4f2;color:#888;font-weight:600;font-size:11px;border-bottom:1px solid #eee}
+.legajo-table td{padding:6px 8px;border-bottom:1px solid #f0f0ec;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legajo-table tr:last-child td{border-bottom:none}
+.del-btn{background:none;border:none;cursor:pointer;color:#ccc;font-size:16px;padding:0 2px;line-height:1}
+.del-btn:hover{color:#A32D2D}
+.plan-block{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:13px;margin-bottom:9px}
+.plan-block-title{font-size:13px;font-weight:600;color:#111;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.plan-row-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0ec;cursor:pointer}
+.plan-row-item:last-child{border-bottom:none}
+.plan-row-item:hover{opacity:.75}
+.plan-item-name{font-size:12px;color:#111;flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-bar{flex:1;max-width:60px;height:5px;background:#eee;border-radius:99px;overflow:hidden;margin:0 8px}
+.mini-fill{height:100%;border-radius:99px;background:#1D9E75}
+.mini-fill.warn{background:#EF9F27}
+.mini-fill.danger{background:#E24B4A}
+.config-section{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:13px;margin-bottom:9px}
+.config-title{font-size:13px;font-weight:600;color:#111;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.tag{background:#f4f4f2;border:1px solid #e0e0da;border-radius:99px;padding:4px 10px;font-size:12px;color:#111;display:flex;align-items:center;gap:5px}
+.tag-del{color:#bbb;cursor:pointer;font-size:15px;line-height:1}
+.tag-del:hover{color:#A32D2D}
+.upload-btn-label{background:#E1F5EE;color:#085041;border:1px solid #5DCAA5;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500}
+.upload-btn-label:hover{background:#9FE1CB}
+.user-card{background:#fff;border-radius:10px;border:1px solid #e5e5e0;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.user-card-info{flex:1}
+.user-card-name{font-size:13px;font-weight:600;color:#111}
+.user-card-meta{font-size:11px;color:#888;margin-top:2px}
+.user-card-actions{display:flex;gap:6px}
+.empty-state{text-align:center;padding:40px 24px;color:#888}
+.empty-num{font-size:32px;margin-bottom:10px}
+.empty-t{font-size:14px;font-weight:600;color:#333;margin-bottom:5px}
+.loading{text-align:center;padding:48px;color:#888;font-size:14px}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.visor-banner{background:#FAEEDA;border-bottom:1px solid #FAC775;padding:8px 16px;font-size:12px;color:#854F0B;text-align:center;font-weight:500}
+.format-hint{background:#f4f4f2;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;line-height:2;color:#444}
+@media(max-width:400px){.stats-bar{grid-template-columns:repeat(2,1fr)}.form-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🎓</div>
+      <div class="login-title">Plan de Capacitación 2026</div>
+      <div class="login-sub">Ingresá con tu usuario</div>
+    </div>
+    <div class="login-form">
+      <div class="login-group">
+        <label class="login-label">Email</label>
+        <input class="login-input" id="login-email" type="email" placeholder="usuario@empresa.com" autocomplete="email">
+      </div>
+      <div class="login-group">
+        <label class="login-label">Contraseña</label>
+        <input class="login-input" id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
+      <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app-wrap" style="display:none">
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <div class="header-title">Plan de Capacitación 2026</div>
+        <div class="header-sub"><span class="sync-dot" id="sync-dot"></span><span id="hdr-sub">Conectando...</span></div>
+      </div>
+      <div class="user-info">
+        <div id="user-avatar" class="user-avatar">?</div>
+        <button class="btn-gray" onclick="doLogout()">Salir</button>
+      </div>
+    </div>
+  </div>
+  <div id="visor-banner" class="visor-banner" style="display:none">👁 Modo visualización — solo lectura</div>
+  <div class="filter-bar">
+    <label>Bimestre</label>
+    <select id="flt-bim" onchange="applyFilters()">
+      <option value="">Todos</option>
+      <option>1° Bimestre (Ene-Feb)</option>
+      <option>2° Bimestre (Mar-Abr)</option>
+      <option>3° Bimestre (May-Jun)</option>
+      <option>4° Bimestre (Jul-Ago)</option>
+      <option>5° Bimestre (Sep-Oct)</option>
+      <option>6° Bimestre (Nov-Dic)</option>
+    </select>
+    <label>UN</label>
+    <select id="flt-un" onchange="applyFilters()"><option value="">Todas</option></select>
+    <label>Sector</label>
+    <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
+  </div>
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
+    <div class="stat"><div class="stat-num ok" id="st-ok">—</div><div class="stat-lbl">Realizadas</div></div>
+    <div class="stat"><div class="stat-num pend" id="st-pend">—</div><div class="stat-lbl">Pendientes</div></div>
+    <div class="stat"><div class="stat-num miss" id="st-venc">—</div><div class="stat-lbl">Vencidas</div></div>
+  </div>
+  <div class="tabs" id="tabs-bar">
+    <div class="tab active" id="tab-lista" onclick="switchTab('lista')">Lista</div>
+    <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
+    <div class="tab" id="tab-un" onclick="switchTab('un')">Por UN/Sector</div>
+    <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
+    <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
+    <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
+  </div>
+  <div class="content" id="content"><div class="loading">Cargando datos...</div></div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
+  <div class="modal" id="modal-box"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPA_URL='https://alfmizpxkfvafvipjkvr.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsZm1penB4a2Z2YWZ2aXBqa3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTc4NzEsImV4cCI6MjA5MTI3Mzg3MX0.4kUViDv8QA4mwXK_uDCaGqT3vorEo1MFFRKn_gU4-eg';
+const H={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
+
+const BIMESTRES=[
+  {label:'1° Bimestre (Ene-Feb)',months:[1,2]},
+  {label:'2° Bimestre (Mar-Abr)',months:[3,4]},
+  {label:'3° Bimestre (May-Jun)',months:[5,6]},
+  {label:'4° Bimestre (Jul-Ago)',months:[7,8]},
+  {label:'5° Bimestre (Sep-Oct)',months:[9,10]},
+  {label:'6° Bimestre (Nov-Dic)',months:[11,12]}
+];
+
+let caps=[],asistentes=[],uns=[],sectores=[],usuarios=[];
+let currentTab='lista',fltBim='',fltUN='',fltSec='';
+let currentUser=null;
+
+function isAdmin(){return currentUser&&currentUser.rol==='admin';}
+function canEdit(){return isAdmin();}
+
+async function api(method,table,body,query){
+  query=query||'';
+  const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}`,{
+    method,headers:H,body:body?JSON.stringify(body):undefined
+  });
+  if(!r.ok) throw new Error(await r.text());
+  if(r.status===204) return null;
+  const ct=r.headers.get('content-type')||'';
+  return ct.includes('json')?r.json():null;
+}
+
+function setSyncStatus(s){
+  const d=document.getElementById('sync-dot');
+  d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+}
+
+function toast(msg,dur){
+  dur=dur||2500;
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// LOGIN
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim().toLowerCase();
+  const pass=document.getElementById('login-pass').value.trim();
+  const btn=document.getElementById('login-btn');
+  const err=document.getElementById('login-error');
+  if(!email||!pass) return;
+  btn.disabled=true;btn.textContent='Ingresando...';err.style.display='none';
+  try{
+    const res=await api('GET','usuarios','',`?email=eq.${encodeURIComponent(email)}&password_hash=eq.${encodeURIComponent(pass)}&activo=eq.true`);
+    if(!res||!res.length){
+      err.style.display='block';
+      btn.disabled=false;btn.textContent='Ingresar';
+      return;
+    }
+    currentUser=res[0];
+    sessionStorage.setItem('capUser',JSON.stringify(currentUser));
+    showApp();
+  }catch(e){
+    err.textContent='Error de conexión. Intentá de nuevo.';
+    err.style.display='block';
+    btn.disabled=false;btn.textContent='Ingresar';
+  }
+}
+
+function doLogout(){
+  sessionStorage.removeItem('capUser');
+  currentUser=null;
+  document.getElementById('login-wrap').style.display='flex';
+  document.getElementById('app-wrap').style.display='none';
+  document.getElementById('login-email').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-btn').disabled=false;
+  document.getElementById('login-btn').textContent='Ingresar';
+  document.getElementById('login-error').style.display='none';
+}
+
+function showApp(){
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app-wrap').style.display='flex';
+  // avatar
+  const av=document.getElementById('user-avatar');
+  av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
+  // visor banner
+  document.getElementById('visor-banner').style.display=isAdmin()?'none':'block';
+  // tabs admin-only
+  document.getElementById('tab-config').style.display=isAdmin()?'':'none';
+  document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
+  // filtros visor: precargar su UN/Sector
+  if(!isAdmin()){
+    if(currentUser.un){fltUN=currentUser.un;}
+    if(currentUser.sector){fltSec=currentUser.sector;}
+  }
+  loadAll();
+}
+
+async function loadAll(){
+  setSyncStatus('syncing');
+  document.getElementById('hdr-sub').textContent='Sincronizando...';
+  try{
+    const queries=[
+      api('GET','capacitaciones','','?order=fecha.asc'),
+      api('GET','asistentes','','?order=nombre.asc'),
+      api('GET','unidades_negocio','','?order=nombre.asc'),
+      api('GET','sectores','','?order=nombre.asc')
+    ];
+    if(isAdmin()) queries.push(api('GET','usuarios','','?order=nombre.asc'));
+    const res=await Promise.all(queries);
+    caps=res[0]||[];asistentes=res[1]||[];uns=res[2]||[];sectores=res[3]||[];
+    if(isAdmin()) usuarios=res[4]||[];
+    setSyncStatus('ok');
+    updateSub();
+    populateFilters();
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    document.getElementById('hdr-sub').textContent='Sin conexión';
+  }
+}
+
+function updateSub(){
+  const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
+  const pct=total?Math.round(ok/total*100):0;
+  const nombre=currentUser?currentUser.nombre.split(' ')[0]:'';
+  document.getElementById('hdr-sub').textContent=`Hola ${nombre} · ${pct}% completado`;
+}
+
+function getA(capId){return asistentes.filter(a=>a.capacitacion_id===capId);}
+
+function getFiltered(){
+  return caps.filter(c=>{
+    if(fltBim&&c.bimestre!==fltBim) return false;
+    if(fltUN||fltSec){
+      const a=getA(c.id);
+      if(!a.length) return true;
+      return a.some(x=>{
+        if(fltUN&&x.un!==fltUN) return false;
+        if(fltSec&&x.sector!==fltSec) return false;
+        return true;
+      });
+    }
+    return true;
+  });
+}
+
+function applyFilters(){
+  fltBim=document.getElementById('flt-bim').value;
+  fltUN=document.getElementById('flt-un').value;
+  fltSec=document.getElementById('flt-sec').value;
+  renderContent();
+}
+
+function populateFilters(){
+  const unEl=document.getElementById('flt-un');
+  const secEl=document.getElementById('flt-sec');
+  // visor: solo ve su UN/Sector
+  if(!isAdmin()&&currentUser.un){
+    unEl.innerHTML=`<option value="${esc(currentUser.un)}">${esc(currentUser.un)}</option>`;
+    unEl.disabled=true;
+    if(currentUser.sector){
+      secEl.innerHTML=`<option value="${esc(currentUser.sector)}">${esc(currentUser.sector)}</option>`;
+      secEl.disabled=true;
+    }else{
+      secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===currentUser.un).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');
+      secEl.disabled=false;
+    }
+  }else{
+    unEl.disabled=false;secEl.disabled=false;
+    unEl.innerHTML='<option value="">Todas</option>'+uns.map(u=>`<option${fltUN===u.nombre?' selected':''}>${u.nombre}</option>`).join('');
+    secEl.innerHTML='<option value="">Todos</option>'+sectores.map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');
+  }
+  document.getElementById('flt-bim').value=fltBim;
+}
+
+function renderStats(f){
+  document.getElementById('st-tot').textContent=f.length;
+  document.getElementById('st-ok').textContent=f.filter(c=>c.estado==='Realizada').length;
+  document.getElementById('st-pend').textContent=f.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
+  document.getElementById('st-venc').textContent=f.filter(c=>c.estado==='Vencida').length;
+}
+
+function sFill(estado,pct){
+  if(estado==='Vencida') return 'danger';
+  if(estado==='Pendiente') return 'warn';
+  if(estado==='Programada') return 'purple';
+  if(pct<50) return 'warn';
+  return '';
+}
+
+function capCard(c){
+  const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+  const pct=esp?Math.round(comp/esp*100):0;
+  return`<div class="cap-card" onclick="openDetail(${c.id})">
+    <div class="cap-top"><div class="cap-title">${esc(c.titulo)}</div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>
+    <div class="cap-meta"><span>${esc(c.area||'')}</span><span>·</span><span>${fmtF(c.fecha)}</span><span>·</span><span>${c.duracion}h</span>${c.bimestre?`<span class="chip-bim">${c.bimestre.split('(')[0].trim()}</span>`:''}</div>
+    <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron</span><span class="asist-pct" style="${pct<50&&c.estado==='Realizada'?'color:#BA7517':''}">${pct}%</span></div>
+    <div class="progress-bar" style="margin-top:5px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${Math.min(pct,100)}%"></div></div>
+  </div>`;
+}
+
+function switchTab(t){
+  currentTab=t;
+  ['lista','bim','un','resumen','config','usuarios'].forEach(x=>{
+    const el=document.getElementById('tab-'+x);
+    if(el) el.classList.toggle('active',x===t);
+  });
+  renderContent();
+}
+
+function renderContent(){
+  const f=getFiltered();
+  renderStats(f);
+  const el=document.getElementById('content');
+  // boton nueva solo admin
+  const btnNueva=document.getElementById('btn-nueva');
+  if(btnNueva) btnNueva.style.display=isAdmin()?'':'none';
+
+  if(currentTab==='lista') el.innerHTML=(f.length?f.map(c=>capCard(c)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>');
+  else if(currentTab==='bim') el.innerHTML=renderBim();
+  else if(currentTab==='un') el.innerHTML=renderUN();
+  else if(currentTab==='resumen') el.innerHTML=renderResumen();
+  else if(currentTab==='config') el.innerHTML=renderConfig();
+  else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
+}
+
+function renderBim(){
+  return BIMESTRES.map(b=>{
+    const g=getFiltered().filter(c=>c.bimestre===b.label);
+    const ok=g.filter(c=>c.estado==='Realizada').length;
+    const pct=g.length?Math.round(ok/g.length*100):0;
+    const fill=pct>=75?'':pct>=40?'warn':'danger';
+    const rows=g.length?g.map(c=>{
+      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+      const p=esp?Math.round(comp/esp*100):0;
+      const mf=p>=75?'':p>=40?'warn':'danger';
+      return`<div class="plan-row-item" onclick="openDetail(${c.id})"><span class="plan-item-name">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${mf}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
+    }).join(''):'<p style="font-size:12px;color:#ccc;padding:4px 0">Sin capacitaciones en este período</p>';
+    return`<div class="plan-block"><div class="plan-block-title"><span>${b.label}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:5px;margin-bottom:10px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
+  }).join('');
+}
+
+function renderUN(){
+  const f=getFiltered();
+  const unList=fltUN?uns.filter(u=>u.nombre===fltUN):uns;
+  if(!unList.length) return'<div class="empty-state"><div class="empty-num">🏢</div><div class="empty-t">Sin unidades configuradas</div></div>';
+  return unList.map(un=>{
+    const secList=fltSec?sectores.filter(s=>s.un===un.nombre&&s.nombre===fltSec):sectores.filter(s=>s.un===un.nombre);
+    const secRows=secList.map(sec=>{
+      const capsConSec=f.filter(c=>getA(c.id).some(a=>a.sector===sec.nombre&&a.un===un.nombre));
+      const partics=[...new Map(f.flatMap(c=>getA(c.id).filter(a=>a.sector===sec.nombre&&a.un===un.nombre)).map(a=>[a.legajo,a])).values()];
+      const capRows=capsConSec.length?capsConSec.map(c=>{
+        const as=getA(c.id).filter(a=>a.sector===sec.nombre&&a.un===un.nombre);
+        const comp=as.filter(a=>a.completo).length;
+        return`<div class="plan-row-item" onclick="openDetail(${c.id})"><span class="plan-item-name">${esc(c.titulo)}</span><span style="font-size:11px;color:#999;margin-right:6px">${comp}/${as.length}</span><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
+      }).join(''):'<p style="font-size:11px;color:#ccc;padding:4px 0">Sin registros de asistencia</p>';
+      return`<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:#333;padding:5px 0;border-bottom:1px solid #f0f0ec;margin-bottom:5px">${esc(sec.nombre)} <span style="color:#999;font-weight:400">· ${partics.length} empleados · ${capsConSec.length} capacitaciones</span></div>${capRows}</div>`;
+    }).join('')||'<p style="font-size:12px;color:#bbb">Sin sectores configurados</p>';
+    return`<div class="plan-block"><div class="plan-block-title">🏢 ${esc(un.nombre)}</div>${secRows}</div>`;
+  }).join('');
+}
+
+function renderResumen(){
+  const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
+  const pct=total?Math.round(ok/total*100):0;
+  const horas=caps.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
+  const totalComp=asistentes.filter(a=>a.completo).length;
+  const totalEsp=caps.reduce((s,c)=>s+Number(c.participantes_esperados||0),0);
+  const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
+  const bimRows=BIMESTRES.map(b=>{
+    const g=caps.filter(c=>c.bimestre===b.label);
+    const r=g.filter(c=>c.estado==='Realizada').length;
+    const p=g.length?Math.round(r/g.length*100):0;
+    const mf=p>=75?'':p>=40?'warn':'danger';
+    return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.label.split('(')[0].trim()}</span><span style="font-size:11px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${mf}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:30px;text-align:right">${p}%</span></div>`;
+  }).join('');
+  return`<div class="plan-block">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span style="font-size:13px;color:#888">Avance del plan 2026</span><span style="font-size:16px;font-weight:600;color:#1D9E75">${pct}%</span></div>
+    <div class="progress-bar" style="height:7px;margin-bottom:14px"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+      <div class="stat"><div class="stat-num ok">${ok}</div><div class="stat-lbl">Realizadas</div></div>
+      <div class="stat"><div class="stat-num pend">${caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length}</div><div class="stat-lbl">Por realizar</div></div>
+      <div class="stat"><div class="stat-num miss">${caps.filter(c=>c.estado==='Vencida').length}</div><div class="stat-lbl">Vencidas</div></div>
+      <div class="stat"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
+    </div>
+  </div>
+  <div class="plan-block">
+    <div class="plan-block-title">Ejecución general</div>
+    <div class="detail-row"><span class="detail-key">Horas realizadas</span><span class="detail-val">${horas} hs</span></div>
+    <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${totalComp} / ${totalEsp} (${pctA}%)</span></div>
+    <div class="detail-row"><span class="detail-key">Áreas cubiertas</span><span class="detail-val">${[...new Set(caps.map(c=>c.area).filter(Boolean))].length}</span></div>
+    <div class="detail-row"><span class="detail-key">Unidades de negocio</span><span class="detail-val">${uns.length}</span></div>
+    <div class="detail-row"><span class="detail-key">Sectores</span><span class="detail-val">${sectores.length}</span></div>
+  </div>
+  <div class="plan-block"><div class="plan-block-title">Avance por bimestre</div>${bimRows}</div>`;
+}
+
+function renderConfig(){
+  if(!isAdmin()) return'<div class="empty-state"><div class="empty-num">🔒</div><div class="empty-t">Sin acceso</div></div>';
+  const unTags=uns.map(u=>`<div class="tag">${esc(u.nombre)}<span class="tag-del" onclick="delUN(${u.id},'${esc(u.nombre)}')">×</span></div>`).join('');
+  const secTags=sectores.map(s=>`<div class="tag" style="border-radius:8px;flex-direction:column;align-items:flex-start;padding:5px 10px"><div style="display:flex;align-items:center;gap:5px;width:100%"><span style="font-size:12px;flex:1">${esc(s.nombre)}</span><span class="tag-del" onclick="delSector(${s.id},'${esc(s.nombre)}')">×</span></div><span style="font-size:10px;color:#999">${esc(s.un)}</span></div>`).join('');
+  return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:5px 10px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
+  <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:5px 10px" onclick="addSector()">+ Agregar</button></div><div class="tag-list">${secTags}</div></div>
+  <div class="config-section"><div class="config-title">Formato de importación Excel</div><div class="format-hint"><div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div><div><strong>un</strong> — Unidad de Negocio</div><div><strong>sector</strong> — sector del empleado</div><div><strong>completo</strong> — SI o NO</div></div></div>`;
+}
+
+function renderUsuarios(){
+  if(!isAdmin()) return'';
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:13px;font-weight:600;color:#111">${usuarios.length} usuarios registrados</span><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button></div>`;
+  if(!usuarios.length) return html+'<div class="empty-state"><div class="empty-num">👤</div><div class="empty-t">Sin usuarios</div></div>';
+  html+=usuarios.map(u=>{
+    const av=(u.nombre||'?').charAt(0).toUpperCase();
+    const rolLabel=u.rol==='admin'?'Admin':'Visor';
+    const meta=[u.email,u.un?`UN: ${u.un}`:'',u.sector?`Sector: ${u.sector}`:''].filter(Boolean).join(' · ');
+    return`<div class="user-card">
+      <div class="user-avatar" style="${u.rol==='admin'?'background:#EEEDFE;color:#3C3489':'background:#f4f4f2;color:#555'}">${av}</div>
+      <div class="user-card-info">
+        <div class="user-card-name">${esc(u.nombre)} ${u.activo?'':'<span style="color:#aaa;font-weight:400;font-size:11px">(inactivo)</span>'}</div>
+        <div class="user-card-meta">${esc(meta)}</div>
+      </div>
+      <div class="user-card-actions">
+        <span class="badge ${u.rol}">${rolLabel}</span>
+        <button class="btn-del" style="padding:5px 8px" onclick="editUsuario(${u.id})">✎</button>
+        ${u.id!==currentUser.id?`<button class="btn-del" style="padding:5px 8px" onclick="toggleUsuario(${u.id},${!u.activo})">${u.activo?'🚫':'✓'}</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  return html;
+}
+
+function openDetail(id){buildDetail(id);}
+
+function buildDetail(id){
+  const c=caps.find(x=>x.id===id);
+  if(!c) return;
+  const a=getA(id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+  const pct=esp?Math.round(comp/esp*100):0;
+  const falt=a.filter(x=>!x.completo);
+  const tblRows=a.map(x=>`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td>${esc(x.sector||'')}</td><td style="font-size:10px">${esc(x.un||'')}</td><td><span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Completó':'Pendiente'}</span></td>${canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:''}</tr>`).join('');
+  const colHeader=canEdit()?'<th style="width:28px"></th>':'';
+  const tbl=a.length?`<div style="overflow-x:auto;margin-top:6px"><table class="legajo-table"><thead><tr><th style="width:55px">Legajo</th><th>Nombre</th><th style="width:80px">Sector</th><th style="width:70px">UN</th><th style="width:65px">Estado</th>${colHeader}</tr></thead><tbody>${tblRows}</tbody></table></div>`:`<div style="background:#f4f4f2;border-radius:8px;padding:12px;text-align:center;font-size:12px;color:#888;margin-top:6px">${canEdit()?'Sin asistentes cargados. Importá desde Excel.':'Sin asistentes registrados.'}</div>`;
+  const exportBtn=falt.length?`<button class="btn-export" onclick="exportFalt(${id})">📥 Exportar faltantes (${falt.length})</button>`:'';
+  const adminBtns=canEdit()?`<div style="display:flex;gap:6px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
+  const importBtn=canEdit()?`<label class="upload-btn-label">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
+  showModal(`<div class="modal-handle"></div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px">
+      <div style="flex:1"><div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px">${esc(c.titulo)}</div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span>${c.bimestre?`<span class="chip-bim" style="margin-left:6px">${c.bimestre}</span>`:''}</div>
+      ${adminBtns}
+    </div>
+    <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:4px"><span>Asistencia completada</span><span>${pct}%</span></div><div class="progress-bar" style="height:6px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${pct}%"></div></div></div>
+    <div class="section-title">Información</div>
+    <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
+    <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
+    <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
+    <div class="detail-row"><span class="detail-key">Participantes esperados</span><span class="detail-val">${esp}</span></div>
+    <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} personas (${pct}%)</span></div>
+    <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:#BA7517">${falt.length} personas</span></div>
+    <div class="detail-row"><span class="detail-key">Instructor</span><span class="detail-val">${esc(c.instructor||'—')}</span></div>
+    ${c.obs?`<div class="detail-row"><span class="detail-key">Observaciones</span><span class="detail-val" style="font-size:12px">${esc(c.obs)}</span></div>`:''}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 4px;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">Asistentes (${a.length})</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${exportBtn}${importBtn}</div>
+    </div>
+    ${tbl}
+    <button class="btn-sec" style="width:100%;margin-top:16px" onclick="closeModal()">Cerrar</button>`);
+}
+
+async function deleteA(aid,capId){
+  if(!canEdit()){toast('Sin permisos');return;}
+  if(!confirm('¿Eliminar este participante?')) return;
+  setSyncStatus('syncing');
+  try{
+    await api('DELETE','asistentes','',`?id=eq.${aid}`);
+    asistentes=asistentes.filter(a=>a.id!==aid);
+    toast('Participante eliminado');setSyncStatus('ok');
+    buildDetail(capId);renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al eliminar');}
+}
+
+function exportFalt(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const falt=getA(capId).filter(a=>!a.completo);
+  if(!falt.length){toast('No hay faltantes');return;}
+  const rows=falt.map(a=>({'Legajo':a.legajo,'Nombre':a.nombre,'UN':a.un||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:25},{wch:18},{wch:18},{wch:12},{wch:35},{wch:12},{wch:25}];
+  XLSX.utils.book_append_sheet(wb,ws,'Faltantes');
+  XLSX.writeFile(wb,`faltantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
+  toast('Excel descargado');
+}
+
+async function importExcel(event,capId){
+  if(!canEdit()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      const nuevos=rows.map(r=>({capacitacion_id:capId,legajo:String(r.legajo||r.Legajo||r.LEGAJO||'').trim(),nombre:String(r.nombre||r.Nombre||r.NOMBRE||'').trim(),un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim(),sector:String(r.sector||r.Sector||r.SECTOR||'').trim(),completo:['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim())})).filter(r=>r.legajo);
+      if(!nuevos.length){alert('No se encontraron registros con columna "legajo".');return;}
+      setSyncStatus('syncing');toast('Importando...',10000);
+      await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
+      asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
+      const ins=await api('POST','asistentes',nuevos,'');
+      if(ins) asistentes=[...asistentes,...(Array.isArray(ins)?ins:[ins])];
+      for(const nombre of [...new Set(nuevos.map(a=>a.un).filter(Boolean))]){
+        if(!uns.find(u=>u.nombre===nombre)){const r=await api('POST','unidades_negocio',{nombre},'');if(r)uns.push(Array.isArray(r)?r[0]:r);}
+      }
+      const pairs=[...new Map(nuevos.filter(a=>a.sector&&a.un).map(a=>[`${a.sector}|${a.un}`,{nombre:a.sector,un:a.un}])).values()];
+      for(const s of pairs){if(!sectores.find(x=>x.nombre===s.nombre&&x.un===s.un)){const r=await api('POST','sectores',s,'');if(r)sectores.push(Array.isArray(r)?r[0]:r);}}
+      const capObj=caps.find(c=>c.id===capId);
+      if(capObj&&(capObj.estado==='Programada'||capObj.estado==='Pendiente')&&nuevos.filter(a=>a.completo).length>0){await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);capObj.estado='Realizada';}
+      setSyncStatus('ok');populateFilters();renderContent();buildDetail(capId);
+      toast(`${nuevos.length} participantes importados`);
+    }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function openNewCap(){if(!canEdit()){toast('Sin permisos');return;}showForm(null);}
+function openEdit(id){if(!canEdit()){toast('Sin permisos');return;}showForm(caps.find(x=>x.id===id));}
+
+function showForm(c){
+  const bOpts=BIMESTRES.map(b=>`<option${c&&c.bimestre===b.label?' selected':''}>${b.label}</option>`).join('');
+  const eOpts=['Programada','Pendiente','Realizada','Vencida'].map(e=>`<option${c&&c.estado===e?' selected':''}>${e}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:14px">${c?'Editar capacitación':'Nueva capacitación'}</div>
+    <div class="form-group"><label class="form-label">Título *</label><input class="form-input" id="f-tit" value="${c?esc(c.titulo):''}" placeholder="Nombre de la capacitación"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Área / Tema</label><input class="form-input" id="f-area" value="${c?esc(c.area||''):''}" placeholder="Seguridad..."></div>
+      <div class="form-group"><label class="form-label">Estado</label><select class="form-input" id="f-est">${eOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Fecha</label><input class="form-input" id="f-fecha" type="date" value="${c?c.fecha:''}"></div>
+      <div class="form-group"><label class="form-label">Bimestre</label><select class="form-input" id="f-bim">${bOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Duración (hs)</label><input class="form-input" id="f-dur" type="number" min="0.5" step="0.5" value="${c?c.duracion:4}"></div>
+      <div class="form-group"><label class="form-label">Participantes esperados</label><input class="form-input" id="f-par" type="number" min="1" value="${c?c.participantes_esperados:10}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
+    <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="f-obs" rows="2">${c?esc(c.obs||''):''}</textarea></div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv" onclick="saveCap(${c?c.id:'null'})">${c?'Guardar':'Agregar'}</button></div>`);
+}
+
+async function saveCap(id){
+  if(!canEdit()){toast('Sin permisos');return;}
+  const tit=document.getElementById('f-tit').value.trim();
+  if(!tit){alert('El título es obligatorio');return;}
+  const isNew=String(id)==='null';
+  const obj={titulo:tit,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim()};
+  const btn=document.getElementById('btn-sv');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  setSyncStatus('syncing');
+  try{
+    if(isNew){const r=await api('POST','capacitaciones',obj,'');const n=Array.isArray(r)?r[0]:r;if(n)caps.push(n);toast('Capacitación creada');}
+    else{await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);const i=caps.findIndex(c=>c.id===Number(id));if(i>=0)caps[i]={...caps[i],...obj};toast('Actualizada');}
+    setSyncStatus('ok');updateSub();closeModal();renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al guardar');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
+}
+
+async function deleteCap(id){
+  if(!canEdit()){toast('Sin permisos');return;}
+  if(!confirm('¿Eliminar esta capacitación y todos sus participantes?'))return;
+  setSyncStatus('syncing');
+  try{
+    await api('DELETE','capacitaciones','',`?id=eq.${id}`);
+    caps=caps.filter(c=>c.id!==id);asistentes=asistentes.filter(a=>a.capacitacion_id!==id);
+    toast('Eliminada');setSyncStatus('ok');closeModal();updateSub();renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al eliminar');}
+}
+
+async function addUN(){
+  if(!isAdmin())return;
+  const n=prompt('Nombre de la nueva Unidad de Negocio:');if(!n||!n.trim())return;
+  if(uns.find(u=>u.nombre===n.trim())){toast('Ya existe');return;}
+  try{const r=await api('POST','unidades_negocio',{nombre:n.trim()},'');const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);populateFilters();renderContent();toast('UN agregada');}catch(e){toast('Error');}
+}
+async function delUN(id,nombre){
+  if(!isAdmin())return;
+  if(!confirm(`¿Eliminar la UN "${nombre}"?`))return;
+  try{await api('DELETE','unidades_negocio','',`?id=eq.${id}`);uns=uns.filter(u=>u.id!==id);populateFilters();renderContent();toast('UN eliminada');}catch(e){toast('Error');}
+}
+async function addSector(){
+  if(!isAdmin())return;
+  if(!uns.length){alert('Primero agregá al menos una UN.');return;}
+  const unN=prompt(`¿A qué UN pertenece?\nOpciones: ${uns.map(u=>u.nombre).join(', ')}`);if(!unN)return;
+  const unReal=uns.find(u=>u.nombre.toLowerCase()===unN.trim().toLowerCase());
+  if(!unReal){alert('UN no encontrada.');return;}
+  const n=prompt('Nombre del sector:');if(!n||!n.trim())return;
+  if(sectores.find(s=>s.nombre.toLowerCase()===n.trim().toLowerCase()&&s.un===unReal.nombre)){toast('Ya existe');return;}
+  try{const r=await api('POST','sectores',{nombre:n.trim(),un:unReal.nombre},'');const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);populateFilters();renderContent();toast('Sector agregado');}catch(e){toast('Error');}
+}
+async function delSector(id,nombre){
+  if(!isAdmin())return;
+  if(!confirm(`¿Eliminar el sector "${nombre}"?`))return;
+  try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}
+}
+
+// USUARIOS
+function openNewUsuario(){
+  const unOpts='<option value="">Sin restricción (ve todo)</option>'+uns.map(u=>`<option>${u.nombre}</option>`).join('');
+  const secOpts='<option value="">Sin restricción</option>'+sectores.map(s=>`<option>${s.nombre}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:14px">Nuevo usuario</div>
+    <div class="form-group"><label class="form-label">Nombre completo *</label><input class="form-input" id="u-nombre" placeholder="Juan Pérez"></div>
+    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" placeholder="juan@empresa.com"></div>
+    <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-input" id="u-pass" type="text" placeholder="Contraseña inicial"></div>
+    <div class="form-group"><label class="form-label">Rol</label>
+      <select class="form-input" id="u-rol" onchange="toggleRolFields()">
+        <option value="visor">Visor (solo lectura)</option>
+        <option value="admin">Administrador</option>
+      </select>
+    </div>
+    <div id="rol-fields">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Unidad de Negocio</label><select class="form-input" id="u-un">${unOpts}</select></div>
+        <div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div>
+      </div>
+      <p style="font-size:11px;color:#888;margin-top:-6px">El visor solo verá datos de la UN/Sector asignado.</p>
+    </div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv-u" onclick="saveUsuario(null)">Crear usuario</button></div>`);
+}
+
+function toggleRolFields(){
+  const rol=document.getElementById('u-rol').value;
+  const fields=document.getElementById('rol-fields');
+  if(fields) fields.style.display=rol==='admin'?'none':'';
+}
+
+function editUsuario(id){
+  const u=usuarios.find(x=>x.id===id);if(!u)return;
+  const unOpts='<option value="">Sin restricción (ve todo)</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
+  const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:14px">Editar usuario</div>
+    <div class="form-group"><label class="form-label">Nombre completo *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
+    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}"></div>
+    <div class="form-group"><label class="form-label">Nueva contraseña (dejar vacío para no cambiar)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
+    <div class="form-group"><label class="form-label">Rol</label>
+      <select class="form-input" id="u-rol" onchange="toggleRolFields()">
+        <option value="visor"${u.rol==='visor'?' selected':''}>Visor (solo lectura)</option>
+        <option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option>
+      </select>
+    </div>
+    <div id="rol-fields" style="${u.rol==='admin'?'display:none':''}">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Unidad de Negocio</label><select class="form-input" id="u-un">${unOpts}</select></div>
+        <div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div>
+      </div>
+    </div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv-u" onclick="saveUsuario(${id})">Guardar cambios</button></div>`);
+}
+
+async function saveUsuario(id){
+  const nombre=document.getElementById('u-nombre').value.trim();
+  const email=document.getElementById('u-email').value.trim().toLowerCase();
+  const pass=document.getElementById('u-pass').value.trim();
+  const rol=document.getElementById('u-rol').value;
+  const un=rol==='admin'?null:(document.getElementById('u-un').value||null);
+  const sector=rol==='admin'?null:(document.getElementById('u-sec').value||null);
+  if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
+  const isNew=!id;
+  if(isNew&&!pass){alert('La contraseña es obligatoria para nuevos usuarios');return;}
+  const obj={nombre,email,rol,un,sector};
+  if(pass) obj.password_hash=pass;
+  const btn=document.getElementById('btn-sv-u');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    if(isNew){
+      const r=await api('POST','usuarios',{...obj,activo:true},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)usuarios.push(nv);
+      toast('Usuario creado');
+    }else{
+      await api('PATCH','usuarios',obj,`?id=eq.${id}`);
+      const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i]={...usuarios[i],...obj};
+      toast('Usuario actualizado');
+    }
+    closeModal();renderContent();
+  }catch(e){toast('Error: '+e.message);if(btn){btn.disabled=false;btn.textContent=isNew?'Crear usuario':'Guardar cambios';}}
+}
+
+async function toggleUsuario(id,nuevoEstado){
+  try{
+    await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);
+    const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;
+    toast(nuevoEstado?'Usuario activado':'Usuario desactivado');
+    renderContent();
+  }catch(e){toast('Error');}
+}
+
+function showModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-overlay').classList.add('open');}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
+function fmtF(f){if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// Boton Nueva en header
+document.querySelector('.header-row').querySelector('.btn-green').id='btn-nueva';
+document.getElementById('btn-nueva').onclick=openNewCap;
+
+// Verificar sesión guardada
+const savedUser=sessionStorage.getItem('capUser');
+if(savedUser){try{currentUser=JSON.parse(savedUser);showApp();}catch(e){}}
+
+setInterval(()=>{if(currentUser)loadAll();},30000);
+</script>
+</body>
+</html>

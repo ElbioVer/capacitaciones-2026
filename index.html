@@ -176,6 +176,7 @@ select.form-input{cursor:pointer}
         <div class="header-sub"><span class="sync-dot" id="sync-dot"></span><span id="hdr-sub">Conectando...</span></div>
       </div>
       <div class="user-info">
+        <button class="btn-green" id="btn-nueva" onclick="openNewCap()" style="display:none">+ Nueva</button>
         <div id="user-avatar" class="user-avatar">?</div>
         <button class="btn-gray" onclick="doLogout()">Salir</button>
       </div>
@@ -437,9 +438,8 @@ function renderContent(){
   const f=getFiltered();
   renderStats(f);
   const el=document.getElementById('content');
-  // boton nueva solo admin
   const btnNueva=document.getElementById('btn-nueva');
-  if(btnNueva) btnNueva.style.display=isAdmin()?'':'none';
+  if(btnNueva) btnNueva.style.display=isAdmin()?'inline-block':'none';
 
   if(currentTab==='lista') el.innerHTML=(f.length?f.map(c=>capCard(c)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>');
   else if(currentTab==='bim') el.innerHTML=renderBim();
@@ -822,9 +822,7 @@ function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))
 function fmtF(f){if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-// Boton Nueva en header
-document.querySelector('.header-row').querySelector('.btn-green').id='btn-nueva';
-document.getElementById('btn-nueva').onclick=openNewCap;
+
 
 // Verificar sesión guardada
 const savedUser=sessionStorage.getItem('capUser');

@@ -697,6 +697,7 @@ function buildDetail(id){
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
   const exportBtn=falt.length?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${falt.length})</button>`:'';
   const importBtn=canEdit()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
+  const forzarBtn=canEdit()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
@@ -721,7 +722,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes (${a.length})</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${importBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${forzarBtn}${importBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -929,6 +930,18 @@ async function submitEval(evalId,totalPqs){
     const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
     const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
     const aprobado=puntaje>=nota_aprobacion;
+    // Auto-registrar como asistente si completó la evaluación
+    if(cap){
+      try{
+        const existing=await fetch(`${SUPA_URL}/rest/v1/asistentes?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`,{headers:H});
+        const existingData=await existing.json();
+        if(!existingData||!existingData.length){
+          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:'',sector:''},'');
+        }else{
+          await api('PATCH','asistentes',{completo:true,nota:puntaje},`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
+        }
+      }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
+    }
     document.body.innerHTML=`<div class="eval-public-wrap">
       <div class="eval-public-card">
         <div class="result-card">
@@ -1112,6 +1125,78 @@ async function saveUsuario(id){
 
 async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
+}
+
+function openForzarCumplimiento(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const comp=a.filter(x=>x.completo).length;
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px">✍ Registro en papel</div>
+    <p style="font-size:12px;color:#777;margin-bottom:14px">Usá esto cuando los participantes firmaron en papel y no tenés el Excel. Podés registrar sus datos manualmente o actualizar el total de presentes.</p>
+    <div style="background:#E6F1FB;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#185FA5">
+      Actualmente: <strong>${comp} presentes registrados</strong> de ${c.participantes_esperados} esperados.
+    </div>
+    <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:10px">Opción 1 — Agregar participante individual</div>
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label class="form-label">Legajo *</label><input class="form-input" id="fp-legajo" placeholder="Ej: 10025"></div>
+      <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="fp-nombre" placeholder="Apellido Nombre"></div>
+    </div>
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="fp-un" placeholder="Unidad de negocio" list="fp-un-list"><datalist id="fp-un-list">${uns.map(u=>`<option value="${esc(u.nombre)}">`).join('')}</datalist></div>
+      <div class="form-group"><label class="form-label">Sector</label><input class="form-input" id="fp-sector" placeholder="Sector" list="fp-sec-list"><datalist id="fp-sec-list">${sectores.map(s=>`<option value="${esc(s.nombre)}">`).join('')}</datalist></div>
+    </div>
+    <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="agregarParticipantePapel(${capId})">Agregar participante</button>
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:6px">Opción 2 — Forzar actualización de estado</div>
+      <p style="font-size:11px;color:#777;margin-bottom:10px">Marca la capacitación como Realizada independientemente de los registros cargados.</p>
+      <button class="btn-prim" style="width:100%;background:#7F77DD" onclick="forzarRealizada(${capId})">Marcar como Realizada</button>
+    </div>
+    <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
+}
+
+async function agregarParticipantePapel(capId){
+  const legajo=document.getElementById('fp-legajo').value.trim();
+  const nombre=document.getElementById('fp-nombre').value.trim();
+  const un=document.getElementById('fp-un').value.trim();
+  const sector=document.getElementById('fp-sector').value.trim();
+  if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  try{
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+    if(existing&&existing.length){
+      await api('PATCH','asistentes',{completo:true,nombre,un,sector},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+      const i=asistentes.findIndex(a=>a.capacitacion_id===capId&&a.legajo===legajo);
+      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector};
+      toast('Participante actualizado');
+    }else{
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,completo:true},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)asistentes.push(nv);
+      toast('Participante agregado');
+    }
+    if(un&&!uns.find(u=>u.nombre===un)){
+      const r=await api('POST','unidades_negocio',{nombre:un},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);
+    }
+    if(sector&&un&&!sectores.find(s=>s.nombre===sector&&s.un===un)){
+      const r=await api('POST','sectores',{nombre:sector,un},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);
+    }
+    document.getElementById('fp-legajo').value='';
+    document.getElementById('fp-nombre').value='';
+    document.getElementById('fp-un').value='';
+    document.getElementById('fp-sector').value='';
+    renderContent();
+  }catch(e){toast('Error al guardar: '+e.message);}
+}
+
+async function forzarRealizada(capId){
+  if(!confirm('¿Marcar esta capacitación como Realizada?'))return;
+  try{
+    await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);
+    const i=caps.findIndex(c=>c.id===capId);if(i>=0)caps[i].estado='Realizada';
+    toast('Capacitación marcada como Realizada');
+    closeModal();renderContent();
+  }catch(e){toast('Error');}
 }
 
 function showModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-overlay').classList.add('open');}

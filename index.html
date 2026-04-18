@@ -454,6 +454,7 @@ function capCard(c){
       ${tipoBadge(c.tipo_codigo)}
       <span>${esc(c.area||'')}</span><span>·</span>
       <span>${fmtF(c.fecha)}</span><span>·</span><span>${c.duracion}h</span>
+      ${c.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span>`:''}
       ${c.bimestre?`<span class="chip-bim">${c.bimestre.split('(')[0].trim()}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
@@ -622,6 +623,25 @@ function renderConfig(){
   return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
   <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list">${secTags}</div></div>
   <div class="config-section"><div class="config-title">Tipos de capacitación<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addTipo()">+ Nuevo tipo</button></div>${tipoRows}</div>
+  <div class="config-section">
+    <div class="config-title">Importar / Exportar plan</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Cargá todas las capacitaciones de una vez desde Excel, o exportá el plan actual.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn-sm green" onclick="exportPlantillaCaps()">📥 Plantilla Excel</button>
+      <button class="btn-sm blue" onclick="exportPlanActual()">📤 Exportar plan</button>
+      <label class="upload-label">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarCaps(event)"></label>
+    </div>
+    <div style="background:#FAEEDA;border-radius:8px;padding:10px;font-size:11px;line-height:1.8;color:#854F0B">
+      <strong>Columnas requeridas:</strong><br>
+      <strong>codigo_redmine</strong> — ej: #35167 (identificador único)<br>
+      <strong>titulo *</strong> — nombre de la capacitación<br>
+      <strong>tipo_codigo *</strong> — REMO, SST, SALUD, AMBIENTE, CALIFICACION, INDUCCION<br>
+      <strong>un</strong> — Unidad de Negocio · <strong>area</strong> — tema<br>
+      <strong>fecha</strong> — DD/MM/AAAA · <strong>bimestre</strong> — número 1 al 6<br>
+      <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
+      <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong>
+    </div>
+  </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div>
@@ -745,6 +765,8 @@ function buildDetail(id){
     <div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:3px"><span>Asistencia</span><span>${pct}%</span></div><div class="progress-bar" style="height:5px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${pct}%"></div></div></div>
     <div class="modal-section">
       <div class="modal-section-title">Información</div>
+      ${c.codigo_redmine?`<div class="detail-row"><span class="detail-key">Redmine</span><span class="detail-val" style="color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span></div>`:''}
+      ${c.un?`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val">${esc(c.un)}</span></div>`:''}
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
@@ -1077,6 +1099,7 @@ function showForm(c){
       <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
       <div class="form-group"><label class="form-label">Nota mínima aprobación</label><input class="form-input" id="f-nota" type="number" min="1" max="10" step="0.5" value="${c?c.nota_aprobacion:6}"></div>
     </div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">UN</label><input class="form-input" id="f-un" value="${c?esc(c.un||''):''}"></div></div>
     <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="f-obs" rows="2">${c?esc(c.obs||''):''}</textarea></div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv" onclick="saveCap(${c?c.id:'null'})">${c?'Guardar':'Agregar'}</button></div>`);
 }
@@ -1086,7 +1109,7 @@ async function saveCap(id){
   const tit=document.getElementById('f-tit').value.trim();
   if(!tit){alert('El título es obligatorio');return;}
   const isNew=String(id)==='null';
-  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim()};
+  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null};
   const btn=document.getElementById('btn-sv');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   setSyncStatus('syncing');
   try{
@@ -1268,6 +1291,83 @@ async function forzarRealizada(capId){
     toast('Capacitación marcada como Realizada');
     closeModal();renderContent();
   }catch(e){toast('Error');}
+}
+
+function exportPlantillaCaps(){
+  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',area:'Operativos',fecha:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:''}];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Plan');
+  XLSX.writeFile(wb,'plantilla_plan_capacitacion.xlsx');
+  toast('Plantilla descargada');
+}
+
+function exportPlanActual(){
+  if(!caps.length){toast('No hay capacitaciones');return;}
+  const bimNum={'1° Bimestre (Ene-Feb)':1,'2° Bimestre (Mar-Abr)':2,'3° Bimestre (May-Jun)':3,'4° Bimestre (Jul-Ago)':4,'5° Bimestre (Sep-Oct)':5,'6° Bimestre (Nov-Dic)':6};
+  const rows=caps.map(c=>({codigo_redmine:c.codigo_redmine||'',titulo:c.titulo,tipo_codigo:c.tipo_codigo||'',un:c.un||'',area:c.area||'',fecha:c.fecha?fmtF(c.fecha):'',bimestre:bimNum[c.bimestre]||'',participantes_esperados:c.participantes_esperados||'',duracion:c.duracion||'',instructor:c.instructor||'',estado:c.estado||'',nota_aprobacion:c.nota_aprobacion||6,obs:c.obs||''}));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Plan');
+  XLSX.writeFile(wb,'plan_capacitacion_2026.xlsx');
+  toast('Plan exportado');
+}
+
+async function importarCaps(event){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file)return;
+  const bimMap={1:'1° Bimestre (Ene-Feb)',2:'2° Bimestre (Mar-Abr)',3:'3° Bimestre (May-Jun)',4:'4° Bimestre (Jul-Ago)',5:'5° Bimestre (Sep-Oct)',6:'6° Bimestre (Nov-Dic)'};
+  const reader=new FileReader();
+  reader.onload=async function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length){alert('El archivo está vacío');return;}
+      let creadas=0,actualizadas=0,errores=0;
+      setSyncStatus('syncing');
+      toast('Importando...',30000);
+      for(const r of rows){
+        const codigo=String(r.codigo_redmine||r.codigo||'').trim();
+        const titulo=String(r.titulo||'').trim();
+        if(!titulo){errores++;continue;}
+        let fecha='';
+        const fr=String(r.fecha||'').trim();
+        if(fr){
+          if(fr.includes('/')){const p=fr.split('/');if(p.length===3)fecha=((p[2].length===2)?'20'+p[2]:p[2])+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
+          else if(fr.includes('-'))fecha=fr;
+        }
+        const bimNum=parseInt(r.bimestre)||0;
+        const bimestre=bimMap[bimNum]||String(r.bimestre||'');
+        const obj={titulo,tipo_codigo:String(r.tipo_codigo||'REMO').trim().toUpperCase(),un:String(r.un||'').trim()||null,area:String(r.area||'').trim(),fecha,bimestre,participantes_esperados:parseInt(r.participantes_esperados)||10,duracion:parseFloat(r.duracion)||1,instructor:String(r.instructor||'').trim(),estado:String(r.estado||'Programada').trim(),nota_aprobacion:parseFloat(r.nota_aprobacion)||6,obs:String(r.obs||'').trim(),codigo_redmine:codigo||null};
+        try{
+          let existente=null;
+          if(codigo){
+            const found=await api('GET','capacitaciones','','?codigo_redmine=eq.'+encodeURIComponent(codigo));
+            if(found&&found.length)existente=found[0];
+          }
+          if(existente){
+            await api('PATCH','capacitaciones',obj,'?id=eq.'+existente.id);
+            const i=caps.findIndex(c=>c.id===existente.id);
+            if(i>=0)caps[i]={...caps[i],...obj};else caps.push({...existente,...obj});
+            actualizadas++;
+          }else{
+            const nr=await api('POST','capacitaciones',obj,'');
+            const nv=Array.isArray(nr)?nr[0]:nr;if(nv)caps.push(nv);
+            creadas++;
+          }
+          if(obj.un&&!uns.find(u=>u.nombre===obj.un)){
+            const ur=await api('POST','unidades_negocio',{nombre:obj.un},'');
+            const unv=Array.isArray(ur)?ur[0]:ur;if(unv)uns.push(unv);
+          }
+        }catch(rowErr){errores++;console.warn('Error fila',titulo,rowErr);}
+      }
+      setSyncStatus('ok');populateFilters();renderContent();
+      alert('Importación: '+creadas+' creadas, '+actualizadas+' actualizadas'+(errores?', '+errores+' errores':''));
+    }catch(err){setSyncStatus('error');alert('Error: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function showModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-overlay').classList.add('open');}

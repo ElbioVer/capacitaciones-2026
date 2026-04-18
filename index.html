@@ -173,7 +173,7 @@ select.form-input{cursor:pointer}
 .login-btn{width:100%;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
 .login-btn:hover{background:#0F6E56}
 .login-btn:disabled{background:#aaa}
-.login-error{background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:9px;font-size:12px;margin-top:10px;text-align:center;display:none}
+.login-error{background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;text-align:left;display:none;line-height:1.5}
 /* FORM EVAL PUBLICO */
 .eval-public-wrap{min-height:100vh;background:#f4f4f2;padding:16px}
 .eval-public-card{max-width:560px;margin:0 auto;background:#fff;border-radius:16px;border:1px solid #e5e5e0;padding:20px}
@@ -197,7 +197,32 @@ select.form-input{cursor:pointer}
     <label class="login-label">Contraseña</label>
     <input class="login-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
-    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+    <div class="login-error" id="login-error" style="display:none">
+      <strong>Usuario o contraseña incorrectos.</strong><br>
+      <span style="font-size:11px">Verificá el email y la contraseña. Si no podés ingresar, contactá al administrador.</span>
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <button onclick="openForgot()" style="background:none;border:none;color:#888;font-size:12px;cursor:pointer;text-decoration:underline">¿Olvidaste tu contraseña?</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT MODAL -->
+<div id="forgot-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:90%;max-width:340px;margin:auto;margin-top:80px">
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px">Recuperar acceso</div>
+    <p style="font-size:12px;color:#777;margin-bottom:12px">Ingresá tu email. Si existe en el sistema, te generamos un código que el administrador puede usar para resetearte la contraseña desde el panel Usuarios.</p>
+    <input class="login-input" id="forgot-email" type="email" placeholder="tu@email.com">
+    <div id="forgot-error" style="display:none;background:#FCEBEB;color:#A32D2D;border-radius:7px;padding:8px;font-size:12px;margin-bottom:8px">Email no encontrado en el sistema.</div>
+    <div id="forgot-code-box" style="display:none;background:#E1F5EE;border-radius:8px;padding:12px;margin-bottom:10px;text-align:center">
+      <div style="font-size:11px;color:#777;margin-bottom:4px">Tu código de recuperación es:</div>
+      <div id="forgot-code" style="font-size:26px;font-weight:700;color:#085041;letter-spacing:6px"></div>
+      <div style="font-size:11px;color:#777;margin-top:6px">Mostráselo al administrador para que resetee tu clave desde el panel Usuarios.</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="closeForgot()" style="flex:1;background:#fff;color:#666;border:1px solid #ddd;border-radius:8px;padding:10px;font-size:13px;cursor:pointer">Cerrar</button>
+      <button onclick="doForgot()" id="forgot-btn" style="flex:1;background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer">Generar código</button>
+    </div>
   </div>
 </div>
 
@@ -289,7 +314,7 @@ async function doLogin(){
   btn.disabled=true;btn.textContent='Ingresando...';err.style.display='none';
   try{
     const res=await api('GET','usuarios','',`?email=eq.${encodeURIComponent(email)}&password_hash=eq.${encodeURIComponent(pass)}&activo=eq.true`);
-    if(!res||!res.length){err.style.display='block';btn.disabled=false;btn.textContent='Ingresar';return;}
+    if(!res||!res.length){err.style.display='block';btn.disabled=false;btn.textContent='Ingresar';document.getElementById('login-pass').value='';document.getElementById('login-pass').focus();return;}
     currentUser=res[0];
     sessionStorage.setItem('capUser',JSON.stringify(currentUser));
     showApp();
@@ -1094,6 +1119,33 @@ function closeModal(){document.getElementById('modal-overlay').classList.remove(
 function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
 function fmtF(f){if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// FORGOT PASSWORD
+function openForgot(){
+  const overlay=document.getElementById('forgot-overlay');
+  overlay.style.display='flex';
+  document.getElementById('forgot-email').value='';
+  document.getElementById('forgot-error').style.display='none';
+  document.getElementById('forgot-code-box').style.display='none';
+  document.getElementById('forgot-btn').style.display='inline-block';
+}
+function closeForgot(){
+  document.getElementById('forgot-overlay').style.display='none';
+}
+async function doForgot(){
+  const email=document.getElementById('forgot-email').value.trim().toLowerCase();
+  if(!email){alert('Ingresá tu email');return;}
+  document.getElementById('forgot-error').style.display='none';
+  document.getElementById('forgot-code-box').style.display='none';
+  try{
+    const res=await api('GET','usuarios','',`?email=eq.${encodeURIComponent(email)}&activo=eq.true`);
+    if(!res||!res.length){document.getElementById('forgot-error').style.display='block';return;}
+    const code=Math.random().toString(36).substring(2,8).toUpperCase();
+    document.getElementById('forgot-code').textContent=code;
+    document.getElementById('forgot-code-box').style.display='block';
+    document.getElementById('forgot-btn').style.display='none';
+  }catch(e){alert('Error de conexión');}
+}
 
 // INIT
 async function init(){

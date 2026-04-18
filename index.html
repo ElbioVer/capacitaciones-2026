@@ -609,33 +609,9 @@ function renderResumen(){
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
   }).join('')}</div>
-  <script>
-  (function(){
-    // Chart linea mensual
-    const ctxL=document.getElementById('chart-linea');
-    if(!ctxL)return;
-    const dm=${JSON.stringify(dataMeses)};
-    const labels=dm.map(d=>d.m);
-    const realizadas=dm.map(d=>d.realizadas);
-    const planificadas=dm.map(d=>d.planificadas);
-    const isDark=document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;
-    const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
-    const textColor=isDark?'#aaa':'#888';
-    new Chart(ctxL,{type:'line',data:{labels,datasets:[
-      {label:'Planificadas',data:planificadas,borderColor:'#B5D4F4',backgroundColor:'rgba(181,212,244,0.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#B5D4F4',tension:0.3,fill:true},
-      {label:'Realizadas',data:realizadas,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.3,fill:true}
-    ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
-
-    // Chart efectividad
-    const ctxE=document.getElementById('chart-eval');
-    if(!ctxE)return;
-    const ed=${JSON.stringify(evalData)};
-    new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
-      {label:'Nota promedio',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4,yAxisID:'y'},
-      {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4,yAxisID:'y2'}
-    ]},options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},y2:{display:false},x:{beginAtZero:true,max:10,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
-  })();
-  <\/script>`;
+  <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
+  <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
+  setTimeout(renderCharts, 100);
 }
 }
 
@@ -1188,6 +1164,39 @@ async function saveUsuario(id){
 
 async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
+}
+
+function renderCharts(){
+  const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
+  const textColor=isDark?'#aaa':'#888';
+
+  const ctxL=document.getElementById('chart-linea');
+  const dmEl=document.getElementById('chart-data-linea');
+  if(ctxL&&dmEl){
+    try{
+      const dm=JSON.parse(dmEl.textContent);
+      if(window._chartLinea) window._chartLinea.destroy();
+      window._chartLinea=new Chart(ctxL,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
+        {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
+        {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
+      ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+    }catch(e){console.warn('chart-linea error',e);}
+  }
+
+  const ctxE=document.getElementById('chart-eval');
+  const edEl=document.getElementById('chart-data-eval');
+  if(ctxE&&edEl){
+    try{
+      const ed=JSON.parse(edEl.textContent);
+      if(!ed.length)return;
+      if(window._chartEval) window._chartEval.destroy();
+      window._chartEval=new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
+        {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
+        {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
+      ]},options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+    }catch(e){console.warn('chart-eval error',e);}
+  }
 }
 
 function openForzarCumplimiento(capId){

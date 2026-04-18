@@ -628,7 +628,7 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const tblRows=a.map(x=>{
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=nota_aprobacion?'nota-ok':'nota-fail'}">${x.nota}</span>`:'<span style="color:#bbb">—</span>'):'';
-    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td style="font-size:10px">${esc(x.sector||'')}</td><td><span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span></td>${hasNota?`<td>${notaHtml}</td>`:''${canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:''}</tr>`;
+    const delCell=canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td style="font-size:10px">${esc(x.sector||'')}</td><td><span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span></td>${notaCell}${delCell}</tr>`;
   }).join('');
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canEdit()?'<th style="width:24px"></th>':'';

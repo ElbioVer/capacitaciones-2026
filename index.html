@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;min-height:100vh;color:#1a1a1a}
@@ -545,36 +546,97 @@ function renderResumen(){
   const totalComp=asistentes.filter(a=>a.completo).length;
   const totalEsp=caps.reduce((s,c)=>s+Number(c.participantes_esperados||0),0);
   const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
+  const vencidas=caps.filter(c=>c.estado==='Vencida').length;
+  const pendientes=caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
+
   const tipoRows=tipos.map(t=>{
     const g=caps.filter(c=>c.tipo_codigo===t.codigo);
     const r=g.filter(c=>c.estado==='Realizada').length;
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
   }).join('');
-  const bimRows=BIMESTRES.map(b=>{
-    const g=caps.filter(c=>c.bimestre===b);
-    const r=g.filter(c=>c.estado==='Realizada').length;
-    const p=g.length?Math.round(r/g.length*100):0;
-    return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
-  }).join('');
+
+  // Datos para grafico de linea mensual
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const dataMeses=meses.map((m,i)=>{
+    const mes=i+1;
+    const capsDelMes=caps.filter(c=>{if(!c.fecha)return false;const cm=parseInt(c.fecha.split('-')[1]);return cm===mes;});
+    const realizadas=capsDelMes.filter(c=>c.estado==='Realizada').length;
+    const planificadas=capsDelMes.length;
+    return{m,realizadas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
+  });
+
+  // Datos para grafico de efectividad
+  const capsConEval=caps.filter(c=>{
+    const t=getTipo(c.tipo_codigo);
+    return t.tiene_evaluacion;
+  });
+  const evalData=capsConEval.map(c=>{
+    const a=getA(c.id).filter(x=>x.nota!=null);
+    const prom=a.length?(a.reduce((s,x)=>s+x.nota,0)/a.length):null;
+    const apr=a.length?Math.round(a.filter(x=>x.nota>=(c.nota_aprobacion||6)).length/a.length*100):null;
+    return{titulo:c.titulo.length>18?c.titulo.substring(0,18)+'…':c.titulo,prom,apr,tipo:c.tipo_codigo};
+  }).filter(x=>x.prom!==null);
+
   return`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#888">Avance 2026</span><span style="font-size:15px;font-weight:600;color:#1D9E75">${pct}%</span></div>
     <div class="progress-bar" style="height:6px;margin-bottom:12px"><div class="progress-fill" style="width:${pct}%"></div></div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:7px">
       <div class="stat"><div class="stat-num ok">${ok}</div><div class="stat-lbl">Realizadas</div></div>
-      <div class="stat"><div class="stat-num pend">${caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length}</div><div class="stat-lbl">Por realizar</div></div>
-      <div class="stat"><div class="stat-num miss">${caps.filter(c=>c.estado==='Vencida').length}</div><div class="stat-lbl">Vencidas</div></div>
+      <div class="stat"><div class="stat-num pend">${pendientes}</div><div class="stat-lbl">Por realizar</div></div>
+      <div class="stat"><div class="stat-num miss">${vencidas}</div><div class="stat-lbl">Vencidas</div></div>
       <div class="stat"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
     </div>
   </div>
   <div class="plan-block"><div class="plan-block-title">Ejecución general</div>
     <div class="detail-row"><span class="detail-key">Horas realizadas</span><span class="detail-val">${horas} hs</span></div>
-    <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${totalComp} / ${totalEsp} (${pctA}%)</span></div>
+    <div class="detail-row"><span class="detail-key">Asistentes completaron</span><span class="detail-val">${totalComp} / ${totalEsp} (${pctA}%)</span></div>
     <div class="detail-row"><span class="detail-key">UNs</span><span class="detail-val">${uns.length}</span></div>
     <div class="detail-row"><span class="detail-key">Sectores</span><span class="detail-val">${sectores.length}</span></div>
   </div>
+  <div class="plan-block">
+    <div class="plan-block-title" style="margin-bottom:12px">Evolución de cumplimiento mensual</div>
+    <canvas id="chart-linea" height="180"></canvas>
+  </div>
+  ${evalData.length?`<div class="plan-block">
+    <div class="plan-block-title" style="margin-bottom:12px">Efectividad de evaluaciones</div>
+    <canvas id="chart-eval" height="${Math.max(160,evalData.length*44)}"></canvas>
+  </div>`:''}
   <div class="plan-block"><div class="plan-block-title">Por tipo</div>${tipoRows}</div>
-  <div class="plan-block"><div class="plan-block-title">Por bimestre</div>${bimRows}</div>`;
+  <div class="plan-block"><div class="plan-block-title">Por bimestre</div>${BIMESTRES.map(b=>{
+    const g=caps.filter(c=>c.bimestre===b);
+    const r=g.filter(c=>c.estado==='Realizada').length;
+    const p=g.length?Math.round(r/g.length*100):0;
+    return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
+  }).join('')}</div>
+  <script>
+  (function(){
+    // Chart linea mensual
+    const ctxL=document.getElementById('chart-linea');
+    if(!ctxL)return;
+    const dm=${JSON.stringify(dataMeses)};
+    const labels=dm.map(d=>d.m);
+    const realizadas=dm.map(d=>d.realizadas);
+    const planificadas=dm.map(d=>d.planificadas);
+    const isDark=document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;
+    const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
+    const textColor=isDark?'#aaa':'#888';
+    new Chart(ctxL,{type:'line',data:{labels,datasets:[
+      {label:'Planificadas',data:planificadas,borderColor:'#B5D4F4',backgroundColor:'rgba(181,212,244,0.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#B5D4F4',tension:0.3,fill:true},
+      {label:'Realizadas',data:realizadas,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.3,fill:true}
+    ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+
+    // Chart efectividad
+    const ctxE=document.getElementById('chart-eval');
+    if(!ctxE)return;
+    const ed=${JSON.stringify(evalData)};
+    new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
+      {label:'Nota promedio',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4,yAxisID:'y'},
+      {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4,yAxisID:'y2'}
+    ]},options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},y2:{display:false},x:{beginAtZero:true,max:10,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+  })();
+  <\/script>`;
+}
 }
 
 function renderConfig(){
@@ -622,6 +684,7 @@ function buildDetail(id){
   const a=getA(id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
   const pct=esp?Math.round(comp/esp*100):0;
   const falt=a.filter(x=>!x.completo);
+  const faltantesReal=Math.max(0,(c.participantes_esperados||0)-comp);
   const nota_aprobacion=c.nota_aprobacion||6;
 
   // tabla asistentes
@@ -695,7 +758,7 @@ function buildDetail(id){
   }
 
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
-  const exportBtn=falt.length?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${falt.length})</button>`:'';
+  const exportBtn=faltantesReal>0?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${faltantesReal})</button>`:'';
   const importBtn=canEdit()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canEdit()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
 
@@ -712,7 +775,7 @@ function buildDetail(id){
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
       <div class="detail-row"><span class="detail-key">Esperados</span><span class="detail-val">${esp}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
-      <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:#BA7517">${falt.length}</span></div>
+      <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
       ${hasNota?`<div class="detail-row"><span class="detail-key">Nota aprobación</span><span class="detail-val">≥ ${nota_aprobacion}</span></div>`:''}
       ${notaStatsHtml}
       <div class="detail-row"><span class="detail-key">Instructor</span><span class="detail-val">${esc(c.instructor||'—')}</span></div>

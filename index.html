@@ -411,8 +411,20 @@ function getFiltered(){
     if(fltTipo&&c.tipo_codigo!==fltTipo) return false;
     if(fltBim&&c.bimestre!==fltBim) return false;
     if(fltUN||fltSec){
+      // Check cap's own UN field first
+      if(fltUN&&c.un){
+        if(c.un!==fltUN) return false;
+        // If sector filter active, also check asistentes
+        if(fltSec){
+          const a=getA(c.id);
+          if(!a.length) return true; // cap belongs to this UN, no attendees yet
+          return a.some(x=>x.sector===fltSec&&x.un===fltUN);
+        }
+        return true;
+      }
+      // Fallback: check via asistentes
       const a=getA(c.id);
-      if(!a.length) return true;
+      if(!a.length) return !fltUN; // no attendees: only show if no UN filter
       return a.some(x=>{if(fltUN&&x.un!==fltUN)return false;if(fltSec&&x.sector!==fltSec)return false;return true;});
     }
     return true;
@@ -550,20 +562,24 @@ function renderUN(){
   if(!unList.length)return'<div class="empty-state"><div class="empty-num">🏢</div><div class="empty-t">Sin unidades configuradas</div></div>';
   return unList.map(un=>{
     const secList=fltSec?sectores.filter(s=>s.un===un.nombre&&s.nombre===fltSec):sectores.filter(s=>s.un===un.nombre);
+    const capsDeUN=f.filter(c=>c.un===un.nombre);
+    const capsViaAsis=f.filter(c=>!c.un&&getA(c.id).some(a=>a.un===un.nombre));
+    const todasCapsUN=[...new Map([...capsDeUN,...capsViaAsis].map(c=>[c.id,c])).values()];
     const secRows=secList.map(sec=>{
-      const capsConSec=f.filter(c=>getA(c.id).some(a=>a.sector===sec.nombre&&a.un===un.nombre));
-      const partics=[...new Map(f.flatMap(c=>getA(c.id).filter(a=>a.sector===sec.nombre&&a.un===un.nombre)).map(a=>[a.legajo,a])).values()];
+      const capsConSec=todasCapsUN.filter(c=>getA(c.id).some(a=>a.sector===sec.nombre&&a.un===un.nombre));
+      const partics=[...new Map(todasCapsUN.flatMap(c=>getA(c.id).filter(a=>a.sector===sec.nombre&&a.un===un.nombre)).map(a=>[a.legajo,a])).values()];
       const capRows=capsConSec.length?capsConSec.map(c=>{
         const as=getA(c.id).filter(a=>a.sector===sec.nombre&&a.un===un.nombre);
         const comp=as.filter(a=>a.completo).length;
         return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
       }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin registros</p>';
       return`<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:600;color:#333;padding:4px 0;border-bottom:1px solid #f0f0ec;margin-bottom:4px">${esc(sec.nombre)} <span style="color:#999;font-weight:400">· ${partics.length} empleados · ${capsConSec.length} cap.</span></div>${capRows}</div>`;
-    }).join('')||'<p style="font-size:11px;color:#bbb">Sin sectores</p>';
-    return`<div class="plan-block"><div class="plan-block-title">🏢 ${esc(un.nombre)}</div>${secRows}</div>`;
+    }).join('');
+    const capsSinSec=capsDeUN.filter(c=>{const a=getA(c.id).filter(x=>x.un===un.nombre);return !a.some(x=>x.sector);});
+    const sinSecRows=capsSinSec.length?`<div style="margin-top:6px"><div style="font-size:11px;font-weight:600;color:#aaa;padding:4px 0;border-bottom:1px solid #f5f5f0;margin-bottom:4px">Sin sector asignado</div>${capsSinSec.map(c=>{const as=getA(c.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;}).join('')}</div>`:(!secList.length&&!todasCapsUN.length?'<p style="font-size:11px;color:#bbb">Sin capacitaciones</p>':'');
+    return`<div class="plan-block"><div class="plan-block-title">🏢 ${esc(un.nombre)} <span style="font-size:11px;font-weight:400;color:#888">· ${todasCapsUN.length} cap.</span></div>${secRows}${sinSecRows}</div>`;
   }).join('');
 }
-
 function renderResumen(){
   const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
   const pct=total?Math.round(ok/total*100):0;

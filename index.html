@@ -297,6 +297,7 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
     <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Sector</div>
     <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
+    <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
   </div>
@@ -314,7 +315,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const H={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
 const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre (May-Jun)','4° Bimestre (Jul-Ago)','5° Bimestre (Sep-Oct)','6° Bimestre (Nov-Dic)'];
 
-let caps=[],asistentes=[],uns=[],sectores=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[];
+let caps=[],asistentes=[],uns=[],sectores=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
 let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='';
 let currentUser=null;
 
@@ -371,6 +372,7 @@ function showApp(){
   const av=document.getElementById('user-avatar');
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
+  document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
@@ -391,13 +393,15 @@ async function loadAll(){
       api('GET','tipos_capacitacion','','?activo=eq.true&order=codigo.asc'),
       api('GET','materiales','','?order=created_at.asc'),
       api('GET','evaluaciones','','?order=created_at.asc'),
-      api('GET','preguntas_evaluacion','','?order=orden.asc')
+      api('GET','preguntas_evaluacion','','?order=orden.asc'),
+      api('GET','padron','','?order=nombre.asc')
     ];
     if(isAdmin()) queries.push(api('GET','usuarios','','?order=nombre.asc'));
     const res=await Promise.all(queries);
     caps=res[0]||[];asistentes=res[1]||[];uns=res[2]||[];sectores=res[3]||[];
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
-    if(isAdmin()) usuarios=res[8]||[];
+    padron=res[8]||[];
+    if(isAdmin()) usuarios=res[9]||[];
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
   }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
 }
@@ -489,10 +493,12 @@ function capCard(c){
   if(t.tiene_repositorio&&getMat(c.id).length) iconos.push('📎');
   const ev=getEval(c.id);
   if(ev) iconos.push(ev.activa?'📝':'📋');
+  const diasDesvio=desvioInfo(c);
+  const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
   return`<div class="cap-card" onclick="openDetail(${c.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(c.titulo)}</div>
-      <span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span>
+      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>
     </div>
     <div class="cap-meta">
       ${tipoBadge(c.tipo_codigo)}
@@ -500,6 +506,7 @@ function capCard(c){
       <span>${fmtF(c.fecha)}</span><span>·</span><span>${c.duracion}h</span>
       ${c.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span>`:''}
       ${c.bimestre?`<span class="chip-bim">${c.bimestre.split('(')[0].trim()}</span>`:''}
+      ${c.fecha_fin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(c.fecha_fin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
     <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron</span><span class="asist-pct">${pct}%</span></div>
@@ -509,7 +516,7 @@ function capCard(c){
 
 function switchTab(t){
   currentTab=t;
-  ['lista','tipo','bim','un','resumen','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+  ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
   renderContent();
 }
 
@@ -521,6 +528,7 @@ function renderContent(){
   else if(currentTab==='bim') el.innerHTML=renderBim();
   else if(currentTab==='un') el.innerHTML=renderUN();
   else if(currentTab==='resumen') el.innerHTML=renderResumen();
+  else if(currentTab==='padron') el.innerHTML=renderPadron();
   else if(currentTab==='config') el.innerHTML=renderConfig();
   else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
 }
@@ -658,9 +666,269 @@ function renderResumen(){
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
   }).join('')}</div>
+  ${(()=>{
+    const conDesvio=caps.filter(c=>desvioInfo(c)!==null);
+    if(!conDesvio.length) return'';
+    const totalDias=conDesvio.reduce((s,c)=>s+(desvioInfo(c)||0),0);
+    const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
+    const rows=conDesvio.sort((a,b)=>(desvioInfo(b)||0)-(desvioInfo(a)||0)).map(c=>{
+      const d=desvioInfo(c);
+      return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
+    }).join('');
+    return`<div class="plan-block" style="border-left:3px solid #EF9F27">
+      <div class="plan-block-title">⚠ Desvío de planificación</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px">
+        <div class="stat"><div class="stat-num miss">${conDesvio.length}</div><div class="stat-lbl">Fuera de plan</div></div>
+        <div class="stat"><div class="stat-num pend">${promDias}d</div><div class="stat-lbl">Desvío promedio</div></div>
+      </div>
+      ${rows}
+    </div>`;
+  })()}
   <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
   <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
   setTimeout(renderCharts, 100);
+}
+
+
+
+
+async function cargarParticipantesDesdePadron(capId, un, sector){
+  if(!un&&!sector) return;
+  const activos=padronActivos(un||null,sector||null);
+  if(!activos.length) return;
+  try{
+    // Solo insertar los que no existen ya
+    const existentes=getA(capId).map(a=>String(a.legajo));
+    const nuevos=activos
+      .filter(p=>!existentes.includes(String(p.legajo)))
+      .map(p=>({
+        capacitacion_id:capId,
+        legajo:String(p.legajo),
+        nombre:p.nombre,
+        un:p.un||'',
+        sector:p.sector||'',
+        completo:false,
+        nota:null
+      }));
+    if(!nuevos.length) return;
+    const ins=await api('POST','asistentes',nuevos,'');
+    if(ins){
+      const arr=Array.isArray(ins)?ins:[ins];
+      asistentes=[...asistentes,...arr];
+      toast(`${nuevos.length} participantes cargados desde el padrón`);
+    }
+  }catch(e){console.warn('Error cargando participantes desde padrón:',e);}
+}
+
+function onChangeFormUN(unNombre){
+  const secSel=document.getElementById('f-sec');
+  if(!secSel) return;
+  const filtered=unNombre?sectores.filter(s=>s.un===unNombre):sectores;
+  secSel.innerHTML=filtered.map(s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`).join('')+'<option value="">Sin sector</option>';
+  updatePadronPreview();
+}
+
+function updatePadronPreview(){
+  const prev=document.getElementById('padron-preview');
+  if(!prev) return;
+  const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
+  const sec=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
+  if(!un&&!sec){prev.style.display='none';return;}
+  const activos=padronActivos(un||null,sec||null);
+  if(activos.length>0){
+    prev.style.display='block';
+    prev.textContent=`👥 ${activos.length} empleado${activos.length!==1?'s':''} activo${activos.length!==1?'s':''} en este sector — se cargarán como participantes al guardar`;
+  } else {
+    prev.style.display='block';
+    prev.style.color='#888';
+    prev.textContent='Sin empleados activos en el padrón para esta UN/Sector';
+  }
+}
+
+function desvioInfo(cap){
+  if(!cap.fecha_fin) return null;
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const fin=new Date(cap.fecha_fin+'T00:00:00');
+  if(isNaN(fin.getTime())) return null;
+  if(cap.estado==='Realizada') return null;
+  const dias=Math.floor((hoy-fin)/(1000*60*60*24));
+  if(dias<=0) return null;
+  return dias;
+}
+
+// ── PADRÓN ───────────────────────────────────────────────────────
+function getPadronEmpleado(legajo){return padron.find(p=>String(p.legajo)===String(legajo));}
+function padronActivos(un,sector){
+  return padron.filter(p=>{
+    if(p.estado&&p.estado!=='Vigente') return false;
+    if(un&&p.un!==un) return false;
+    if(sector&&p.sector!==sector) return false;
+    return true;
+  });
+}
+
+function renderPadron(){
+  if(!isAdmin()&&!isCapacitador())return'';
+  const total=padron.length;
+  const vigentes=padron.filter(p=>!p.estado||p.estado==='Vigente').length;
+  const bajas=total-vigentes;
+  
+  // Obtener columnas extra del primer registro con datos_extra
+  let extraCols=[];
+  const conExtra=padron.find(p=>p.datos_extra&&Object.keys(p.datos_extra).length>0);
+  if(conExtra) extraCols=Object.keys(conExtra.datos_extra);
+
+  const filas=padron.map(p=>{
+    const estadoBadge=p.estado==='Vigente'?'<span class="badge realizada" style="font-size:10px">Vigente</span>'
+      :p.estado==='Renuncia'?'<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>'
+      :p.estado==='Despido'?'<span class="badge vencida" style="font-size:10px">Despido</span>'
+      :`<span class="badge" style="font-size:10px;background:#ccc;color:#555">${esc(p.estado||'?')}</span>`;
+    const extra=extraCols.map(k=>`<td style="font-size:11px;padding:5px 7px">${esc(String(p.datos_extra?.[k]??''))}</td>`).join('');
+    return`<tr>
+      <td style="font-size:11px;padding:5px 7px;font-weight:600">${esc(String(p.legajo||''))}</td>
+      <td style="font-size:11px;padding:5px 7px">${esc(p.nombre||'')}</td>
+      <td style="font-size:11px;padding:5px 7px">${esc(p.un||'')}</td>
+      <td style="font-size:11px;padding:5px 7px">${esc(p.sector||'')}</td>
+      <td style="font-size:11px;padding:5px 7px">${p.fecha_ingreso?p.fecha_ingreso.slice(0,10):''}</td>
+      <td style="font-size:11px;padding:5px 7px">${p.fecha_egreso?p.fecha_egreso.slice(0,10):''}</td>
+      <td style="font-size:11px;padding:5px 7px">${estadoBadge}</td>
+      ${extra}
+    </tr>`;
+  }).join('');
+
+  const extraHeaders=extraCols.map(k=>`<th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">${esc(k)}</th>`).join('');
+
+  return`
+  <div class="config-section">
+    <div class="config-title">Padrón de personal
+      ${isAdmin()?`<div style="display:flex;gap:6px">
+        <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla Excel</button>
+        <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarPadron(event)"></label>
+        <button class="btn-sm blue" onclick="exportarPadron()">📤 Exportar</button>
+      </div>`:''}
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="background:#E1F5EE;border-radius:8px;padding:8px 14px;font-size:12px">
+        <div style="font-size:20px;font-weight:700;color:#0F6E56">${total}</div>
+        <div style="color:#0F6E56">Total</div>
+      </div>
+      <div style="background:#E8F5FF;border-radius:8px;padding:8px 14px;font-size:12px">
+        <div style="font-size:20px;font-weight:700;color:#185FA5">${vigentes}</div>
+        <div style="color:#185FA5">Vigentes</div>
+      </div>
+      <div style="background:#FAEEDA;border-radius:8px;padding:8px 14px;font-size:12px">
+        <div style="font-size:20px;font-weight:700;color:#854F0B">${bajas}</div>
+        <div style="color:#854F0B">Bajas</div>
+      </div>
+    </div>
+    ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">
+      No hay empleados cargados aún. Importá un Excel para comenzar.
+    </div>`:`
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid #e5e5e0">
+      <table class="legajo-table" style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Legajo</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Nombre</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">UN</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Sector</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Ingreso</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Egreso</th>
+            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Estado</th>
+            ${extraHeaders}
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`}
+  </div>
+  <div class="config-section">
+    <div class="config-title">Formato del archivo Excel</div>
+    <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
+      <div><strong>legajo *</strong> — número de legajo (campo único)</div>
+      <div><strong>nombre *</strong> — nombre y apellido completo</div>
+      <div><strong>un</strong> — Unidad de Negocio</div>
+      <div><strong>sector</strong> — sector del empleado</div>
+      <div><strong>fecha_ingreso</strong> — fecha de ingreso (DD/MM/AAAA)</div>
+      <div><strong>fecha_egreso</strong> — fecha de egreso (DD/MM/AAAA)</div>
+      <div><strong>estado</strong> — Vigente / Renuncia / Despido / Suspendido</div>
+      <div style="color:#185FA5"><strong>+ columnas extra</strong> — cualquier otra columna se guarda automáticamente en datos_extra</div>
+    </div>
+  </div>`;
+}
+
+async function exportPlantillaPadron(){
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet([{legajo:'12345',nombre:'García Juan',un:'Servicios Electricos',sector:'Operaciones',fecha_ingreso:'01/03/2020',fecha_egreso:'',estado:'Vigente'}]);
+  XLSX.utils.book_append_sheet(wb,ws,'Padrón');
+  XLSX.writeFile(wb,'plantilla_padron.xlsx');
+  toast('Plantilla descargada');
+}
+
+async function exportarPadron(){
+  if(!padron.length){toast('No hay datos en el padrón');return;}
+  const rows=padron.map(p=>({
+    legajo:p.legajo,nombre:p.nombre,un:p.un||'',sector:p.sector||'',
+    fecha_ingreso:p.fecha_ingreso||'',fecha_egreso:p.fecha_egreso||'',estado:p.estado||'Vigente',
+    ...(p.datos_extra||{})
+  }));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'Padrón');
+  XLSX.writeFile(wb,'padron_personal.xlsx');
+  toast('Excel descargado');
+}
+
+async function importarPadron(event){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
+      const CAMPOS_BASE=['legajo','nombre','un','sector','fecha_ingreso','fecha_egreso','estado'];
+      const nuevos=rows.map(r=>{
+        const legajo=String(r.legajo||r.Legajo||r.LEGAJO||'').trim();
+        const nombre=String(r.nombre||r.Nombre||r.NOMBRE||'').trim();
+        if(!legajo||!nombre) return null;
+        // Campos extra → datos_extra JSONB
+        const datos_extra={};
+        Object.keys(r).forEach(k=>{
+          const kl=k.toLowerCase().trim();
+          if(!CAMPOS_BASE.includes(kl)&&r[k]!==''&&r[k]!==null){
+            datos_extra[k]=r[k];
+          }
+        });
+        const parseFecha=(v)=>{
+          if(!v||!String(v).trim()) return null;
+          const s=String(v).trim();
+          // DD/MM/AAAA
+          if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m}-${d}`;}
+          return s;
+        };
+        return{
+          legajo,nombre,
+          un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim()||null,
+          sector:String(r.sector||r.Sector||r.SECTOR||'').trim()||null,
+          fecha_ingreso:parseFecha(r.fecha_ingreso||r['Fecha Ingreso']||r['FECHA_INGRESO']||''),
+          fecha_egreso:parseFecha(r.fecha_egreso||r['Fecha Egreso']||r['FECHA_EGRESO']||''),
+          estado:String(r.estado||r.Estado||r.ESTADO||'Vigente').trim(),
+          datos_extra:Object.keys(datos_extra).length?datos_extra:{}
+        };
+      }).filter(Boolean);
+      if(!nuevos.length){alert('No se encontraron registros válidos (se requiere columna legajo y nombre).');return;}
+      setSyncStatus('syncing');toast('Importando padrón...',10000);
+      // Upsert por legajo
+      const res=await api('POST','padron',nuevos,'?on_conflict=legajo');
+      if(res){
+        await loadAll();
+        toast(`${nuevos.length} registros importados al padrón`);
+        renderContent();
+      }
+    }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function renderConfig(){
@@ -1000,15 +1268,67 @@ function renderEvalPublica(evalId){
       </div>
       <div style="background:#FAEEDA;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#854F0B">
         <strong>Datos del participante</strong>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-          <div><label class="form-label">Legajo *</label><input class="form-input" id="pub-legajo" placeholder="Ej: 10001"></div>
-          <div><label class="form-label">Nombre *</label><input class="form-input" id="pub-nombre" placeholder="Nombre completo"></div>
+        <div style="margin-top:8px">
+          <label class="form-label">Legajo *</label>
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu legajo" style="flex:1" oninput="validarLegajoPadron(this.value)">
+          </div>
+          <div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>
+          <div style="margin-top:8px">
+            <label class="form-label">Nombre completo *</label>
+            <input class="form-input" id="pub-nombre" placeholder="Se completa automáticamente" readonly style="background:#f9f9f7">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+            <div><label class="form-label">UN</label><input class="form-input" id="pub-un" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+            <div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+          </div>
         </div>
       </div>
       ${pqsHtml}
       <button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEval(${evalId},${pqs.length})">Enviar respuestas</button>
     </div>
   </div>`;
+}
+
+
+function validarLegajoPadron(legajo){
+  const lookup=document.getElementById('padron-lookup');
+  const nombreInput=document.getElementById('pub-nombre');
+  const unInput=document.getElementById('pub-un');
+  const secInput=document.getElementById('pub-sector');
+  if(!lookup||!nombreInput) return;
+  if(!legajo||legajo.length<3){
+    lookup.style.display='none';
+    nombreInput.value='';nombreInput.readOnly=true;
+    if(unInput) unInput.value='';
+    if(secInput) secInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.style.display='block';
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}" — contactá a RRHH</span>`;
+      nombreInput.value='';nombreInput.readOnly=true;
+    } else {
+      lookup.style.display='block';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(emp.sector||'')}</span>`;
+      nombreInput.value=emp.nombre;nombreInput.readOnly=true;
+      if(unInput) unInput.value=emp.un||'';
+      if(secInput) secInput.value=emp.sector||'';
+    }
+  } else if(padron.length>0){
+    // Hay padrón cargado pero no encontró el legajo
+    lookup.style.display='block';
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    nombreInput.value='';nombreInput.readOnly=true;
+    if(unInput) unInput.value='';
+    if(secInput) secInput.value='';
+  } else {
+    // Sin padrón: dejar editar manualmente
+    lookup.style.display='none';
+    nombreInput.readOnly=false;
+  }
 }
 
 function selectOpcion(pqId,val,total){
@@ -1021,7 +1341,15 @@ function selectOpcion(pqId,val,total){
 async function submitEval(evalId,totalPqs){
   const legajo=document.getElementById('pub-legajo').value.trim();
   const nombre=document.getElementById('pub-nombre').value.trim();
-  if(!legajo||!nombre){alert('Ingresá tu legajo y nombre para continuar');return;}
+  if(!legajo){alert('Ingresá tu legajo para continuar');return;}
+  if(!nombre){alert('No se pudo validar el legajo. Verificá que sea correcto.');return;}
+  // Verificar que el empleado esté vigente si hay padrón
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){alert('Tu legajo figura con estado "'+emp.estado+'". Contactá a RRHH.');return;}
+  }
+  const pubUN=document.getElementById('pub-un')?document.getElementById('pub-un').value.trim():'';
+  const pubSec=document.getElementById('pub-sector')?document.getElementById('pub-sector').value.trim():'';
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   let correctas=0;
   const respuestas={};
@@ -1045,7 +1373,7 @@ async function submitEval(evalId,totalPqs){
         const existing=await fetch(`${SUPA_URL}/rest/v1/asistentes?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`,{headers:H});
         const existingData=await existing.json();
         if(!existingData||!existingData.length){
-          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:'',sector:''},'');
+          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:pubUN||'',sector:pubSec||''},'');
         }else{
           await api('PATCH','asistentes',{completo:true,nota:puntaje},`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
         }
@@ -1159,7 +1487,12 @@ function showForm(c){
       <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
       <div class="form-group"><label class="form-label">Nota mínima aprobación</label><input class="form-input" id="f-nota" type="number" min="1" max="10" step="0.5" value="${c?c.nota_aprobacion:6}"></div>
     </div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">UN</label><input class="form-input" id="f-un" value="${c?esc(c.un||''):''}"></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">Fecha fin planificada</label><input class="form-input" id="f-fecha-fin" type="date" value="${c&&c.fecha_fin?c.fecha_fin:''}"></div></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">UN</label><select class="form-input" id="f-un" onchange="onChangeFormUN(this.value)">${uns.map(u=>`<option value="${esc(u.nombre)}"${c&&c.un===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('')}<option value="">Sin UN</option></select></div>
+      <div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="f-sec">${(c&&c.un?sectores.filter(s=>s.un===c.un):sectores).map(s=>`<option value="${esc(s.nombre)}"${c&&c.sector===s.nombre?' selected':''}>${esc(s.nombre)}</option>`).join('')}<option value="">Sin sector</option></select></div>
+    </div>
+    <div id="padron-preview" style="font-size:11px;color:#1D9E75;padding:4px 0;display:none"></div>
     <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="f-obs" rows="2">${c?esc(c.obs||''):''}</textarea></div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv" onclick="saveCap(${c?c.id:'null'})">${c?'Guardar':'Agregar'}</button></div>`);
 }
@@ -1170,12 +1503,35 @@ async function saveCap(id){
   if(isNew&&!canCapacitar()){toast('Sin permisos');return;}
   const tit=document.getElementById('f-tit').value.trim();
   if(!tit){alert('El título es obligatorio');return;}
-  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null};
+  const unSel=document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null;
+  const secSel=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim()||null:null;
+  const fechaFin=document.getElementById('f-fecha-fin')?document.getElementById('f-fecha-fin').value||null:null;
+  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,fecha_fin:fechaFin,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:unSel,sector:secSel};
   const btn=document.getElementById('btn-sv');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   setSyncStatus('syncing');
   try{
-    if(isNew){const r=await api('POST','capacitaciones',obj,'');const n=Array.isArray(r)?r[0]:r;if(n)caps.push(n);toast('Capacitación creada');}
-    else{await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);const i=caps.findIndex(c=>c.id===Number(id));if(i>=0)caps[i]={...caps[i],...obj};toast('Actualizada');}
+    if(isNew){
+      const r=await api('POST','capacitaciones',obj,'');
+      const n=Array.isArray(r)?r[0]:r;
+      if(n){
+        caps.push(n);
+        // Auto-cargar participantes del padrón si hay UN y sector
+        await cargarParticipantesDesdePadron(n.id, n.un, n.sector);
+      }
+      toast('Capacitación creada');
+    } else {
+      await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);
+      const i=caps.findIndex(c=>c.id===Number(id));
+      if(i>=0)caps[i]={...caps[i],...obj};
+      // Si cambió la UN o sector, ofrecer recargar participantes
+      const capActual=caps[i];
+      if(capActual&&(capActual.un!==obj.un||capActual.sector!==obj.sector)&&obj.un){
+        if(confirm('¿Actualizar participantes desde el padrón para la nueva UN/Sector?')){
+          await cargarParticipantesDesdePadron(Number(id),obj.un,obj.sector);
+        }
+      }
+      toast('Actualizada');
+    }
     setSyncStatus('ok');updateSub();closeModal();renderContent();
   }catch(e){setSyncStatus('error');toast('Error');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
 }

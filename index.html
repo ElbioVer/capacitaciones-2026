@@ -315,7 +315,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const H={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
 const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre (May-Jun)','4° Bimestre (Jul-Ago)','5° Bimestre (Sep-Oct)','6° Bimestre (Nov-Dic)'];
 
-let caps=[],asistentes=[],uns=[],sectores=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
+let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
 let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='';
 let currentUser=null;
 
@@ -402,6 +402,8 @@ async function loadAll(){
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
     padron=res[8]||[];
     if(isAdmin()) usuarios=res[9]||[];
+    // Extraer departamentos únicos del padrón
+    departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
   }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
 }
@@ -758,11 +760,15 @@ function desvioInfo(cap){
 
 // ── PADRÓN ───────────────────────────────────────────────────────
 function getPadronEmpleado(legajo){return padron.find(p=>String(p.legajo)===String(legajo));}
-function padronActivos(un,sector){
+function padronActivos(un,sector,depto){
   return padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
     if(un&&p.un!==un) return false;
     if(sector&&p.sector!==sector) return false;
+    if(depto){
+      const d=p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'';
+      if(d!==depto) return false;
+    }
     return true;
   });
 }
@@ -772,94 +778,94 @@ function renderPadron(){
   const total=padron.length;
   const vigentes=padron.filter(p=>!p.estado||p.estado==='Vigente').length;
   const bajas=total-vigentes;
-  
-  // Obtener columnas extra del primer registro con datos_extra
-  let extraCols=[];
-  const conExtra=padron.find(p=>p.datos_extra&&Object.keys(p.datos_extra).length>0);
-  if(conExtra) extraCols=Object.keys(conExtra.datos_extra);
 
-  const filas=padron.map(p=>{
-    const estadoBadge=p.estado==='Vigente'?'<span class="badge realizada" style="font-size:10px">Vigente</span>'
-      :p.estado==='Renuncia'?'<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>'
-      :p.estado==='Despido'?'<span class="badge vencida" style="font-size:10px">Despido</span>'
-      :`<span class="badge" style="font-size:10px;background:#ccc;color:#555">${esc(p.estado||'?')}</span>`;
-    const extra=extraCols.map(k=>`<td style="font-size:11px;padding:5px 7px">${esc(String(p.datos_extra?.[k]??''))}</td>`).join('');
-    return`<tr>
-      <td style="font-size:11px;padding:5px 7px;font-weight:600">${esc(String(p.legajo||''))}</td>
-      <td style="font-size:11px;padding:5px 7px">${esc(p.nombre||'')}</td>
-      <td style="font-size:11px;padding:5px 7px">${esc(p.un||'')}</td>
-      <td style="font-size:11px;padding:5px 7px">${esc(p.sector||'')}</td>
-      <td style="font-size:11px;padding:5px 7px">${p.fecha_ingreso?p.fecha_ingreso.slice(0,10):''}</td>
-      <td style="font-size:11px;padding:5px 7px">${p.fecha_egreso?p.fecha_egreso.slice(0,10):''}</td>
-      <td style="font-size:11px;padding:5px 7px">${estadoBadge}</td>
-      ${extra}
-    </tr>`;
-  }).join('');
+  const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none';
+  const tdS=(i)=>`font-size:11px;padding:5px 8px;border-bottom:1px solid #f0f0ec;background:${i%2===0?'#fff':'#fafafa'}`;
 
-  const extraHeaders=extraCols.map(k=>`<th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">${esc(k)}</th>`).join('');
+  const estadoBadge=(p)=>p.estado==='Vigente'?'<span class="badge realizada" style="font-size:10px">Vigente</span>'
+    :p.estado==='Renuncia'?'<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>'
+    :p.estado==='Despido'?'<span class="badge vencida" style="font-size:10px">Despido</span>'
+    :`<span class="badge" style="font-size:10px;background:#ccc;color:#555">${esc(p.estado||'?')}</span>`;
+
+  const sorted=[...padron].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
+  const filas=sorted.map((p,i)=>`<tr>
+    <td style="${tdS(i)};font-weight:600">${esc(String(p.legajo||''))}</td>
+    <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
+    <td style="${tdS(i)}">${p.fecha_ingreso?p.fecha_ingreso.slice(0,10):''}</td>
+    <td style="${tdS(i)}">${p.fecha_egreso?p.fecha_egreso.slice(0,10):''}</td>
+    <td style="${tdS(i)}">${esc(p.sector||'')}</td>
+    <td style="${tdS(i)}">${esc(p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'')}</td>
+    <td style="${tdS(i)}">${estadoBadge(p)}</td>
+    <td style="${tdS(i)}">${esc(p.un||'')}</td>
+    <td style="${tdS(i)}">${esc(p.establecimiento||p.datos_extra?.Establecimiento||p.datos_extra?.establecimiento||'')}</td>
+    <td style="${tdS(i)}">${esc(p.documento||p.datos_extra?.Documento||p.datos_extra?.documento||'')}</td>
+  </tr>`).join('');
 
   return`
   <div class="config-section">
     <div class="config-title">Padrón de personal
-      ${isAdmin()?`<div style="display:flex;gap:6px">
-        <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla Excel</button>
-        <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarPadron(event)"></label>
+      ${isAdmin()?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla</button>
+        <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarPadron(event)"></label>
         <button class="btn-sm blue" onclick="exportarPadron()">📤 Exportar</button>
+        <button class="btn-sm" style="background:#CC0000;color:#fff" onclick="limpiarPadron()">🗑 Limpiar padrón</button>
       </div>`:''}
     </div>
-    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-      <div style="background:#E1F5EE;border-radius:8px;padding:8px 14px;font-size:12px">
-        <div style="font-size:20px;font-weight:700;color:#0F6E56">${total}</div>
-        <div style="color:#0F6E56">Total</div>
-      </div>
-      <div style="background:#E8F5FF;border-radius:8px;padding:8px 14px;font-size:12px">
-        <div style="font-size:20px;font-weight:700;color:#185FA5">${vigentes}</div>
-        <div style="color:#185FA5">Vigentes</div>
-      </div>
-      <div style="background:#FAEEDA;border-radius:8px;padding:8px 14px;font-size:12px">
-        <div style="font-size:20px;font-weight:700;color:#854F0B">${bajas}</div>
-        <div style="color:#854F0B">Bajas</div>
-      </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="background:#E1F5EE;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#0F6E56">${total}</div><div style="color:#0F6E56">Total</div></div>
+      <div style="background:#E8F5FF;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#185FA5">${vigentes}</div><div style="color:#185FA5">Vigentes</div></div>
+      <div style="background:#FAEEDA;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#854F0B">${bajas}</div><div style="color:#854F0B">Bajas</div></div>
     </div>
-    ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">
-      No hay empleados cargados aún. Importá un Excel para comenzar.
-    </div>`:`
-    <div style="overflow-x:auto;border-radius:8px;border:1px solid #e5e5e0">
-      <table class="legajo-table" style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Legajo</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Nombre</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">UN</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Sector</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Ingreso</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Egreso</th>
-            <th style="font-size:11px;padding:5px 7px;text-align:left;background:#f4f4f2;border-bottom:2px solid #e0e0e0">Estado</th>
-            ${extraHeaders}
-          </tr>
-        </thead>
+    ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid #e0e0e0">
+      <table style="width:100%;border-collapse:collapse;min-width:750px">
+        <thead><tr>
+          <th style="${thS}">Legajo</th>
+          <th style="${thS}">Nombre</th>
+          <th style="${thS}">Fecha de Ingreso</th>
+          <th style="${thS}">Fecha de egreso</th>
+          <th style="${thS}">Sector</th>
+          <th style="${thS}">Departamento</th>
+          <th style="${thS}">Estado Empleado</th>
+          <th style="${thS}">Unidad de Negocio</th>
+          <th style="${thS}">Establecimiento</th>
+          <th style="${thS}">Documento</th>
+        </tr></thead>
         <tbody>${filas}</tbody>
       </table>
     </div>`}
+  </div>
+  <div class="config-section">
+    <div class="config-title">Exportar estructura organizativa</div>
+    <p style="font-size:12px;color:#777;margin-bottom:8px">Descarga un Excel con UN, Departamento y Sector para uso en otros sistemas.</p>
+    <button class="btn-sm blue" onclick="exportarEstructura()">📊 Exportar UN / Departamento / Sector</button>
   </div>
   <div class="config-section">
     <div class="config-title">Formato del archivo Excel</div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo *</strong> — número de legajo (campo único)</div>
       <div><strong>nombre *</strong> — nombre y apellido completo</div>
-      <div><strong>un</strong> — Unidad de Negocio</div>
-      <div><strong>sector</strong> — sector del empleado</div>
-      <div><strong>fecha_ingreso</strong> — fecha de ingreso (DD/MM/AAAA)</div>
-      <div><strong>fecha_egreso</strong> — fecha de egreso (DD/MM/AAAA)</div>
-      <div><strong>estado</strong> — Vigente / Renuncia / Despido / Suspendido</div>
-      <div style="color:#185FA5"><strong>+ columnas extra</strong> — cualquier otra columna se guarda automáticamente en datos_extra</div>
+      <div><strong>Fecha de Ingreso</strong> — DD/MM/AAAA</div>
+      <div><strong>Fecha de egreso</strong> — DD/MM/AAAA</div>
+      <div><strong>Sector</strong> — sector del empleado</div>
+      <div><strong>Departamento</strong> — departamento</div>
+      <div><strong>Estado Empleado</strong> — Vigente / Renuncia / Despido / Suspendido</div>
+      <div><strong>Unidad de Negocio</strong> — UN</div>
+      <div><strong>Establecimiento</strong> — establecimiento</div>
+      <div><strong>Documento</strong> — número de documento</div>
     </div>
   </div>`;
 }
 
 async function exportPlantillaPadron(){
   const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.json_to_sheet([{legajo:'12345',nombre:'García Juan',un:'Servicios Electricos',sector:'Operaciones',fecha_ingreso:'01/03/2020',fecha_egreso:'',estado:'Vigente'}]);
+  const ws=XLSX.utils.json_to_sheet([{
+    legajo:'12345',nombre:'García Juan',
+    'Fecha de Ingreso':'01/03/2020','Fecha de egreso':'',
+    Sector:'Operaciones',Departamento:'Distribución',
+    'Estado Empleado':'Vigente','Unidad de Negocio':'Servicios Electricos',
+    Establecimiento:'Casa Central',Documento:'25678901'
+  }]);
   XLSX.utils.book_append_sheet(wb,ws,'Padrón');
   XLSX.writeFile(wb,'plantilla_padron.xlsx');
   toast('Plantilla descargada');
@@ -867,16 +873,56 @@ async function exportPlantillaPadron(){
 
 async function exportarPadron(){
   if(!padron.length){toast('No hay datos en el padrón');return;}
-  const rows=padron.map(p=>({
-    legajo:p.legajo,nombre:p.nombre,un:p.un||'',sector:p.sector||'',
-    fecha_ingreso:p.fecha_ingreso||'',fecha_egreso:p.fecha_egreso||'',estado:p.estado||'Vigente',
-    ...(p.datos_extra||{})
+  const sorted=[...padron].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
+  const rows=sorted.map(p=>({
+    legajo:p.legajo,
+    nombre:p.nombre,
+    'Fecha de Ingreso':p.fecha_ingreso||'',
+    'Fecha de egreso':p.fecha_egreso||'',
+    'Sector':p.sector||'',
+    'Departamento':p.departamento||p.datos_extra?.Departamento||'',
+    'Estado Empleado':p.estado||'Vigente',
+    'Unidad de Negocio':p.un||'',
+    'Establecimiento':p.establecimiento||p.datos_extra?.Establecimiento||'',
+    'Documento':p.documento||p.datos_extra?.Documento||'',
   }));
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb,ws,'Padrón');
   XLSX.writeFile(wb,'padron_personal.xlsx');
   toast('Excel descargado');
+}
+
+async function limpiarPadron(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  if(!confirm('¿Eliminar TODOS los registros del padrón? Esta acción no se puede deshacer.')) return;
+  try{
+    setSyncStatus('syncing');
+    await api('DELETE','padron','','?id=gte.0');
+    padron=[];departamentos=[];
+    toast('Padrón eliminado');
+    renderContent();
+    setSyncStatus('ok');
+  }catch(err){setSyncStatus('error');alert('Error al eliminar: '+err.message);}
+}
+
+async function exportarEstructura(){
+  if(!padron.length){toast('No hay datos en el padrón');return;}
+  const vistos=new Set();
+  const rows=[];
+  padron.forEach(p=>{
+    const key=`${p.un||''}|${p.departamento||p.datos_extra?.Departamento||''}|${p.sector||''}`;
+    if(!vistos.has(key)){
+      vistos.add(key);
+      rows.push({'Unidad de Negocio':p.un||'','Departamento':p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'','Sector':p.sector||''});
+    }
+  });
+  rows.sort((a,b)=>a['Unidad de Negocio'].localeCompare(b['Unidad de Negocio'])||a['Departamento'].localeCompare(b['Departamento'])||a['Sector'].localeCompare(b['Sector']));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'Estructura');
+  XLSX.writeFile(wb,'estructura_UN_Depto_Sector.xlsx');
+  toast('Exportado');
 }
 
 async function importarPadron(event){
@@ -887,39 +933,38 @@ async function importarPadron(event){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
-      const CAMPOS_BASE=['legajo','nombre','un','sector','fecha_ingreso','fecha_egreso','estado'];
+      const get=(r,...keys)=>{for(const k of keys){if(r[k]!==undefined&&r[k]!=='')return String(r[k]).trim();}return '';};
+      const parseFecha=(v)=>{
+        if(!v||!String(v).trim()) return null;
+        const s=String(v).trim();
+        if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m}-${d}`;}
+        if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        return null;
+      };
+      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento'];
       const nuevos=rows.map(r=>{
-        const legajo=String(r.legajo||r.Legajo||r.LEGAJO||'').trim();
-        const nombre=String(r.nombre||r.Nombre||r.NOMBRE||'').trim();
+        const legajo=get(r,'legajo','Legajo','LEGAJO');
+        const nombre=get(r,'nombre','Nombre','NOMBRE');
         if(!legajo||!nombre) return null;
-        // Campos extra → datos_extra JSONB
         const datos_extra={};
         Object.keys(r).forEach(k=>{
-          const kl=k.toLowerCase().trim();
-          if(!CAMPOS_BASE.includes(kl)&&r[k]!==''&&r[k]!==null){
-            datos_extra[k]=r[k];
-          }
+          if(!CAMPOS_BASE.includes(k.toLowerCase().trim())&&r[k]!==''&&r[k]!==null) datos_extra[k]=r[k];
         });
-        const parseFecha=(v)=>{
-          if(!v||!String(v).trim()) return null;
-          const s=String(v).trim();
-          // DD/MM/AAAA
-          if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m}-${d}`;}
-          return s;
-        };
         return{
           legajo,nombre,
-          un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim()||null,
-          sector:String(r.sector||r.Sector||r.SECTOR||'').trim()||null,
-          fecha_ingreso:parseFecha(r.fecha_ingreso||r['Fecha Ingreso']||r['FECHA_INGRESO']||''),
-          fecha_egreso:parseFecha(r.fecha_egreso||r['Fecha Egreso']||r['FECHA_EGRESO']||''),
-          estado:String(r.estado||r.Estado||r.ESTADO||'Vigente').trim(),
+          un:get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null,
+          sector:get(r,'Sector','sector','SECTOR')||null,
+          departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,
+          fecha_ingreso:parseFecha(get(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
+          fecha_egreso:parseFecha(get(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso')),
+          estado:get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente',
+          establecimiento:get(r,'Establecimiento','establecimiento')||null,
+          documento:get(r,'Documento','documento','DOCUMENTO')||null,
           datos_extra:Object.keys(datos_extra).length?datos_extra:{}
         };
       }).filter(Boolean);
-      if(!nuevos.length){alert('No se encontraron registros válidos (se requiere columna legajo y nombre).');return;}
-      setSyncStatus('syncing');toast('Importando padrón...',10000);
-      // Upsert por legajo
+      if(!nuevos.length){alert('No se encontraron registros válidos. Se requieren columnas legajo y nombre.');return;}
+      setSyncStatus('syncing');toast(`Importando ${nuevos.length} registros...`,10000);
       const res=await api('POST','padron',nuevos,'?on_conflict=legajo');
       if(res){
         await loadAll();
@@ -935,8 +980,10 @@ function renderConfig(){
   if(!isAdmin())return'';
   const unTags=uns.map(u=>`<div class="tag">${esc(u.nombre)}<span class="tag-del" onclick="delUN(${u.id},'${esc(u.nombre)}')">×</span></div>`).join('');
   const secTags=sectores.map(s=>`<div class="tag" style="border-radius:8px;flex-direction:column;align-items:flex-start;padding:4px 9px"><div style="display:flex;align-items:center;gap:4px;width:100%"><span style="font-size:11px;flex:1">${esc(s.nombre)}</span><span class="tag-del" onclick="delSector(${s.id},'${esc(s.nombre)}')">×</span></div><span style="font-size:10px;color:#999">${esc(s.un)}</span></div>`).join('');
+  const deptTags=departamentos.map(d=>`<div class="tag" style="background:#E8F5FF;border-color:#90CAF9">${esc(d)}<span class="tag-del" onclick="delDepto('${esc(d)}')">×</span></div>`).join('')||'<span style="font-size:11px;color:#aaa">Sin departamentos (se cargan desde el padrón)</span>';
   const tipoRows=tipos.map(t=>`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><div style="display:flex;gap:4px">${t.tiene_evaluacion?'<span class="badge realizada" style="font-size:10px">Eval</span>':''}${t.tiene_repositorio?'<span class="badge programada" style="font-size:10px">Repo</span>':''}</div></div>`).join('');
   return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
+  <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list">${deptTags}</div></div>
   <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list">${secTags}</div></div>
   <div class="config-section"><div class="config-title">Tipos de capacitación<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addTipo()">+ Nuevo tipo</button></div>${tipoRows}</div>
   <div class="config-section">
@@ -1271,16 +1318,19 @@ function renderEvalPublica(evalId){
         <div style="margin-top:8px">
           <label class="form-label">Legajo *</label>
           <div style="display:flex;gap:6px">
-            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu legajo" style="flex:1" oninput="validarLegajoPadron(this.value)">
+            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu número de legajo" style="flex:1" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value)">
+            <button onclick="validarLegajoPadron(document.getElementById('pub-legajo').value)" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Validar</button>
           </div>
           <div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>
-          <div style="margin-top:8px">
-            <label class="form-label">Nombre completo *</label>
-            <input class="form-input" id="pub-nombre" placeholder="Se completa automáticamente" readonly style="background:#f9f9f7">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-            <div><label class="form-label">UN</label><input class="form-input" id="pub-un" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
-            <div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+          <div id="padron-datos" style="display:none">
+            <div style="margin-top:8px">
+              <label class="form-label">Nombre completo</label>
+              <input class="form-input" id="pub-nombre" placeholder="Se completa automáticamente" readonly style="background:#f9f9f7">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+              <div><label class="form-label">UN</label><input class="form-input" id="pub-un" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+              <div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1293,41 +1343,45 @@ function renderEvalPublica(evalId){
 
 function validarLegajoPadron(legajo){
   const lookup=document.getElementById('padron-lookup');
+  const datos=document.getElementById('padron-datos');
   const nombreInput=document.getElementById('pub-nombre');
   const unInput=document.getElementById('pub-un');
   const secInput=document.getElementById('pub-sector');
-  if(!lookup||!nombreInput) return;
-  if(!legajo||legajo.length<3){
-    lookup.style.display='none';
-    nombreInput.value='';nombreInput.readOnly=true;
-    if(unInput) unInput.value='';
-    if(secInput) secInput.value='';
+  if(!lookup) return;
+  const leg=String(legajo||'').trim();
+  if(!leg){
+    lookup.style.display='block';
+    lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá tu legajo antes de validar</span>';
+    if(datos) datos.style.display='none';
     return;
   }
-  const emp=getPadronEmpleado(legajo);
+  const emp=getPadronEmpleado(leg);
   if(emp){
     if(emp.estado&&emp.estado!=='Vigente'){
       lookup.style.display='block';
-      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}" — contactá a RRHH</span>`;
-      nombreInput.value='';nombreInput.readOnly=true;
+      lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">⚠ Empleado con estado "${esc(emp.estado)}" — contactá a RRHH para regularizar</span>`;
+      if(datos) datos.style.display='none';
     } else {
       lookup.style.display='block';
-      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(emp.sector||'')}</span>`;
-      nombreInput.value=emp.nombre;nombreInput.readOnly=true;
+      lookup.innerHTML=`<span style="color:#0F6E56;font-weight:600">✔ Legajo validado: ${esc(emp.nombre)}</span>`;
+      if(nombreInput) nombreInput.value=emp.nombre;
       if(unInput) unInput.value=emp.un||'';
       if(secInput) secInput.value=emp.sector||'';
+      if(datos) datos.style.display='block';
     }
   } else if(padron.length>0){
-    // Hay padrón cargado pero no encontró el legajo
     lookup.style.display='block';
-    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
-    nombreInput.value='';nombreInput.readOnly=true;
+    lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado en el padrón — verificá el número o contactá a RRHH</span>`;
+    if(datos) datos.style.display='none';
+    if(nombreInput) nombreInput.value='';
     if(unInput) unInput.value='';
     if(secInput) secInput.value='';
   } else {
-    // Sin padrón: dejar editar manualmente
-    lookup.style.display='none';
-    nombreInput.readOnly=false;
+    // Sin padrón: mostrar campos para completar manualmente
+    lookup.style.display='block';
+    lookup.innerHTML='<span style="color:#888">Sin padrón cargado — completá los datos manualmente</span>';
+    if(datos) datos.style.display='block';
+    if(nombreInput){nombreInput.readOnly=false;nombreInput.placeholder='Nombre y apellido';}
   }
 }
 
@@ -1552,7 +1606,23 @@ async function addTipo(){
   try{const r=await api('POST','tipos_capacitacion',{codigo:codigoU,nombre:nombre.trim(),tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo},'');const nv=Array.isArray(r)?r[0]:r;if(nv)tipos.push(nv);populateFilters();renderContent();toast('Tipo agregado');}catch(e){toast('Error');}
 }
 
-async function addUN(){if(!isAdmin())return;const n=prompt('Nombre de la nueva UN:');if(!n||!n.trim())return;if(uns.find(u=>u.nombre===n.trim())){toast('Ya existe');return;}try{const r=await api('POST','unidades_negocio',{nombre:n.trim()},'');const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);populateFilters();renderContent();toast('UN agregada');}catch(e){toast('Error');}}
+async function addDepto(){
+  const nombre=prompt('Nombre del departamento:');
+  if(!nombre||!nombre.trim()) return;
+  const n=nombre.trim();
+  if(departamentos.includes(n)){toast('Ya existe ese departamento');return;}
+  departamentos=[...departamentos,n].sort();
+  renderContent();
+  toast('Departamento agregado');
+}
+function delDepto(nombre){
+  if(!confirm(`¿Eliminar el departamento "${nombre}"?`)) return;
+  departamentos=departamentos.filter(d=>d!==nombre);
+  renderContent();
+  toast('Departamento eliminado');
+}
+
+function addUN(){if(!isAdmin())return;const n=prompt('Nombre de la nueva UN:');if(!n||!n.trim())return;if(uns.find(u=>u.nombre===n.trim())){toast('Ya existe');return;}try{const r=await api('POST','unidades_negocio',{nombre:n.trim()},'');const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);populateFilters();renderContent();toast('UN agregada');}catch(e){toast('Error');}}
 async function delUN(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar la UN "${nombre}"?`))return;try{await api('DELETE','unidades_negocio','',`?id=eq.${id}`);uns=uns.filter(u=>u.id!==id);populateFilters();renderContent();toast('UN eliminada');}catch(e){toast('Error');}}
 async function addSector(){if(!isAdmin())return;if(!uns.length){alert('Primero agregá una UN.');return;}const unN=prompt(`¿A qué UN pertenece?\nOpciones: ${uns.map(u=>u.nombre).join(', ')}`);if(!unN)return;const unReal=uns.find(u=>u.nombre.toLowerCase()===unN.trim().toLowerCase());if(!unReal){alert('UN no encontrada.');return;}const n=prompt('Nombre del sector:');if(!n||!n.trim())return;if(sectores.find(s=>s.nombre.toLowerCase()===n.trim().toLowerCase()&&s.un===unReal.nombre)){toast('Ya existe');return;}try{const r=await api('POST','sectores',{nombre:n.trim(),un:unReal.nombre},'');const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);populateFilters();renderContent();toast('Sector agregado');}catch(e){toast('Error');}}
 async function delSector(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar "${nombre}"?`))return;try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}}

@@ -8,8 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;min-height:100vh;color:#1a1a1a}
-.app{background:#f4f4f2;min-height:100vh;display:flex;flex-direction:column}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;height:100vh;overflow:hidden;color:#1a1a1a}
+.app{background:#f4f4f2;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 .header{background:#fff;border-bottom:1px solid #e5e5e0;padding:12px 16px;position:sticky;top:0;z-index:20}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .header-left{flex:1;min-width:0}
@@ -26,7 +26,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-gray{background:#f4f4f2;color:#555;border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
 .btn-gray:hover{background:#e8e8e4}
 .user-avatar{width:28px;height:28px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#085041;flex-shrink:0}
-.top-controls{position:sticky;top:0;z-index:20;background:#fff}.filter-bar{background:#fff;border-bottom:1px solid #e5e5e0;padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.top-controls{flex-shrink:0;z-index:20;background:#fff}.filter-bar{background:#fff;border-bottom:1px solid #e5e5e0;padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .filter-bar label{font-size:11px;color:#888;white-space:nowrap}
 .filter-bar select{font-size:11px;padding:4px 7px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;cursor:pointer}
 .filter-bar select:focus{outline:none;border-color:#1D9E75}
@@ -36,19 +36,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stat-lbl{font-size:10px;color:#888;margin-top:1px}
 .stat-num.ok{color:#0F6E56}.stat-num.pend{color:#BA7517}.stat-num.miss{color:#A32D2D}
 /* ── LAYOUT SIDEBAR ──────────────────────── */
-.app-body{display:flex;flex-direction:row;align-items:flex-start;flex:1;min-height:calc(100vh - 170px)}
-.tabs{display:flex;flex-direction:column;background:#fff;border-right:1px solid #e5e5e0;padding:8px 0;position:sticky;top:0;align-self:flex-start;min-height:calc(100vh - 170px);overflow-y:auto;width:130px;flex-shrink:0;z-index:10}
+.app-body{display:flex;flex-direction:row;align-items:stretch;flex:1;overflow:hidden;min-height:0}
+.tabs{display:flex;flex-direction:column;background:#fff;border-right:1px solid #e5e5e0;padding:8px 0;overflow-y:auto;width:130px;flex-shrink:0;z-index:10}
 .tab{padding:10px 14px;font-size:11px;font-weight:500;cursor:pointer;border-left:3px solid transparent;color:#777;white-space:nowrap;text-align:left;user-select:none}
 .tab:hover{background:#f9f9f7;color:#333}
 .tab.active{color:#1D9E75;border-left-color:#1D9E75;background:#F0FBF7;font-weight:600}
-.content{flex:1;padding:12px 18px;min-width:0;overflow-x:auto}
+.content{flex:1;padding:12px 18px;min-width:0;overflow-y:auto;overflow-x:auto}
 /* Mobile: menú horizontal abajo del stats-bar */
 @media(max-width:640px){
   .app-body{flex-direction:column}
-  .tabs{flex-direction:row;width:100%;min-height:auto;border-right:none;border-bottom:1px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;position:relative;padding:0 8px}
+  .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;border-right:none;border-bottom:1px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;padding:0 8px}
   .tab{border-left:none;border-bottom:3px solid transparent;padding:10px 10px;white-space:nowrap;flex-shrink:0}
   .tab.active{border-left:none;border-bottom-color:#1D9E75;background:transparent}
-  .content{padding:10px 12px}
+  .content{padding:10px 12px;overflow-x:auto}
 }
 
 /* TIPO BADGES */
@@ -542,6 +542,7 @@ function capCard(c){
 }
 
 function switchTab(t){
+  if(t!=='padron') window._padronFiltro='todos';
   currentTab=t;
   ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
   renderContent();
@@ -798,23 +799,34 @@ function padronActivos(un,sector,depto){
   });
 }
 
-function renderPadron(){
+function renderPadron(filtro){
   if(!isAdmin()&&!isCapacitador())return'';
+  if(typeof filtro==='undefined') filtro=window._padronFiltro||'todos';
+  window._padronFiltro=filtro;
   const total=padron.length;
   const vigentes=padron.filter(p=>!p.estado||p.estado==='Vigente').length;
   const bajas=total-vigentes;
 
-  const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none';
+  const lista=filtro==='vigentes'?padron.filter(p=>!p.estado||p.estado==='Vigente')
+              :filtro==='bajas'?padron.filter(p=>p.estado&&p.estado!=='Vigente')
+              :padron;
+
+  const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none;position:sticky;top:0;z-index:2';
   const tdS=(i)=>`font-size:11px;padding:5px 8px;border-bottom:1px solid #f0f0ec;background:${i%2===0?'#fff':'#fafafa'}`;
 
   const estadoBadge=(p)=>{
-    if(p.estado==='Vigente') return '<span class="badge realizada" style="font-size:10px">Vigente</span>';
+    if(!p.estado||p.estado==='Vigente') return '<span class="badge realizada" style="font-size:10px">Vigente</span>';
     if(p.estado==='Renuncia') return '<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>';
     if(p.estado==='Despido') return '<span class="badge vencida" style="font-size:10px">Despido</span>';
+    if(p.estado==='UOCRA Baja Definitiva'||p.estado.toLowerCase().includes('baja')) return '<span class="badge vencida" style="font-size:10px">'+esc(p.estado)+'</span>';
     return '<span class="badge" style="font-size:10px;background:#ccc;color:#555">'+esc(p.estado||'?')+'</span>';
   };
 
-  const sorted=[...padron].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
+  const cardStyle=(active,bg,txt,border)=>active
+    ?`background:${bg};border-radius:10px;padding:8px 16px;font-size:12px;cursor:pointer;border:2px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.15);transform:scale(1.04);transition:.15s`
+    :`background:${bg};border-radius:10px;padding:8px 16px;font-size:12px;cursor:pointer;border:2px solid transparent;transition:.15s;opacity:0.8`;
+
+  const sorted=[...lista].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
   const filas=sorted.map((p,i)=>`<tr>
     <td style="${tdS(i)};font-weight:600">${esc(String(p.legajo||''))}</td>
     <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
@@ -828,40 +840,54 @@ function renderPadron(){
     <td style="${tdS(i)}">${esc(p.documento||p.datos_extra?.Documento||p.datos_extra?.documento||'')}</td>
   </tr>`).join('');
 
+  const labelFiltro=filtro==='vigentes'?`Vigentes (${vigentes})`
+                   :filtro==='bajas'?`Bajas (${bajas})`
+                   :`Todos (${total})`;
+
   return`
-  <div class="config-section">
-    <div class="config-title">Padrón de personal
-      ${isAdmin()?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div onclick="filtrarPadron('todos')" style="${cardStyle(filtro==='todos','#E1F5EE','#0F6E56','#1D9E75')}">
+        <div style="font-size:22px;font-weight:700;color:#0F6E56">${total}</div>
+        <div style="color:#0F6E56;font-weight:${filtro==='todos'?'700':'400'}">Total</div>
+      </div>
+      <div onclick="filtrarPadron('vigentes')" style="${cardStyle(filtro==='vigentes','#E8F5FF','#185FA5','#185FA5')}">
+        <div style="font-size:22px;font-weight:700;color:#185FA5">${vigentes}</div>
+        <div style="color:#185FA5;font-weight:${filtro==='vigentes'?'700':'400'}">Vigentes</div>
+      </div>
+      <div onclick="filtrarPadron('bajas')" style="${cardStyle(filtro==='bajas','#FAEEDA','#854F0B','#EF9F27')}">
+        <div style="font-size:22px;font-weight:700;color:#854F0B">${bajas}</div>
+        <div style="color:#854F0B;font-weight:${filtro==='bajas'?'700':'400'}">Bajas</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      ${filtro!=='todos'?`<span style="font-size:11px;background:#f4f4f2;border-radius:6px;padding:4px 10px;color:#555">Mostrando: <strong>${labelFiltro}</strong></span>`:''}
+      ${isAdmin()?`
         <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla</button>
         <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarPadron(event)"></label>
         <button class="btn-sm blue" onclick="exportarPadron()">📤 Exportar</button>
-        <button class="btn-sm" style="background:#CC0000;color:#fff" onclick="limpiarPadron()">🗑 Limpiar padrón</button>
-      </div>`:''}
+        <button class="btn-sm" style="background:#CC0000;color:#fff" onclick="limpiarPadron()">🗑 Limpiar</button>
+      `:''}
     </div>
-    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <div style="background:#E1F5EE;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#0F6E56">${total}</div><div style="color:#0F6E56">Total</div></div>
-      <div style="background:#E8F5FF;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#185FA5">${vigentes}</div><div style="color:#185FA5">Vigentes</div></div>
-      <div style="background:#FAEEDA;border-radius:8px;padding:8px 14px;font-size:12px"><div style="font-size:20px;font-weight:700;color:#854F0B">${bajas}</div><div style="color:#854F0B">Bajas</div></div>
-    </div>
-    ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
-    <div style="overflow-x:auto;border-radius:8px;border:1px solid #e0e0e0">
-      <table style="width:100%;border-collapse:collapse;min-width:750px">
-        <thead><tr>
-          <th style="${thS}">Legajo</th>
-          <th style="${thS}">Nombre</th>
-          <th style="${thS}">Fecha de Ingreso</th>
-          <th style="${thS}">Fecha de egreso</th>
-          <th style="${thS}">Sector</th>
-          <th style="${thS}">Departamento</th>
-          <th style="${thS}">Estado Empleado</th>
-          <th style="${thS}">Unidad de Negocio</th>
-          <th style="${thS}">Establecimiento</th>
-          <th style="${thS}">Documento</th>
-        </tr></thead>
-        <tbody>${filas}</tbody>
-      </table>
-    </div>`}
   </div>
+  ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
+  <div style="overflow-x:auto;border-radius:8px;border:1px solid #e0e0e0">
+    <table style="width:100%;border-collapse:collapse;min-width:900px">
+      <thead><tr>
+        <th style="${thS}">Legajo</th>
+        <th style="${thS}">Nombre</th>
+        <th style="${thS}">Fecha de Ingreso</th>
+        <th style="${thS}">Fecha de egreso</th>
+        <th style="${thS}">Sector</th>
+        <th style="${thS}">Departamento</th>
+        <th style="${thS}">Estado Empleado</th>
+        <th style="${thS}">Unidad de Negocio</th>
+        <th style="${thS}">Establecimiento</th>
+        <th style="${thS}">Documento</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+  </div>`}
   <div class="config-section">
     <div class="config-title">Exportar estructura organizativa</div>
     <p style="font-size:12px;color:#777;margin-bottom:8px">Descarga un Excel con UN, Departamento y Sector para uso en otros sistemas.</p>
@@ -918,6 +944,13 @@ async function exportarPadron(){
   XLSX.utils.book_append_sheet(wb,ws,'Padrón');
   XLSX.writeFile(wb,'padron_personal.xlsx');
   toast('Excel descargado');
+}
+
+
+function filtrarPadron(filtro){
+  window._padronFiltro=filtro;
+  const el=document.getElementById('content');
+  if(el) el.innerHTML=renderPadron(filtro);
 }
 
 async function limpiarPadron(){

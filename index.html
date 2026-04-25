@@ -936,6 +936,42 @@ async function exportarEstructura(){
   toast('Exportado');
 }
 
+
+async function syncUNsSectoresDesde(registros){
+  // Extraer UN únicas del padrón
+  const unNombres=[...new Set(registros.map(r=>r.un).filter(Boolean))];
+  const secPares=[...new Map(
+    registros.filter(r=>r.sector&&r.un).map(r=>`${r.un}|||${r.sector}`)
+    .filter((v,i,a)=>a.indexOf(v)===i)
+    .map(v=>v.split('|||'))
+    .map(([u,s])=>[`${u}|||${s}`,{un:u,nombre:s}])
+  ).values()];
+
+  // Insertar UN que no existen
+  const unExistentes=new Set(uns.map(u=>u.nombre));
+  const unNuevas=unNombres.filter(n=>!unExistentes.has(n));
+  if(unNuevas.length){
+    try{
+      const res=await api('POST','unidades_negocio',unNuevas.map(n=>({nombre:n})),'?on_conflict=nombre');
+      if(res){const arr=Array.isArray(res)?res:[res];uns=[...uns,...arr];}
+    }catch(e){console.warn('Error sync UNs:',e);}
+  }
+
+  // Insertar Sectores que no existen
+  const secExistentes=new Set(sectores.map(s=>`${s.un}|||${s.nombre}`));
+  const secNuevos=secPares.filter(s=>!secExistentes.has(`${s.un}|||${s.nombre}`));
+  if(secNuevos.length){
+    try{
+      const res=await api('POST','sectores',secNuevos,'?on_conflict=nombre,un');
+      if(res){const arr=Array.isArray(res)?res:[res];sectores=[...sectores,...arr];}
+    }catch(e){console.warn('Error sync sectores:',e);}
+  }
+
+  if(unNuevas.length||secNuevos.length){
+    toast(`Estructura actualizada: ${unNuevas.length} UN y ${secNuevos.length} sectores nuevos`);
+  }
+}
+
 async function importarPadron(event){
   if(!isAdmin()){toast('Sin permisos');return;}
   const file=event.target.files[0];if(!file)return;
@@ -943,13 +979,25 @@ async function importarPadron(event){
   reader.onload=async function(e){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
-      const get=(r,...keys)=>{for(const k of keys){if(r[k]!==undefined&&r[k]!=='')return String(r[k]).trim();}return '';};
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true,dateNF:'DD/MM/YYYY'});
+      const get=(r,...keys)=>{for(const k of keys){const v=r[k];if(v!==undefined&&v!==null&&String(v).trim()!=='')return String(v).trim();}return '';};
       const parseFecha=(v)=>{
-        if(!v||!String(v).trim()) return null;
+        if(v===null||v===undefined||String(v).trim()==='') return null;
         const s=String(v).trim();
-        if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m}-${d}`;}
+        // DD/MM/AAAA
+        if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+        // AAAA-MM-DD
         if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        // DD-MM-AAAA
+        if(/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)){const[d,m,y]=s.split('-');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+        // Excel serial number (días desde 1900-01-01)
+        const num=Number(s);
+        if(!isNaN(num)&&num>1&&num<100000){
+          const d=new Date(Math.round((num-25569)*86400*1000));
+          if(!isNaN(d.getTime()))return d.toISOString().slice(0,10);
+        }
+        // Intentar parsear como fecha genérica
+        try{const d=new Date(s);if(!isNaN(d.getTime()))return d.toISOString().slice(0,10);}catch(e){}
         return null;
       };
       const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento'];
@@ -987,6 +1035,7 @@ async function importarPadron(event){
           importados+=lote.length;
         }catch(e){errores+=lote.length;console.warn('Error en lote',i,e);}
       }
+      await syncUNsSectoresDesde(nuevos);
       await loadAll();
       if(errores>0){
         toast(`${importados} registros importados. ${errores} con error.`);
@@ -1921,12 +1970,13 @@ async function init(){
   if(evalId){
     // cargar datos minimos y mostrar evaluacion
     try{
-      const [ev,pq,cap]=await Promise.all([
+      const [ev,pq,cap,pad]=await Promise.all([
         api('GET','evaluaciones','',`?id=eq.${evalId}`),
         api('GET','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}&order=orden.asc`),
-        api('GET','capacitaciones','','?order=id.asc')
+        api('GET','capacitaciones','','?order=id.asc'),
+        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc')
       ]);
-      evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];
+      evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];padron=pad||[];
       const tiposData=await api('GET','tipos_capacitacion','','?activo=eq.true');
       tipos=tiposData||[];
       document.getElementById('login-wrap').style.display='none';

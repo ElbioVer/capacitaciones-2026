@@ -39,6 +39,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tab{flex-shrink:0;padding:10px 12px;font-size:11px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:#888;white-space:nowrap}
 .tab.active{color:#1D9E75;border-bottom-color:#1D9E75}
 .content{flex:1;padding:10px 16px}
+@media(min-width:768px){
+  .app-body{display:flex;flex-direction:row;align-items:flex-start}
+  .tabs{flex-direction:column;border-bottom:none;border-right:1px solid #e5e5e0;padding:8px 0;position:sticky;top:116px;min-height:calc(100vh - 116px);overflow-x:unset;overflow-y:auto;min-width:130px;max-width:150px}
+  .tab{border-bottom:none;border-left:3px solid transparent;border-right:none;padding:10px 14px;text-align:left;font-size:11px}
+  .tab.active{border-left-color:#1D9E75;border-bottom:none;background:#F0FBF7}
+  .content{flex:1;min-width:0;padding:12px 18px}
+}
 /* TIPO BADGES */
 .tipo-badge{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;white-space:nowrap}
 .tipo-REMO{background:#E6F1FB;color:#185FA5}
@@ -291,6 +298,7 @@ select.form-input{cursor:pointer}
     <div class="stat"><div class="stat-num pend" id="st-pend">—</div><div class="stat-lbl">Pendientes</div></div>
     <div class="stat"><div class="stat-num miss" id="st-venc">—</div><div class="stat-lbl">Vencidas</div></div>
   </div>
+  <div class="app-body">
   <div class="tabs">
     <div class="tab active" id="tab-lista" onclick="switchTab('lista')">Lista</div>
     <div class="tab" id="tab-tipo" onclick="switchTab('tipo')">Por tipo</div>
@@ -302,6 +310,7 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
   </div>
   <div class="content" id="content"><div class="loading">Cargando...</div></div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
@@ -981,25 +990,32 @@ async function importarPadron(event){
       const wb=XLSX.read(e.target.result,{type:'array'});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true,dateNF:'DD/MM/YYYY'});
       const get=(r,...keys)=>{for(const k of keys){const v=r[k];if(v!==undefined&&v!==null&&String(v).trim()!=='')return String(v).trim();}return '';};
+      // parseFecha: recibe valor RAW de XLSX (puede ser Date, número serial, string)
+      // parseFecha: soporta Date JS, serial numérico de Excel y strings
       const parseFecha=(v)=>{
-        if(v===null||v===undefined||String(v).trim()==='') return null;
-        const s=String(v).trim();
-        // DD/MM/AAAA
-        if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
-        // AAAA-MM-DD
-        if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-        // DD-MM-AAAA
-        if(/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)){const[d,m,y]=s.split('-');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
-        // Excel serial number (días desde 1900-01-01)
-        const num=Number(s);
-        if(!isNaN(num)&&num>1&&num<100000){
-          const d=new Date(Math.round((num-25569)*86400*1000));
-          if(!isNaN(d.getTime()))return d.toISOString().slice(0,10);
+        if(v===null||v===undefined||v==='') return null;
+        // Objeto Date (XLSX raw:true)
+        if(v instanceof Date){
+          if(isNaN(v.getTime())) return null;
+          const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');
+          return `${y}-${m}-${d}`;
         }
-        // Intentar parsear como fecha genérica
-        try{const d=new Date(s);if(!isNaN(d.getTime()))return d.toISOString().slice(0,10);}catch(e){}
+        // Número serial de Excel (ej: 44927)
+        if(typeof v==='number'&&v>1&&v<200000){
+          const d=new Date(Math.round((v-25569)*86400*1000));
+          if(!isNaN(d.getTime())){const y=d.getUTCFullYear(),m=String(d.getUTCMonth()+1).padStart(2,'0'),dd=String(d.getUTCDate()).padStart(2,'0');return`${y}-${m}-${dd}`;}
+        }
+        const s=String(v).trim();
+        if(!s) return null;
+        if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+        if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        if(/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)){const[d,m,y]=s.split('-');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+        // Último recurso: parseo genérico
+        try{const d=new Date(s);if(!isNaN(d.getTime())&&d.getFullYear()>1900)return d.toISOString().slice(0,10);}catch(e){}
         return null;
       };
+      // getF: devuelve valor RAW del row (sin String()) para que parseFecha reciba Date/number
+      const getF=(r,...keys)=>{for(const k of keys){const v=r[k];if(v!==undefined&&v!==null&&v!=='')return v;}return null;};
       const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento'];
       const nuevos=rows.map(r=>{
         const legajo=get(r,'legajo','Legajo','LEGAJO');
@@ -1014,8 +1030,8 @@ async function importarPadron(event){
           un:get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null,
           sector:get(r,'Sector','sector','SECTOR')||null,
           departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,
-          fecha_ingreso:parseFecha(get(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
-          fecha_egreso:parseFecha(get(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso')),
+          fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
+          fecha_egreso:parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja')),
           estado:get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente',
           establecimiento:get(r,'Establecimiento','establecimiento')||null,
           documento:get(r,'Documento','documento','DOCUMENTO')||null,

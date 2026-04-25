@@ -394,13 +394,22 @@ async function loadAll(){
       api('GET','materiales','','?order=created_at.asc'),
       api('GET','evaluaciones','','?order=created_at.asc'),
       api('GET','preguntas_evaluacion','','?order=orden.asc'),
-      api('GET','padron','','?order=nombre.asc')
+      api('GET','padron','','?order=nombre.asc&limit=1000&offset=0')
     ];
     if(isAdmin()) queries.push(api('GET','usuarios','','?order=nombre.asc'));
     const res=await Promise.all(queries);
     caps=res[0]||[];asistentes=res[1]||[];uns=res[2]||[];sectores=res[3]||[];
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
-    padron=res[8]||[];
+    // Cargar padrón con paginación para soportar hasta 2000 registros
+    let padronPage1=res[8]||[];
+    if(padronPage1.length===1000){
+      try{
+        const padronPage2=await api('GET','padron','','?order=nombre.asc&limit=1000&offset=1000');
+        padron=[...padronPage1,...(padronPage2||[])];
+      }catch(e){padron=padronPage1;}
+    } else {
+      padron=padronPage1;
+    }
     if(isAdmin()) usuarios=res[9]||[];
     // Extraer departamentos únicos del padrón
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
@@ -966,13 +975,25 @@ async function importarPadron(event){
         };
       }).filter(Boolean);
       if(!nuevos.length){alert('No se encontraron registros válidos. Se requieren columnas legajo y nombre.');return;}
-      setSyncStatus('syncing');toast(`Importando ${nuevos.length} registros...`,10000);
-      const res=await api('POST','padron',nuevos,'?on_conflict=legajo');
-      if(res){
-        await loadAll();
-        toast(`${nuevos.length} registros importados al padrón`);
-        renderContent();
+      setSyncStatus('syncing');
+      const CHUNK=500;
+      let importados=0;
+      let errores=0;
+      for(let i=0;i<nuevos.length;i+=CHUNK){
+        const lote=nuevos.slice(i,i+CHUNK);
+        toast(`Importando... ${Math.min(i+CHUNK,nuevos.length)} de ${nuevos.length}`,15000);
+        try{
+          await api('POST','padron',lote,'?on_conflict=legajo');
+          importados+=lote.length;
+        }catch(e){errores+=lote.length;console.warn('Error en lote',i,e);}
       }
+      await loadAll();
+      if(errores>0){
+        toast(`${importados} registros importados. ${errores} con error.`);
+      } else {
+        toast(`${importados} registros importados al padrón ✓`);
+      }
+      renderContent();
     }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
   };
   reader.readAsArrayBuffer(file);

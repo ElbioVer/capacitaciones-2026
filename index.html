@@ -782,10 +782,12 @@ function renderPadron(){
   const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none';
   const tdS=(i)=>`font-size:11px;padding:5px 8px;border-bottom:1px solid #f0f0ec;background:${i%2===0?'#fff':'#fafafa'}`;
 
-  const estadoBadge=(p)=>p.estado==='Vigente'?'<span class="badge realizada" style="font-size:10px">Vigente</span>'
-    :p.estado==='Renuncia'?'<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>'
-    :p.estado==='Despido'?'<span class="badge vencida" style="font-size:10px">Despido</span>'
-    :`<span class="badge" style="font-size:10px;background:#ccc;color:#555">${esc(p.estado||'?')}</span>`;
+  const estadoBadge=(p)=>{
+    if(p.estado==='Vigente') return '<span class="badge realizada" style="font-size:10px">Vigente</span>';
+    if(p.estado==='Renuncia') return '<span class="badge" style="font-size:10px;background:#E8B86D;color:#7A4F00">Renuncia</span>';
+    if(p.estado==='Despido') return '<span class="badge vencida" style="font-size:10px">Despido</span>';
+    return '<span class="badge" style="font-size:10px;background:#ccc;color:#555">'+esc(p.estado||'?')+'</span>';
+  };
 
   const sorted=[...padron].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
   const filas=sorted.map((p,i)=>`<tr>

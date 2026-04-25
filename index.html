@@ -1038,6 +1038,18 @@ async function importarPadron(event){
           datos_extra:Object.keys(datos_extra).length?datos_extra:{}
         };
       }).filter(Boolean);
+      // DIAGNÓSTICO: mostrar en consola los primeros 2 registros
+      if(nuevos.length>0){
+        const sample=nuevos.slice(0,2);
+        console.log('=== DIAGNÓSTICO PADRÓN ===');
+        console.log('Total registros:', nuevos.length);
+        console.log('Muestra (2 primeros):');
+        sample.forEach((r,i)=>{
+          console.log(`[${i}] legajo:${r.legajo} | fi:${r.fecha_ingreso} | fe:${r.fecha_egreso} | estado:${r.estado}`);
+        });
+        // También mostrar las claves del primer row de Excel
+        if(rows.length>0) console.log('Columnas Excel:', Object.keys(rows[0]));
+      }
       if(!nuevos.length){alert('No se encontraron registros válidos. Se requieren columnas legajo y nombre.');return;}
       setSyncStatus('syncing');
       const CHUNK=500;
@@ -1056,7 +1068,9 @@ async function importarPadron(event){
       if(errores>0){
         toast(`${importados} registros importados. ${errores} con error.`);
       } else {
-        toast(`${importados} registros importados al padrón ✓`);
+        const sample=nuevos.slice(0,1)[0];
+        const diagMsg=sample?`\nMuestra legajo ${sample.legajo}: ingreso=${sample.fecha_ingreso||'vacío'}, egreso=${sample.fecha_egreso||'vacío'}`:'';
+        toast(`${importados} registros importados al padrón ✓${diagMsg}`,8000);
       }
       renderContent();
     }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}

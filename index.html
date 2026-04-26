@@ -435,7 +435,10 @@ async function loadAll(){
 
 function updateSub(){
   const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
-  const pct=total?Math.round(ok/total*100):0;
+  // pct de capacitaciones realizadas (estado)
+  const pctCaps=total?Math.round(ok/total*100):0;
+  // pct de asistencia real (completaron vs meta)
+  const pct=pctCaps; // se muestra en header de resumen
   const nombre=currentUser?(currentUser.nombre||'').split(' ')[0]:'';
   document.getElementById('hdr-sub').textContent=`Hola ${nombre} · ${pct}% completado`;
 }
@@ -701,7 +704,10 @@ function renderUN(){
 
 function renderResumen(){
   const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
-  const pct=total?Math.round(ok/total*100):0;
+  // pct de capacitaciones realizadas (estado)
+  const pctCaps=total?Math.round(ok/total*100):0;
+  // pct de asistencia real (completaron vs meta)
+  const pct=pctCaps; // se muestra en header de resumen
   const horas=caps.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
   const vencidas=caps.filter(c=>c.estado==='Vencida').length;
   const pendientes=caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
@@ -720,7 +726,24 @@ function renderResumen(){
     const g=caps.filter(c=>c.tipo_codigo===t.codigo);
     const r=g.filter(c=>c.estado==='Realizada').length;
     const p=g.length?Math.round(r/g.length*100):0;
-    return`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
+    // Asistencia real de este tipo
+    const compTipo=g.reduce((s,cap)=>s+getA(cap.id).filter(a=>a.completo).length,0);
+    const espTipo=g.reduce((s,cap)=>{const pos=getA(cap.id).length;return s+((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:pos);},0);
+    const pctAsis=espTipo?Math.round(compTipo/espTipo*100):0;
+    return`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:#999">${r}/${g.length} caps</span>
+          <div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div>
+          <span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span>
+        </div>
+        ${espTipo>0?`<div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:#888">${compTipo}/${espTipo} asist.</span>
+          <div class="mini-bar"><div class="mini-fill ${pctAsis>=75?'':pctAsis>=40?'warn':'danger'}" style="width:${pctAsis}%"></div></div>
+          <span style="font-size:11px;font-weight:600;min-width:28px;text-align:right;color:#185FA5">${pctAsis}%</span>
+        </div>`:''}
+      </div>
+    </div>`;
   }).join('');
 
   // Datos para grafico de linea mensual
@@ -746,8 +769,11 @@ function renderResumen(){
   }).filter(x=>x.prom!==null);
 
   return`<div class="plan-block">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#888">Avance 2026</span><span style="font-size:15px;font-weight:600;color:#1D9E75">${pct}%</span></div>
-    <div class="progress-bar" style="height:6px;margin-bottom:12px"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+      <span style="font-size:12px;color:#888">Capacitaciones realizadas</span>
+      <span style="font-size:15px;font-weight:700;color:#1D9E75">${pctCaps}%</span>
+    </div>
+    <div class="progress-bar" style="height:6px;margin-bottom:12px"><div class="progress-fill" style="width:${pctCaps}%"></div></div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:7px">
       <div class="stat"><div class="stat-num ok">${ok}</div><div class="stat-lbl">Realizadas</div></div>
       <div class="stat"><div class="stat-num pend">${pendientes}</div><div class="stat-lbl">Por realizar</div></div>
@@ -1308,7 +1334,11 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const tblRows=a.map(x=>{
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=nota_aprobacion?'nota-ok':'nota-fail'}">${x.nota}</span>`:'<span style="color:#bbb">—</span>'):'';
-    const delCell=canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td style="font-size:10px">${esc(x.sector||'')}</td><td><span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span></td>${notaCell}${delCell}</tr>`;
+    const delCell=canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";
+    const compBadge=canManageParticipants()
+      ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" title="Clic para cambiar" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
+      :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
+    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td style="font-size:10px">${esc(x.sector||'')}</td><td>${compBadge}</td>${notaCell}${delCell}</tr>`;
   }).join('');
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canEdit()?'<th style="width:24px"></th>':'';
@@ -1708,6 +1738,20 @@ async function submitEval(evalId,totalPqs){
 }
 
 // CRUD CAPS
+
+async function toggleCompleto(asistId, capId, nuevoEstado){
+  if(!canManageParticipants()) return;
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','asistentes',{completo:nuevoEstado},`?id=eq.${asistId}`);
+    const i=asistentes.findIndex(a=>a.id===asistId);
+    if(i>=0) asistentes[i].completo=nuevoEstado;
+    setSyncStatus('ok');
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al actualizar');}
+}
+
 async function deleteA(aid,capId){
   if(!canEdit()||!confirm('¿Eliminar este participante?'))return;
   try{await api('DELETE','asistentes','',`?id=eq.${aid}`);asistentes=asistentes.filter(a=>a.id!==aid);toast('Eliminado');buildDetail(capId);renderContent();}catch(e){toast('Error');}

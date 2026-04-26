@@ -513,7 +513,7 @@ function tipoBadge(codigo){
 }
 
 function capCard(c){
-  const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+  const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
   const pct=esp?Math.round(comp/esp*100):0;
   const t=getTipo(c.tipo_codigo);
   const iconos=[];
@@ -569,7 +569,7 @@ function renderPorTipo(){
     const pct=grupo.length?Math.round(ok/grupo.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=grupo.length?grupo.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
       const p=esp?Math.round(comp/esp*100):0;
       return`<div class="plan-row-item" onclick="openDetail(${c.id})"><span class="plan-item-name">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
@@ -592,7 +592,7 @@ function renderBim(){
     const pct=g.length?Math.round(ok/g.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=g.length?g.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
       const p=esp?Math.round(comp/esp*100):0;
       return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
@@ -1232,6 +1232,11 @@ function renderConfig(){
       <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong>
     </div>
   </div>
+<div class="config-section">
+    <div class="config-title">Mantenimiento</div>
+    <p style="font-size:12px;color:#777;margin-bottom:8px">Sincroniza el campo "Participantes esperados" de todas las capacitaciones con el total real de asistentes cargados.</p>
+    <button class="btn-sm blue" onclick="sincronizarEsperados()">🔄 Sincronizar esperados con asistentes</button>
+  </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div>
@@ -1266,10 +1271,10 @@ function openDetail(id){buildDetail(id);}
 function buildDetail(id){
   const c=caps.find(x=>x.id===id);if(!c)return;
   const t=getTipo(c.tipo_codigo);
-  const a=getA(id),comp=a.filter(x=>x.completo).length,esp=c.participantes_esperados||0;
+  const a=getA(id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
   const pct=esp?Math.round(comp/esp*100):0;
   const falt=a.filter(x=>!x.completo);
-  const faltantesReal=Math.max(0,(c.participantes_esperados||0)-comp);
+  const faltantesReal=Math.max(0,esp-comp);
   const nota_aprobacion=c.nota_aprobacion||6;
 
   // tabla asistentes
@@ -1822,6 +1827,27 @@ async function saveCap(id){
     }
     setSyncStatus('ok');updateSub();closeModal();renderContent();
   }catch(e){setSyncStatus('error');toast('Error');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
+}
+
+
+async function sincronizarEsperados(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  if(!confirm('¿Sincronizar participantes esperados de todas las capacitaciones con el total real de asistentes?')) return;
+  setSyncStatus('syncing');
+  let actualizadas=0;
+  try{
+    for(const cap of caps){
+      const total=getA(cap.id).length;
+      if(total>0 && total!==(cap.participantes_esperados||0)){
+        await api('PATCH','capacitaciones',{participantes_esperados:total},`?id=eq.${cap.id}`);
+        cap.participantes_esperados=total;
+        actualizadas++;
+      }
+    }
+    setSyncStatus('ok');
+    toast(`Sincronización completa: ${actualizadas} capacitaciones actualizadas`);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al sincronizar');}
 }
 
 async function deleteCap(id){

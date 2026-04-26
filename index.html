@@ -295,7 +295,7 @@ select.form-input{cursor:pointer}
     </select>
     <label>UN</label>
     <select id="flt-un" onchange="applyFilters()"><option value="">Todas</option></select>
-    <label>Sector</label>
+    <label>Depto</label>
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
   </div>
   <div class="stats-bar">
@@ -453,21 +453,25 @@ function getFiltered(){
     if(fltTipo&&c.tipo_codigo!==fltTipo) return false;
     if(fltBim&&c.bimestre!==fltBim) return false;
     if(fltUN||fltSec){
-      // Check cap's own UN field first
       if(fltUN&&c.un){
         if(c.un!==fltUN) return false;
-        // If sector filter active, also check asistentes
         if(fltSec){
+          // Filtrar por departamento: primero por cap.departamento, luego por asistentes
+          if(c.departamento&&c.departamento===fltSec) return true;
+          if(c.departamento&&c.departamento!==fltSec) return false;
           const a=getA(c.id);
-          if(!a.length) return true; // cap belongs to this UN, no attendees yet
-          return a.some(x=>x.sector===fltSec&&x.un===fltUN);
+          if(!a.length) return true;
+          return a.some(x=>{const d=x.departamento||x.sector||'';return d===fltSec&&x.un===fltUN;});
         }
         return true;
       }
-      // Fallback: check via asistentes
       const a=getA(c.id);
-      if(!a.length) return !fltUN; // no attendees: only show if no UN filter
-      return a.some(x=>{if(fltUN&&x.un!==fltUN)return false;if(fltSec&&x.sector!==fltSec)return false;return true;});
+      if(!a.length) return !fltUN;
+      return a.some(x=>{
+        if(fltUN&&x.un!==fltUN) return false;
+        if(fltSec){const d=x.departamento||x.sector||'';if(d!==fltSec) return false;}
+        return true;
+      });
     }
     return true;
   });
@@ -476,8 +480,11 @@ function getFiltered(){
 function applyFilters(){
   fltTipo=document.getElementById('flt-tipo').value;
   fltBim=document.getElementById('flt-bim').value;
+  const prevUN=fltUN;
   fltUN=document.getElementById('flt-un').value;
-  fltSec=document.getElementById('flt-sec').value;
+  // Si cambió la UN, resetear depto y refrescar opciones
+  if(prevUN!==fltUN){fltSec='';populateFilters();}
+  else{fltSec=document.getElementById('flt-sec').value;}
   renderContent();
 }
 
@@ -493,7 +500,13 @@ function populateFilters(){
   }else{
     unEl.disabled=false;secEl.disabled=false;
     unEl.innerHTML='<option value="">Todas</option>'+uns.map(u=>`<option${fltUN===u.nombre?' selected':''}>${u.nombre}</option>`).join('');
-    secEl.innerHTML='<option value="">Todos</option>'+sectores.map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');
+    // Deptos desde padrón filtrados por UN activa
+    const deptosFiltro=[...new Set(
+      padron.filter(p=>!fltUN||p.un===fltUN)
+        .map(p=>p.departamento||p.datos_extra?.Departamento)
+        .filter(Boolean)
+    )].sort();
+    secEl.innerHTML='<option value="">Todos</option>'+deptosFiltro.map(d=>`<option value="${esc(d)}"${fltSec===d?' selected':''}>${esc(d)}</option>`).join('');
   }
   document.getElementById('flt-bim').value=fltBim;
 }
@@ -703,27 +716,35 @@ function renderUN(){
 }
 
 function renderResumen(){
-  const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
-  // pct de capacitaciones realizadas (estado)
+  // Usar siempre las caps filtradas por los filtros activos
+  const f=getFiltered();
+  const total=f.length,ok=f.filter(c=>c.estado==='Realizada').length;
   const pctCaps=total?Math.round(ok/total*100):0;
-  // pct de asistencia real (completaron vs meta)
-  const pct=pctCaps; // se muestra en header de resumen
-  const horas=caps.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
-  const vencidas=caps.filter(c=>c.estado==='Vencida').length;
-  const pendientes=caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
-  // Usar esp real por capacitación (meta = participantes_esperados; posibles = asistentes reales)
-  const totalComp=asistentes.filter(a=>a.completo).length;
-  const totalPosibles=caps.reduce((s,cap)=>s+getA(cap.id).length,0);
-  const totalEsp=caps.reduce((s,cap)=>{
+  const pct=pctCaps;
+  const horas=f.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
+  const vencidas=f.filter(c=>c.estado==='Vencida').length;
+  const pendientes=f.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
+  // Asistencia: filtrar también por UN/depto activos
+  const asisFiltrados=asistentes.filter(a=>{
+    if(fltUN&&a.un!==fltUN) return false;
+    if(fltSec){const d=a.departamento||a.sector||'';if(d!==fltSec) return false;}
+    // Solo contar asistentes de las caps filtradas
+    return f.some(cap=>cap.id===a.capacitacion_id);
+  });
+  const totalComp=asisFiltrados.filter(a=>a.completo).length;
+  const totalPosibles=f.reduce((s,cap)=>s+getA(cap.id).length,0);
+  const totalEsp=f.reduce((s,cap)=>{
     const posibles=getA(cap.id).length;
     const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
     return s+esp;
   },0);
   const totalFaltantes=Math.max(0,totalEsp-totalComp);
   const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
+  // Contexto activo para mostrar en el título
+  const contexto=[fltUN,fltSec,fltBim?fltBim.split('(')[0].trim():'',fltTipo].filter(Boolean).join(' · ');
 
   const tipoRows=tipos.map(t=>{
-    const g=caps.filter(c=>c.tipo_codigo===t.codigo);
+    const g=f.filter(c=>c.tipo_codigo===t.codigo);
     const r=g.filter(c=>c.estado==='Realizada').length;
     const p=g.length?Math.round(r/g.length*100):0;
     // Asistencia real de este tipo
@@ -750,14 +771,14 @@ function renderResumen(){
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const dataMeses=meses.map((m,i)=>{
     const mes=i+1;
-    const capsDelMes=caps.filter(c=>{if(!c.fecha)return false;const cm=parseInt(c.fecha.split('-')[1]);return cm===mes;});
+    const capsDelMes=f.filter(c=>{if(!c.fecha)return false;const cm=parseInt(c.fecha.split('-')[1]);return cm===mes;});
     const realizadas=capsDelMes.filter(c=>c.estado==='Realizada').length;
     const planificadas=capsDelMes.length;
     return{m,realizadas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
   });
 
   // Datos para grafico de efectividad
-  const capsConEval=caps.filter(c=>{
+  const capsConEval=f.filter(c=>{
     const t=getTipo(c.tipo_codigo);
     return t.tiene_evaluacion;
   });
@@ -770,7 +791,7 @@ function renderResumen(){
 
   return`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-      <span style="font-size:12px;color:#888">Capacitaciones realizadas</span>
+      <span style="font-size:12px;color:#888">Capacitaciones realizadas${contexto?` <span style="font-size:10px;background:#E8F5FF;color:#185FA5;border-radius:4px;padding:1px 6px">${contexto}</span>`:""}</span>
       <span style="font-size:15px;font-weight:700;color:#1D9E75">${pctCaps}%</span>
     </div>
     <div class="progress-bar" style="height:6px;margin-bottom:12px"><div class="progress-fill" style="width:${pctCaps}%"></div></div>
@@ -808,13 +829,13 @@ function renderResumen(){
   </div>`:''}
   <div class="plan-block"><div class="plan-block-title">Por tipo</div>${tipoRows}</div>
   <div class="plan-block"><div class="plan-block-title">Por bimestre</div>${BIMESTRES.map(b=>{
-    const g=caps.filter(c=>c.bimestre===b);
+    const g=f.filter(c=>c.bimestre===b);
     const r=g.filter(c=>c.estado==='Realizada').length;
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
   }).join('')}</div>
   ${(()=>{
-    const conDesvio=caps.filter(c=>desvioInfo(c)!==null);
+    const conDesvio=f.filter(c=>desvioInfo(c)!==null);
     if(!conDesvio.length) return'';
     const totalDias=conDesvio.reduce((s,c)=>s+(desvioInfo(c)||0),0);
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;

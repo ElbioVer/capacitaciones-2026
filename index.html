@@ -821,7 +821,12 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
     if(ins){
       const arr=Array.isArray(ins)?ins:[ins];
       asistentes=[...asistentes,...arr];
-      toast(`${nuevos.length} participantes cargados desde el padrón`);
+      // Actualizar participantes_esperados al total real de asistentes
+      const totalAsis=getA(capId).length + arr.length;
+      await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+      const capIdx=caps.findIndex(x=>x.id===capId);
+      if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
+      toast(`${nuevos.length} participantes cargados — Esperados actualizado a ${totalAsis}`);
     }
   }catch(e){console.warn('Error cargando participantes desde padrón:',e);}
 }
@@ -1719,7 +1724,14 @@ async function importExcel(event,capId){
       await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
       asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
       const ins=await api('POST','asistentes',nuevos,'');
-      if(ins)asistentes=[...asistentes,...(Array.isArray(ins)?ins:[ins])];
+      if(ins){
+        asistentes=[...asistentes,...(Array.isArray(ins)?ins:[ins])];
+        // Actualizar participantes_esperados al total real
+        const totalAsis=getA(capId).length;
+        await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+        const cIdx=caps.findIndex(x=>x.id===capId);
+        if(cIdx>=0) caps[cIdx].participantes_esperados=totalAsis;
+      }
       for(const nombre of [...new Set(nuevos.map(a=>a.un).filter(Boolean))]){
         if(!uns.find(u=>u.nombre===nombre)){const r=await api('POST','unidades_negocio',{nombre},'');if(r)uns.push(Array.isArray(r)?r[0]:r);}
       }
@@ -1974,6 +1986,13 @@ async function agregarParticipantePapel(capId){
     }else{
       const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,completo:true},'');
       const nv=Array.isArray(r)?r[0]:r;if(nv)asistentes.push(nv);
+      // Si el nuevo total supera participantes_esperados, actualizar
+      const totalNuevo=getA(capId).length;
+      const capObj2=caps.find(x=>x.id===capId);
+      if(capObj2&&totalNuevo>(capObj2.participantes_esperados||0)){
+        await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+        capObj2.participantes_esperados=totalNuevo;
+      }
       toast('Participante agregado');
     }
     if(un&&!uns.find(u=>u.nombre===un)){

@@ -973,15 +973,22 @@ function renderPadron(filtro){
   if(!isAdmin()&&!isCapacitador())return'';
   if(typeof filtro==='undefined') filtro=window._padronFiltro||'todos';
   window._padronFiltro=filtro;
-  const total=padron.length;
-  const vigentes=padron.filter(p=>!p.estado||p.estado==='Vigente').length;
+  // Filtrar padrón por UN activa (fltUN) y/o departamento (fltSec)
+  const padronFiltrado=padron.filter(p=>{
+    if(fltUN&&p.un!==fltUN) return false;
+    if(fltSec){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==fltSec) return false;}
+    return true;
+  });
+  const total=padronFiltrado.length;
+  const vigentes=padronFiltrado.filter(p=>!p.estado||p.estado==='Vigente').length;
   const bajas=total-vigentes;
+  const contextoLabel=fltUN?(fltSec?`${fltUN} · ${fltSec}`:fltUN):'Todo el personal';
 
-  const lista=filtro==='vigentes'?padron.filter(p=>!p.estado||p.estado==='Vigente')
-              :filtro==='bajas'?padron.filter(p=>p.estado&&p.estado!=='Vigente')
-              :padron;
+  const lista=filtro==='vigentes'?padronFiltrado.filter(p=>!p.estado||p.estado==='Vigente')
+              :filtro==='bajas'?padronFiltrado.filter(p=>p.estado&&p.estado!=='Vigente')
+              :padronFiltrado;
 
-  const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none;position:sticky;top:0;z-index:2';
+  const thS='font-size:11px;padding:6px 8px;text-align:left;background:#1A2F6E;color:#fff;white-space:nowrap;border:none;position:sticky;top:0;z-index:3';
   const tdS=(i)=>`font-size:11px;padding:5px 8px;border-bottom:1px solid #f0f0ec;background:${i%2===0?'#fff':'#fafafa'}`;
 
   const estadoBadge=(p)=>{
@@ -1020,6 +1027,7 @@ function renderPadron(filtro){
       <div onclick="filtrarPadron('todos')" style="${cardStyle(filtro==='todos','#E1F5EE','#0F6E56','#1D9E75')}">
         <div style="font-size:22px;font-weight:700;color:#0F6E56">${total}</div>
         <div style="color:#0F6E56;font-weight:${filtro==='todos'?'700':'400'}">Total</div>
+        <div style="font-size:9px;color:#0F6E56;opacity:.7;margin-top:2px">${contextoLabel}</div>
       </div>
       <div onclick="filtrarPadron('vigentes')" style="${cardStyle(filtro==='vigentes','#E8F5FF','#185FA5','#185FA5')}">
         <div style="font-size:22px;font-weight:700;color:#185FA5">${vigentes}</div>
@@ -1041,7 +1049,7 @@ function renderPadron(filtro){
     </div>
   </div>
   ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
-  <div style="overflow-x:auto;border-radius:8px;border:1px solid #e0e0e0">
+  <div style="overflow:auto;border-radius:8px;border:1px solid #e0e0e0;max-height:calc(100vh - 310px)">
     <table style="width:100%;border-collapse:collapse;min-width:900px">
       <thead><tr>
         <th style="${thS}">Legajo</th>
@@ -2080,13 +2088,19 @@ function openForzarCumplimiento(capId){
       Actualmente: <strong>${comp} presentes registrados</strong> de ${c.participantes_esperados} esperados.
     </div>
     <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:10px">Opción 1 — Agregar participante individual</div>
-    <div class="form-row" style="margin-bottom:8px">
-      <div class="form-group"><label class="form-label">Legajo *</label><input class="form-input" id="fp-legajo" placeholder="Ej: 10025"></div>
-      <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="fp-nombre" placeholder="Apellido Nombre"></div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label class="form-label">Legajo *</label>
+      <input class="form-input" id="fp-legajo" placeholder="Ej: 10025" oninput="validarLegajoPapel(this.value)">
+      <div id="fp-lookup" style="font-size:11px;margin-top:4px;min-height:16px"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label class="form-label">Nombre completo *</label>
+      <input class="form-input" id="fp-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
     </div>
     <div class="form-row" style="margin-bottom:8px">
-      <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="fp-un" placeholder="Unidad de negocio" list="fp-un-list"><datalist id="fp-un-list">${uns.map(u=>`<option value="${esc(u.nombre)}">`).join('')}</datalist></div>
-      <div class="form-group"><label class="form-label">Sector</label><input class="form-input" id="fp-sector" placeholder="Sector" list="fp-sec-list"><datalist id="fp-sec-list">${sectores.map(s=>`<option value="${esc(s.nombre)}">`).join('')}</datalist></div>
+      <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="fp-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="fp-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      <div class="form-group"><label class="form-label">Sector</label><input class="form-input" id="fp-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
     </div>
     <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="agregarParticipantePapel(${capId})">Agregar participante</button>
     <div style="border-top:1px solid #eee;padding-top:14px">
@@ -2097,21 +2111,70 @@ function openForzarCumplimiento(capId){
     <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
 }
 
+
+function validarLegajoPapel(legajo){
+  const lookup=document.getElementById('fp-lookup');
+  const nombreInput=document.getElementById('fp-nombre');
+  const unInput=document.getElementById('fp-un');
+  const deptoInput=document.getElementById('fp-depto');
+  const secInput=document.getElementById('fp-sector');
+  if(!lookup) return;
+  if(!legajo||legajo.length<2){
+    lookup.innerHTML='';
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(secInput) secInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
+      if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)} / ${esc(emp.sector||'')}</span>`;
+      if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
+      if(unInput) unInput.value=emp.un||'';
+      if(deptoInput) deptoInput.value=depto;
+      if(secInput) secInput.value=emp.sector||'';
+    }
+  } else if(padron.length>0){
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(secInput) secInput.value='';
+  } else {
+    lookup.innerHTML='';
+    if(nombreInput) nombreInput.readOnly=false;
+  }
+}
+
 async function agregarParticipantePapel(capId){
   const legajo=document.getElementById('fp-legajo').value.trim();
   const nombre=document.getElementById('fp-nombre').value.trim();
   const un=document.getElementById('fp-un').value.trim();
+  const depto=document.getElementById('fp-depto')?document.getElementById('fp-depto').value.trim():'';
   const sector=document.getElementById('fp-sector').value.trim();
   if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  // Bloquear si el empleado no está vigente según el padrón
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){
+      alert(`El empleado figura con estado "${emp.estado}". No se puede registrar.`);return;
+    }
+  }
   try{
     const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
     if(existing&&existing.length){
-      await api('PATCH','asistentes',{completo:true,nombre,un,sector},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+      await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
       const i=asistentes.findIndex(a=>a.capacitacion_id===capId&&a.legajo===legajo);
-      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector};
+      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector,departamento:depto};
       toast('Participante actualizado');
     }else{
-      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,completo:true},'');
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,completo:true},'');
       const nv=Array.isArray(r)?r[0]:r;if(nv)asistentes.push(nv);
       // Si el nuevo total supera participantes_esperados, actualizar
       const totalNuevo=getA(capId).length;

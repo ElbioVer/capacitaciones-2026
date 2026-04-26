@@ -513,7 +513,9 @@ function tipoBadge(codigo){
 }
 
 function capCard(c){
-  const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
+  const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+  const posibles=a.length;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
   const pct=esp?Math.round(comp/esp*100):0;
   const t=getTipo(c.tipo_codigo);
   const iconos=[];
@@ -536,7 +538,7 @@ function capCard(c){
       ${c.fecha_fin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(c.fecha_fin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
-    <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron</span><span class="asist-pct">${pct}%</span></div>
+    <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron${posibles!==esp?` <span style="font-size:10px;color:#aaa">(${posibles} en lista)</span>`:""}</span><span class="asist-pct">${pct}%</span></div>
     <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${Math.min(pct,100)}%"></div></div>
   </div>`;
 }
@@ -569,7 +571,9 @@ function renderPorTipo(){
     const pct=grupo.length?Math.round(ok/grupo.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=grupo.length?grupo.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
+      const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+  const posibles=a.length;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
       return`<div class="plan-row-item" onclick="openDetail(${c.id})"><span class="plan-item-name">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
@@ -592,7 +596,9 @@ function renderBim(){
     const pct=g.length?Math.round(ok/g.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=g.length?g.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
+      const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+  const posibles=a.length;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
       return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
@@ -697,11 +703,18 @@ function renderResumen(){
   const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
   const pct=total?Math.round(ok/total*100):0;
   const horas=caps.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
-  const totalComp=asistentes.filter(a=>a.completo).length;
-  const totalEsp=caps.reduce((s,c)=>s+Number(c.participantes_esperados||0),0);
-  const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
   const vencidas=caps.filter(c=>c.estado==='Vencida').length;
   const pendientes=caps.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
+  // Usar esp real por capacitación (meta = participantes_esperados; posibles = asistentes reales)
+  const totalComp=asistentes.filter(a=>a.completo).length;
+  const totalPosibles=caps.reduce((s,cap)=>s+getA(cap.id).length,0);
+  const totalEsp=caps.reduce((s,cap)=>{
+    const posibles=getA(cap.id).length;
+    const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
+    return s+esp;
+  },0);
+  const totalFaltantes=Math.max(0,totalEsp-totalComp);
+  const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
 
   const tipoRows=tipos.map(t=>{
     const g=caps.filter(c=>c.tipo_codigo===t.codigo);
@@ -742,11 +755,22 @@ function renderResumen(){
       <div class="stat"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
     </div>
   </div>
-  <div class="plan-block"><div class="plan-block-title">Ejecución general</div>
+  <div class="plan-block"><div class="plan-block-title">Avance de asistencia</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:12px;color:#888">Completaron vs Meta</span>
+      <span style="font-size:15px;font-weight:700;color:#1D9E75">${pctA}%</span>
+    </div>
+    <div class="progress-bar" style="height:8px;margin-bottom:14px">
+      <div class="progress-fill" style="width:${Math.min(pctA,100)}%"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:10px">
+      <div class="stat"><div class="stat-num ok">${totalComp}</div><div class="stat-lbl">Completaron</div></div>
+      <div class="stat"><div class="stat-num miss">${totalFaltantes}</div><div class="stat-lbl">Faltantes (meta)</div></div>
+      <div class="stat"><div class="stat-num">${totalEsp}</div><div class="stat-lbl">Meta total</div></div>
+      <div class="stat"><div class="stat-num" style="color:#888">${totalPosibles}</div><div class="stat-lbl">En lista (posibles)</div></div>
+    </div>
     <div class="detail-row"><span class="detail-key">Horas realizadas</span><span class="detail-val">${horas} hs</span></div>
-    <div class="detail-row"><span class="detail-key">Asistentes completaron</span><span class="detail-val">${totalComp} / ${totalEsp} (${pctA}%)</span></div>
-    <div class="detail-row"><span class="detail-key">UNs</span><span class="detail-val">${uns.length}</span></div>
-    <div class="detail-row"><span class="detail-key">Sectores</span><span class="detail-val">${sectores.length}</span></div>
+    <div class="detail-row"><span class="detail-key">UNs activas</span><span class="detail-val">${uns.length}</span></div>
   </div>
   <div class="plan-block">
     <div class="plan-block-title" style="margin-bottom:12px">Evolución de cumplimiento mensual</div>
@@ -1271,10 +1295,13 @@ function openDetail(id){buildDetail(id);}
 function buildDetail(id){
   const c=caps.find(x=>x.id===id);if(!c)return;
   const t=getTipo(c.tipo_codigo);
-  const a=getA(id),comp=a.filter(x=>x.completo).length,esp=Math.max(a.length,c.participantes_esperados||0);
+  const a=getA(id),comp=a.filter(x=>x.completo).length;
+  // posibles = total en la lista; esp = meta definida manualmente (o total si nunca se editó)
+  const posibles=a.length;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
   const pct=esp?Math.round(comp/esp*100):0;
   const falt=a.filter(x=>!x.completo);
-  const faltantesReal=Math.max(0,esp-comp);
+  const faltantesReal=Math.max(0,esp-comp); // faltantes respecto a la META, no al total
   const nota_aprobacion=c.nota_aprobacion||6;
 
   // tabla asistentes
@@ -1366,7 +1393,8 @@ function buildDetail(id){
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
-      <div class="detail-row"><span class="detail-key">Esperados</span><span class="detail-val">${esp}</span></div>
+      <div class="detail-row"><span class="detail-key">Posibles (lista)</span><span class="detail-val">${posibles}</span></div>
+      <div class="detail-row"><span class="detail-key">Esperados (meta)</span><span class="detail-val">${esp}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
       ${hasNota?`<div class="detail-row"><span class="detail-key">Nota aprobación</span><span class="detail-val">≥ ${nota_aprobacion}</span></div>`:''}
@@ -1774,7 +1802,7 @@ function showForm(c){
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Duración (hs)</label><input class="form-input" id="f-dur" type="number" min="0.5" step="0.5" value="${c?c.duracion:4}"></div>
-      <div class="form-group"><label class="form-label">Participantes esperados</label><input class="form-input" id="f-par" type="number" min="1" value="${c?c.participantes_esperados:10}"></div>
+      <div class="form-group"><label class="form-label">Participantes esperados</label><input class="form-input" id="f-par" type="number" min="1" value="${c?Math.max(getA(c.id).length,c.participantes_esperados||0):10}"><div style="font-size:10px;color:#888;margin-top:2px">${c&&getA(c.id).length?`Asistentes cargados: ${getA(c.id).length}`:""}</div></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
@@ -1822,6 +1850,13 @@ async function saveCap(id){
         if(confirm('¿Actualizar participantes desde el padrón para la nueva UN/Departamento?')){
           await cargarParticipantesDesdePadron(Number(id),obj.un,obj.departamento);
         }
+        // Respetar el valor de esperados que el usuario editó manualmente
+        const parManual=parseInt(document.getElementById('f-par')?.value)||0;
+        if(parManual>0){
+          await api('PATCH','capacitaciones',{participantes_esperados:parManual},`?id=eq.${id}`);
+          const cIdx2=caps.findIndex(x=>x.id===Number(id));
+          if(cIdx2>=0) caps[cIdx2].participantes_esperados=parManual;
+        }
       }
       toast('Actualizada');
     }
@@ -1838,7 +1873,8 @@ async function sincronizarEsperados(){
   try{
     for(const cap of caps){
       const total=getA(cap.id).length;
-      if(total>0 && total!==(cap.participantes_esperados||0)){
+      // Solo sincronizar si esperados es menor que asistentes reales (nunca reducir)
+      if(total>0 && (cap.participantes_esperados||0)<total){
         await api('PATCH','capacitaciones',{participantes_esperados:total},`?id=eq.${cap.id}`);
         cap.participantes_esperados=total;
         actualizadas++;

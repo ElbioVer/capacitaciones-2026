@@ -9,7 +9,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
-.app{background:#f4f4f2;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.app{background:#f4f4f2;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .header{background:#fff;border-bottom:1px solid #e5e5e0;padding:12px 16px;position:sticky;top:0;z-index:20}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .header-left{flex:1;min-width:0}
@@ -49,7 +49,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .app{height:auto !important;min-height:100vh;overflow:visible !important}
   .top-controls{position:sticky;top:0;z-index:20}
   .app-body{flex-direction:column;height:auto !important;overflow:visible !important;flex:0 0 auto}
-  .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;padding:0 4px;position:sticky !important;top:0;z-index:19;background:#fff}
+  .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;padding:0 4px;position:relative !important;z-index:5;background:#fff}
   .tab{border-left:none;border-bottom:3px solid transparent;padding:8px 10px;white-space:nowrap;flex-shrink:0;font-size:11px}
   .tab.active{border-left:none;border-bottom-color:#1D9E75;background:#F0FBF7}
   .content{padding:8px 10px;overflow:visible !important;height:auto !important;flex:0 0 auto}
@@ -558,31 +558,31 @@ function tipoBadge(codigo){
   return`<span class="tipo-badge tipo-${codigo||'OTRO'}">${t.codigo}</span>`;
 }
 
-function capCard(c){
-  const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+function capCard(cap){
+  const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
   const posibles=a.length;
-  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
+  const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
   const pct=esp?Math.round(comp/esp*100):0;
-  const t=getTipo(c.tipo_codigo);
+  const t=getTipo(cap.tipo_codigo);
   const iconos=[];
-  if(t.tiene_repositorio&&getMat(c.id).length) iconos.push('📎');
-  const ev=getEval(c.id);
+  if(t.tiene_repositorio&&getMat(cap.id).length) iconos.push('📎');
+  const ev=getEval(cap.id);
   if(ev) iconos.push(ev.activa?'📝':'📋');
-  const _est=estadoCap(c);
-  const _ffin=fechaFinCap(c);
-  const diasDesvio=desvioInfoExt(c,_est,_ffin);
+  const _est=estadoCap(cap);
+  const _ffin=fechaFinCap(cap);
+  const diasDesvio=desvioInfoExt(cap,_est,_ffin);
   const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
-  return`<div class="cap-card" onclick="openDetail(${c.id})">
+  return`<div class="cap-card" onclick="openDetail(${cap.id})">
     <div class="cap-top">
-      <div class="cap-title">${esc(c.titulo)}</div>
+      <div class="cap-title">${esc(cap.titulo)}</div>
       <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
     </div>
     <div class="cap-meta">
-      ${tipoBadge(c.tipo_codigo)}
-      <span>${esc(c.area||'')}</span><span>·</span>
-      <span>${fmtF(c.fecha)}</span><span>·</span><span>${c.duracion}h</span>
-      ${c.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span>`:''}
-      ${c.bimestre?`<span class="chip-bim">${c.bimestre.split('(')[0].trim()}</span>`:''}
+      ${tipoBadge(cap.tipo_codigo)}
+      <span>${esc(cap.area||'')}</span><span>·</span>
+      <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
+      ${cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(cap.codigo_redmine)}</span>`:''}
+      ${cap.bimestre?`<span class="chip-bim">${cap.bimestre.split('(')[0].trim()}</span>`:''}
       ${_ffin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(_ffin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
@@ -601,7 +601,7 @@ function switchTab(t){
 function renderContent(){
   const f=getFiltered();renderStats(f);
   const el=document.getElementById('content');
-  if(currentTab==='lista') el.innerHTML=f.length?f.map(c=>capCard(c)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
+  if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
   else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
   else if(currentTab==='bim') el.innerHTML=renderBim();
   else if(currentTab==='un') el.innerHTML=renderUN();

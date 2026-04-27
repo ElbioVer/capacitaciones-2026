@@ -454,6 +454,7 @@ async function loadAll(){
     if(isAdmin()) usuarios=res[9]||[];
     // Extraer departamentos únicos del padrón
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
+    aplicarEstadosEnMemoria();
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
   }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
 }
@@ -475,6 +476,7 @@ function getTipo(codigo){return tipos.find(t=>t.codigo===codigo)||{codigo:'OTRO'
 
 function getFiltered(){
   return caps.filter(c=>{
+    const _e=estadoCap(c);
     if(fltTipo&&c.tipo_codigo!==fltTipo) return false;
     if(fltBim&&c.bimestre!==fltBim) return false;
     if(fltUN||fltSec){
@@ -538,9 +540,9 @@ function populateFilters(){
 
 function renderStats(f){
   document.getElementById('st-tot').textContent=f.length;
-  document.getElementById('st-ok').textContent=f.filter(c=>c.estado==='Realizada').length;
-  document.getElementById('st-pend').textContent=f.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
-  document.getElementById('st-venc').textContent=f.filter(c=>c.estado==='Vencida').length;
+  document.getElementById('st-ok').textContent=f.filter(c=>estadoCap(c)==='Realizada').length;
+  document.getElementById('st-pend').textContent=f.filter(c=>{const e=estadoCap(c);return e==='Pendiente'||e==='Programada';}).length;
+  document.getElementById('st-venc').textContent=f.filter(c=>estadoCap(c)==='Vencida').length;
 }
 
 function sFill(estado,pct){
@@ -563,12 +565,14 @@ function capCard(c){
   if(t.tiene_repositorio&&getMat(c.id).length) iconos.push('📎');
   const ev=getEval(c.id);
   if(ev) iconos.push(ev.activa?'📝':'📋');
-  const diasDesvio=desvioInfo(c);
+  const _est=estadoCap(c);
+  const _ffin=fechaFinCap(c);
+  const diasDesvio=desvioInfoExt(c,_est,_ffin);
   const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
   return`<div class="cap-card" onclick="openDetail(${c.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(c.titulo)}</div>
-      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>
+      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
     </div>
     <div class="cap-meta">
       ${tipoBadge(c.tipo_codigo)}
@@ -576,11 +580,11 @@ function capCard(c){
       <span>${fmtF(c.fecha)}</span><span>·</span><span>${c.duracion}h</span>
       ${c.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span>`:''}
       ${c.bimestre?`<span class="chip-bim">${c.bimestre.split('(')[0].trim()}</span>`:''}
-      ${c.fecha_fin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(c.fecha_fin)}</span>`:''}
+      ${_ffin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(_ffin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
     <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron${posibles!==esp?` <span style="font-size:10px;color:#aaa">(${posibles} en lista)</span>`:""}</span><span class="asist-pct">${pct}%</span></div>
-    <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${Math.min(pct,100)}%"></div></div>
+    <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(_est,pct)}" style="width:${Math.min(pct,100)}%"></div></div>
   </div>`;
 }
 
@@ -743,12 +747,12 @@ function renderUN(){
 function renderResumen(){
   // Usar siempre las caps filtradas por los filtros activos
   const f=getFiltered();
-  const total=f.length,ok=f.filter(c=>c.estado==='Realizada').length;
+  const total=f.length,ok=f.filter(c=>estadoCap(c)==='Realizada').length;
   const pctCaps=total?Math.round(ok/total*100):0;
   const pct=pctCaps;
-  const horas=f.filter(c=>c.estado==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
-  const vencidas=f.filter(c=>c.estado==='Vencida').length;
-  const pendientes=f.filter(c=>c.estado==='Pendiente'||c.estado==='Programada').length;
+  const horas=f.filter(c=>estadoCap(c)==='Realizada').reduce((s,c)=>s+Number(c.duracion||0),0);
+  const vencidas=f.filter(c=>estadoCap(c)==='Vencida').length;
+  const pendientes=f.filter(c=>{const e=estadoCap(c);return e==='Pendiente'||e==='Programada';}).length;
   // Asistencia: filtrar también por UN/depto activos
   const asisFiltrados=asistentes.filter(a=>{
     if(fltUN&&a.un!==fltUN) return false;
@@ -770,7 +774,7 @@ function renderResumen(){
 
   const tipoRows=tipos.map(t=>{
     const g=f.filter(c=>c.tipo_codigo===t.codigo);
-    const r=g.filter(c=>c.estado==='Realizada').length;
+    const r=g.filter(c=>estadoCap(c)==='Realizada').length;
     const p=g.length?Math.round(r/g.length*100):0;
     // Asistencia real de este tipo
     const compTipo=g.reduce((s,cap)=>s+getA(cap.id).filter(a=>a.completo).length,0);
@@ -796,10 +800,17 @@ function renderResumen(){
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const dataMeses=meses.map((m,i)=>{
     const mes=i+1;
-    const capsDelMes=f.filter(c=>{if(!c.fecha)return false;const cm=parseInt(c.fecha.split('-')[1]);return cm===mes;});
-    const realizadas=capsDelMes.filter(c=>c.estado==='Realizada').length;
+    // Incluir cap en el mes según su fecha_fin (o calculada), no su fecha de realización
+    const capsDelMes=f.filter(c=>{
+      const ff=fechaFinCap(c)||c.fecha;
+      if(!ff) return false;
+      const cm=parseInt(ff.split('-')[1]);
+      return cm===mes;
+    });
+    const realizadas=capsDelMes.filter(c=>estadoCap(c)==='Realizada').length;
+    const vencidas=capsDelMes.filter(c=>estadoCap(c)==='Vencida').length;
     const planificadas=capsDelMes.length;
-    return{m,realizadas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
+    return{m,realizadas,vencidas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
   });
 
   // Datos para grafico de efectividad
@@ -855,17 +866,18 @@ function renderResumen(){
   <div class="plan-block"><div class="plan-block-title">Por tipo</div>${tipoRows}</div>
   <div class="plan-block"><div class="plan-block-title">Por bimestre</div>${BIMESTRES.map(b=>{
     const g=f.filter(c=>c.bimestre===b);
-    const r=g.filter(c=>c.estado==='Realizada').length;
+    const r=g.filter(c=>estadoCap(c)==='Realizada').length;
+    const v=g.filter(c=>estadoCap(c)==='Vencida').length;
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
   }).join('')}</div>
   ${(()=>{
-    const conDesvio=f.filter(c=>desvioInfo(c)!==null);
+    const conDesvio=f.filter(c=>desvioInfoExt(c,estadoCap(c),fechaFinCap(c))!==null);
     if(!conDesvio.length) return'';
-    const totalDias=conDesvio.reduce((s,c)=>s+(desvioInfo(c)||0),0);
+    const totalDias=conDesvio.reduce((s,c)=>s+(desvioInfoExt(c,estadoCap(c),fechaFinCap(c))||0),0);
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
-    const rows=conDesvio.sort((a,b)=>(desvioInfo(b)||0)-(desvioInfo(a)||0)).map(c=>{
-      const d=desvioInfo(c);
+    const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(c=>{
+      const d=desvioInfoExt(c,estadoCap(c),fechaFinCap(c));
       return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
     }).join('');
     return`<div class="plan-block" style="border-left:3px solid #EF9F27">
@@ -993,6 +1005,18 @@ function updatePadronPreview(){
     prev.style.color='#888';
     prev.textContent='Sin empleados activos en el padrón para esta selección';
   }
+}
+
+
+function desvioInfoExt(cap, est, ffin){
+  if(!ffin) return null;
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const fin=new Date(ffin+'T00:00:00');
+  if(isNaN(fin.getTime())) return null;
+  if(est==='Realizada') return null;
+  const dias=Math.floor((hoy-fin)/(1000*60*60*24));
+  if(dias<=0) return null;
+  return dias;
 }
 
 function desvioInfo(cap){
@@ -1367,6 +1391,8 @@ function renderConfig(){
     <div class="config-title">Mantenimiento</div>
     <p style="font-size:12px;color:#777;margin-bottom:8px">Sincroniza el campo "Participantes esperados" de todas las capacitaciones con el total real de asistentes cargados.</p>
     <button class="btn-sm blue" onclick="sincronizarEsperados()">🔄 Sincronizar esperados con asistentes</button>
+    <button class="btn-sm green" style="margin-top:6px" onclick="sincronizarFechasYEstados()">📅 Sincronizar fechas fin y estados</button>
+    <p style="font-size:11px;color:#888;margin-top:4px">Asigna fecha fin por bimestre y actualiza estados (Programada/Vencida) en Supabase para todas las capacitaciones.</p>
   </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
@@ -1496,7 +1522,7 @@ function buildDetail(id){
       <div style="flex:1">${tipoBadge(c.tipo_codigo)}<div style="font-size:14px;font-weight:600;color:#111;margin:5px 0">${esc(c.titulo)}</div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span>${c.bimestre?`<span class="chip-bim" style="margin-left:5px">${c.bimestre}</span>`:''}</div>
       ${adminBtns}
     </div>
-    <div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:3px"><span>Asistencia</span><span>${pct}%</span></div><div class="progress-bar" style="height:5px"><div class="progress-fill ${sFill(c.estado,pct)}" style="width:${pct}%"></div></div></div>
+    <div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:3px"><span>Asistencia</span><span>${pct}%</span></div><div class="progress-bar" style="height:5px"><div class="progress-fill ${sFill(_est,pct)}" style="width:${pct}%"></div></div></div>
     <div class="modal-section">
       <div class="modal-section-title">Información</div>
       ${c.codigo_redmine?`<div class="detail-row"><span class="detail-key">Redmine</span><span class="detail-val" style="color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span></div>`:''}
@@ -1997,6 +2023,73 @@ async function saveCap(id){
   }catch(e){setSyncStatus('error');toast('Error');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
 }
 
+
+
+
+
+function estadoCap(cap){return cap._estadoCalc||cap.estado||'Programada';}
+function fechaFinCap(cap){return cap.fecha_fin||cap._fechaFinCalc||'';}
+
+function aplicarEstadosEnMemoria(){
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  for(const cap of caps){
+    // Asignar fecha_fin en memoria si no tiene
+    if(!cap.fecha_fin&&cap.bimestre){
+      const ff=fechaFinPorBimestre(cap.bimestre);
+      if(ff) cap._fechaFinCalc=ff; // campo temporal, no se guarda
+    }
+    // Estado en memoria
+    if(cap.estado!=='Realizada'){
+      const finStr=cap.fecha_fin||cap._fechaFinCalc||cap.fecha;
+      if(finStr){
+        const fin=new Date(finStr+'T00:00:00');
+        cap._estadoCalc=fin<hoy?'Vencida':'Programada';
+      }
+    } else {
+      cap._estadoCalc='Realizada';
+    }
+  }
+}
+
+async function sincronizarFechasYEstados(){
+  if(!isAdmin()&&!isCapacitador()) return;
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const actualizadas=[];
+  for(const cap of caps){
+    const cambios={};
+    // 1. Asignar fecha_fin si no tiene, basada en bimestre
+    if(!cap.fecha_fin&&cap.bimestre){
+      const ff=fechaFinPorBimestre(cap.bimestre);
+      if(ff){ cambios.fecha_fin=ff; cap.fecha_fin=ff; }
+    }
+    // 2. Calcular estado automático (solo si no está Realizada)
+    if(cap.estado!=='Realizada'){
+      const finStr=cap.fecha_fin||cap.fecha;
+      if(finStr){
+        const fin=new Date(finStr+'T00:00:00');
+        const nuevoEstado=fin<hoy?'Vencida':'Programada';
+        if(cap.estado!==nuevoEstado){
+          cambios.estado=nuevoEstado;
+          cap.estado=nuevoEstado;
+        }
+      }
+    }
+    if(Object.keys(cambios).length>0){
+      actualizadas.push({id:cap.id,cambios});
+    }
+  }
+  if(!actualizadas.length){toast('Todo sincronizado — sin cambios');return;}
+  setSyncStatus('syncing');
+  try{
+    for(const {id,cambios} of actualizadas){
+      await api('PATCH','capacitaciones',cambios,`?id=eq.${id}`);
+    }
+    setSyncStatus('ok');
+    toast(`${actualizadas.length} capacitaciones actualizadas (fecha fin + estado)`);
+    renderContent();
+    updateSub();
+  }catch(e){setSyncStatus('error');toast('Error al sincronizar');}
+}
 
 async function sincronizarEsperados(){
   if(!isAdmin()){toast('Sin permisos');return;}

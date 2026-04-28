@@ -44,23 +44,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .content{flex:1;padding:12px 18px;min-width:0;overflow-y:auto;overflow-x:auto}
 /* Mobile: menú horizontal abajo del stats-bar */
 @media(max-width:640px){
-  /* En mobile: el body scrollea libremente, no el .content */
   html,body{overflow-y:auto !important;overflow-x:hidden !important;height:auto !important}
   .app{height:auto !important;min-height:100vh;overflow:visible !important}
-  .top-controls{position:sticky;top:0;z-index:20}
-  .app-body{flex-direction:column;height:auto !important;overflow:visible !important;flex:0 0 auto}
-  .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;padding:0 4px;position:relative !important;z-index:5;background:#fff}
-  .tab{border-left:none;border-bottom:3px solid transparent;padding:8px 10px;white-space:nowrap;flex-shrink:0;font-size:11px}
+  /* top-controls NO es sticky en mobile — scrollea con el contenido */
+  .top-controls{position:relative !important;z-index:1}
+  .app-body{flex-direction:column;height:auto !important;overflow:visible !important}
+  .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;
+    border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;
+    padding:0 4px;position:relative;z-index:1;background:#fff}
+  .tab{border-left:none;border-bottom:3px solid transparent;padding:8px 10px;
+    white-space:nowrap;flex-shrink:0;font-size:11px}
   .tab.active{border-left:none;border-bottom-color:#1D9E75;background:#F0FBF7}
-  .content{padding:8px 10px;overflow:visible !important;height:auto !important;flex:0 0 auto}
-  /* Logo mobile: más chico */
+  /* El content es normal — los clicks siempre llegan */
+  .content{padding:8px 10px;overflow:visible !important;height:auto !important;position:relative;z-index:1}
+  .cap-card{position:relative;z-index:2;cursor:pointer}
   .hdr-logo-img{height:32px !important}
   .hdr-center{font-size:11px !important}
-  /* Filtros en tabla: etiqueta + select en la misma fila */
   .filter-bar{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;padding:6px 8px;align-items:center}
   .filter-bar label{font-size:10px;white-space:nowrap}
   .filter-bar select{font-size:10px;padding:3px 4px;width:100%}
-  /* Stats más compactas */
   .stats-bar{padding:4px 8px;gap:3px}
   .stat-num{font-size:18px !important}
   .stat-lbl{font-size:9px !important}
@@ -313,19 +315,6 @@ select.form-input{cursor:pointer}
     <label>Depto</label>
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
   </div>
-  <style>
-  @media(max-width:640px){
-    .filter-bar{grid-template-columns:auto 1fr auto 1fr !important}
-    .filter-bar>label:nth-child(1){grid-column:1}
-    .filter-bar>select:nth-child(2){grid-column:2}
-    .filter-bar>label:nth-child(3){grid-column:3}
-    .filter-bar>select:nth-child(4){grid-column:4}
-    .filter-bar>label:nth-child(5){grid-column:1;margin-top:2px}
-    .filter-bar>select:nth-child(6){grid-column:2;margin-top:2px}
-    .filter-bar>label:nth-child(7){grid-column:3;margin-top:2px}
-    .filter-bar>select:nth-child(8){grid-column:4;margin-top:2px}
-  }
-  </style>
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
     <div class="stat"><div class="stat-num ok" id="st-ok">—</div><div class="stat-lbl">Realizadas</div></div>
@@ -935,12 +924,12 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
     if(ins){
       const arr=Array.isArray(ins)?ins:[ins];
       asistentes=[...asistentes,...arr];
-      // Actualizar participantes_esperados al total real de asistentes
-      const totalAsis=getA(capId).length + arr.length;
+      // Actualizar participantes_esperados: getA ya incluye los nuevos
+      const totalAsis=getA(capId).length;
       await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
       const capIdx=caps.findIndex(x=>x.id===capId);
       if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
-      toast(`${nuevos.length} participantes cargados — Esperados actualizado a ${totalAsis}`);
+      toast(`${nuevos.length} participantes cargados — Esperados: ${totalAsis}`);
     }
   }catch(e){console.warn('Error cargando participantes desde padrón:',e);}
 }

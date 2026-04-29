@@ -883,7 +883,7 @@ function renderResumen(){
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
     const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(cap=>{
       const d=desvioInfoExt(cap,estadoCap(cap),fechaFinCap(cap));
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
     }).join('');
     return`<div class="plan-block" style="border-left:3px solid #EF9F27">
       <div class="plan-block-title">⚠ Desvío de planificación</div>

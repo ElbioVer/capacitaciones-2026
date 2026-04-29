@@ -581,23 +581,34 @@ function capCard(cap){
 }
 
 function switchTab(t){
-  if(t!=='padron') window._padronFiltro='todos';
-  currentTab=t;
-  ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
-  renderContent();
+  try{
+    if(t!=='padron') window._padronFiltro='todos';
+    currentTab=t;
+    ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+    renderContent();
+  }catch(err){
+    console.error('switchTab error:',err);
+  }
 }
 
 function renderContent(){
-  const f=getFiltered();renderStats(f);
-  const el=document.getElementById('content');
-  if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
-  else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
-  else if(currentTab==='bim') el.innerHTML=renderBim();
-  else if(currentTab==='un') el.innerHTML=renderUN();
-  else if(currentTab==='resumen') el.innerHTML=renderResumen();
-  else if(currentTab==='padron') el.innerHTML=renderPadron();
-  else if(currentTab==='config') el.innerHTML=renderConfig();
-  else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
+  try{
+    const f=getFiltered();renderStats(f);
+    const el=document.getElementById('content');
+    if(!el) return;
+    if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
+    else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
+    else if(currentTab==='bim') el.innerHTML=renderBim();
+    else if(currentTab==='un') el.innerHTML=renderUN();
+    else if(currentTab==='resumen') el.innerHTML=renderResumen();
+    else if(currentTab==='padron') el.innerHTML=renderPadron();
+    else if(currentTab==='config') el.innerHTML=renderConfig();
+    else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
+  }catch(err){
+    console.error('renderContent error en tab',currentTab,':',err);
+    const el=document.getElementById('content');
+    if(el) el.innerHTML='<div style="padding:20px;color:#CC0000;font-size:12px">⚠ Error al renderizar: '+err.message+'<br><small>Tab: '+currentTab+'</small></div>';
+  }
 }
 
 function renderPorTipo(){
@@ -1417,7 +1428,14 @@ function renderUsuarios(){
 }
 
 // DETALLE
-function openDetail(id){buildDetail(Number(id));}
+function openDetail(id){
+  try{
+    buildDetail(Number(id));
+  }catch(err){
+    console.error('openDetail error:',err);
+    alert('Error al abrir: '+err.message);
+  }
+}
 
 function buildDetail(id){
   const _id=Number(id);const c=caps.find(x=>x.id===_id);if(!c)return;
@@ -2558,22 +2576,6 @@ function installPWA(){
     });
   }
 }
-
-// Event delegation para abrir capacitaciones (funciona en mobile y desktop)
-document.addEventListener('DOMContentLoaded', function(){
-  document.addEventListener('click', function(e){
-    // Buscar el elemento clickeado o su padre con data-capid
-    let el = e.target;
-    for(let i=0; i<5; i++){
-      if(!el) break;
-      if(el.dataset && el.dataset.capid){
-        openDetail(Number(el.dataset.capid));
-        return;
-      }
-      el = el.parentElement;
-    }
-  });
-});
 
 </script>
 </body>

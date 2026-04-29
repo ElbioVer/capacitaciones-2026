@@ -1401,9 +1401,11 @@ function renderConfig(){
     <p style="font-size:11px;color:#888;margin-top:4px">Asigna fecha fin por bimestre y actualiza estados (Programada/Vencida) en Supabase para todas las capacitaciones.</p>
   </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
+    <button class="btn-sm green" onclick="exportPlantillaAsistentes()" style="margin-bottom:8px">📥 Plantilla Excel asistentes</button>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div>
-      <div><strong>un</strong> — Unidad de Negocio</div><div><strong>sector</strong> — sector</div>
+      <div><strong>un</strong> — Unidad de Negocio</div><div><strong>departamento</strong> — departamento (impacta en reportes y cumplimiento)</div>
+      <div><strong>sector</strong> — sector</div>
       <div><strong>completo</strong> — SI o NO</div>
       <div><strong>nota</strong> — del 1 al 10 (solo SST y Salud)</div>
     </div>
@@ -1881,7 +1883,7 @@ function exportFalt(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const falt=getA(capId).filter(a=>!a.completo);
   if(!falt.length){toast('No hay faltantes');return;}
-  const rows=falt.map(a=>({'Legajo':a.legajo,'Nombre':a.nombre,'UN':a.un||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
+  const rows=falt.map(a=>({'Legajo':a.legajo,'Nombre':a.nombre,'UN':a.un||'','Departamento':a.departamento||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb,ws,'Faltantes');
   XLSX.writeFile(wb,`faltantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
@@ -1892,7 +1894,7 @@ function exportAll(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const a=getA(capId);
   if(!a.length){toast('No hay participantes');return;}
-  const rows=a.map(x=>({'Legajo':x.legajo,'Nombre':x.nombre,'UN':x.un||'','Sector':x.sector||'','Completó':x.completo?'Sí':'No','Nota':x.nota!=null?x.nota:'','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
+  const rows=a.map(x=>({'Legajo':x.legajo,'Nombre':x.nombre,'UN':x.un||'','Departamento':x.departamento||'','Sector':x.sector||'','Completó':x.completo?'Sí':'No','Nota':x.nota!=null?x.nota:'','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb,ws,'Participantes');
   XLSX.writeFile(wb,`participantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
@@ -1913,6 +1915,7 @@ async function importExcel(event,capId){
         nombre:String(r.nombre||r.Nombre||r.NOMBRE||'').trim(),
         un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim(),
         sector:String(r.sector||r.Sector||r.SECTOR||'').trim(),
+        departamento:String(r.departamento||r.Departamento||r.DEPARTAMENTO||'').trim()||null,
         completo:['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim()),
         nota:parseFloat(r.nota||r.Nota||r.NOTA||'')||null
       })).filter(r=>r.legajo);
@@ -2370,6 +2373,19 @@ async function forzarRealizada(capId){
     toast('Capacitación marcada como Realizada');
     closeModal();renderContent();
   }catch(e){toast('Error');}
+}
+
+function exportPlantillaAsistentes(){
+  const rows=[
+    {legajo:'6462',nombre:'APELLIDO, Nombre Ejemplo',un:'Dist y Logistica',departamento:'DIME y Morosidad',sector:'Dist. Mvo. Este',completo:'NO',nota:''},
+    {legajo:'9177',nombre:'OTRO, Ejemplo Con Nota',un:'Dist y Logistica',departamento:'DIME y Morosidad',sector:'Dist. Mvo. Este',completo:'SI',nota:8},
+  ];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:35},{wch:22},{wch:22},{wch:20},{wch:10},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
+  XLSX.writeFile(wb,'plantilla_asistentes.xlsx');
+  toast('Plantilla de asistentes descargada');
 }
 
 function exportPlantillaCaps(){

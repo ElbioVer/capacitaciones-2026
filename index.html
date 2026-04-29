@@ -600,7 +600,7 @@ function renderContent(){
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
-    else if(currentTab==='resumen') el.innerHTML=renderResumen();
+    else if(currentTab==='resumen'){const _rd=renderResumen();el.innerHTML=_rd.html;setTimeout(()=>renderCharts(_rd.dataMeses,_rd.evalData),150);}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config') el.innerHTML=renderConfig();
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
@@ -830,7 +830,7 @@ function renderResumen(){
     return{titulo:c.titulo.length>18?c.titulo.substring(0,18)+'…':c.titulo,prom,apr,tipo:c.tipo_codigo};
   }).filter(x=>x.prom!==null);
 
-  return`<div class="plan-block">
+  const html=`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
       <span style="font-size:12px;color:#888">Capacitaciones realizadas${contexto?` <span style="font-size:10px;background:#E8F5FF;color:#185FA5;border-radius:4px;padding:1px 6px">${contexto}</span>`:""}</span>
       <span style="font-size:15px;font-weight:700;color:#1D9E75">${pctCaps}%</span>
@@ -896,6 +896,7 @@ function renderResumen(){
   })()}
   `;
   setTimeout(()=>renderCharts(dataMeses,evalData), 150);
+  return {html, dataMeses, evalData};
 }
 
 

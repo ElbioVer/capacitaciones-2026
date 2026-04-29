@@ -2539,28 +2539,13 @@ setInterval(()=>{if(currentUser)loadAll();},30000);
 init();
 </script>
 <script>
-if('serviceWorker' in navigator){
-  const swCode=`
-const CACHE='cap-v1';
-const ASSETS=['/'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{})));self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{if(resp&&resp.status===200){const rc=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,rc));}return resp;}).catch(()=>caches.match('/'))));});
-`;
-  const blob=new Blob([swCode],{type:'application/javascript'});
-  const swUrl=URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl).then(r=>{
-    console.log('SW registered');
-    // Show install prompt
-    window.addEventListener('beforeinstallprompt',e=>{
-      e.preventDefault();
-      window._installPrompt=e;
-      // Show install banner after login
-      const btn=document.getElementById('install-pwa-btn');
-      if(btn)btn.style.display='flex';
-    });
-  }).catch(e=>console.log('SW error:',e));
-}
+// PWA install prompt (sin ServiceWorker por incompatibilidad con GitHub Pages)
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  window._installPrompt=e;
+  const btn=document.getElementById('install-pwa-btn');
+  if(btn)btn.style.display='flex';
+});
 </script>
 <div id="install-pwa-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1D9E75;color:#fff;border:none;border-radius:12px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);align-items:center;gap:8px;z-index:9999;white-space:nowrap" onclick="installPWA()">
   <span>📲</span> Instalar app en el celular

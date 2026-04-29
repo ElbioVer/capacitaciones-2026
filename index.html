@@ -561,7 +561,7 @@ function capCard(cap){
   const _ffin=fechaFinCap(cap);
   const diasDesvio=desvioInfoExt(cap,_est,_ffin);
   const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
-  return`<div class="cap-card" onclick="openDetail(${cap.id})">
+  return`<div class="cap-card" data-capid="${cap.id}" onclick="openDetail(${cap.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(cap.titulo)}</div>
       <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
@@ -604,15 +604,16 @@ function renderPorTipo(){
   let html='';
   tipos.forEach(t=>{
     const grupo=getFiltered().filter(c=>c.tipo_codigo===t.codigo);
-    const ok=grupo.filter(c=>c.estado==='Realizada').length;
+    const ok=grupo.filter(cap=>cap.estado==='Realizada').length;
     const pct=grupo.length?Math.round(ok/grupo.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
-    const rows=grupo.length?grupo.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+    const rows=grupo.length?grupo.map(cap=>{
+
+      const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
   const posibles=a.length;
   const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" onclick="openDetail(${c.id})"><span class="plan-item-name">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -629,15 +630,16 @@ function renderPorTipo(){
 function renderBim(){
   return BIMESTRES.map(b=>{
     const g=getFiltered().filter(c=>c.bimestre===b);
-    const ok=g.filter(c=>c.estado==='Realizada').length;
+    const ok=g.filter(cap=>cap.estado==='Realizada').length;
     const pct=g.length?Math.round(ok/g.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
-    const rows=g.length?g.map(c=>{
-      const a=getA(c.id),comp=a.filter(x=>x.completo).length;
+    const rows=g.length?g.map(cap=>{
+
+      const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
   const posibles=a.length;
   const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(c.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(c.estado||'').toLowerCase()}">${c.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -698,7 +700,7 @@ function renderUN(){
         const capRows=capsDeDepto.length?capsDeDepto.map(cap=>{
           const as=getA(cap.id).filter(a=>a.un===un.nombre&&(a.departamento===dep||a.sector===dep));
           const comp=as.filter(a=>a.completo).length;
-          return`<div class="plan-row-item" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
         }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones registradas</p>';
 
         const barColor=pct>=75?'#1D9E75':pct>=40?'#EF9F27':'#E05555';
@@ -724,7 +726,7 @@ function renderUN(){
       const a=getA(cap.id).filter(x=>x.un===un.nombre);
       return !a.some(x=>x.departamento||x.sector);
     });
-    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;}).join('')}</div>`:'';
+    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;}).join('')}</div>`:'';
 
     return`<div class="plan-block">
       <div class="plan-block-title">🏢 ${esc(un.nombre)}
@@ -868,9 +870,9 @@ function renderResumen(){
     if(!conDesvio.length) return'';
     const totalDias=conDesvio.reduce((s,c)=>s+(desvioInfoExt(c,estadoCap(c),fechaFinCap(c))||0),0);
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
-    const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(c=>{
-      const d=desvioInfoExt(c,estadoCap(c),fechaFinCap(c));
-      return`<div class="plan-row-item" onclick="openDetail(${c.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
+    const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(cap=>{
+      const d=desvioInfoExt(cap,estadoCap(cap),fechaFinCap(cap));
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
     }).join('');
     return`<div class="plan-block" style="border-left:3px solid #EF9F27">
       <div class="plan-block-title">⚠ Desvío de planificación</div>
@@ -1415,10 +1417,10 @@ function renderUsuarios(){
 }
 
 // DETALLE
-function openDetail(id){buildDetail(id);}
+function openDetail(id){buildDetail(Number(id));}
 
 function buildDetail(id){
-  const c=caps.find(x=>x.id===id);if(!c)return;
+  const _id=Number(id);const c=caps.find(x=>x.id===_id);if(!c)return;
   const t=getTipo(c.tipo_codigo);
   const a=getA(id),comp=a.filter(x=>x.completo).length;
   // posibles = total en la lista; esp = meta definida manualmente (o total si nunca se editó)
@@ -2556,6 +2558,23 @@ function installPWA(){
     });
   }
 }
+
+// Event delegation para abrir capacitaciones (funciona en mobile y desktop)
+document.addEventListener('DOMContentLoaded', function(){
+  document.addEventListener('click', function(e){
+    // Buscar el elemento clickeado o su padre con data-capid
+    let el = e.target;
+    for(let i=0; i<5; i++){
+      if(!el) break;
+      if(el.dataset && el.dataset.capid){
+        openDetail(Number(el.dataset.capid));
+        return;
+      }
+      el = el.parentElement;
+    }
+  });
+});
+
 </script>
 </body>
 </html>

@@ -1386,10 +1386,11 @@ function renderConfig(){
       <strong>codigo_redmine</strong> — ej: #35167 (identificador único)<br>
       <strong>titulo *</strong> — nombre de la capacitación<br>
       <strong>tipo_codigo *</strong> — REMO, SST, SALUD, AMBIENTE, CALIFICACION, INDUCCION<br>
-      <strong>un</strong> — Unidad de Negocio · <strong>area</strong> — tema<br>
-      <strong>fecha</strong> — DD/MM/AAAA · <strong>bimestre</strong> — número 1 al 6<br>
-      <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
-      <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong>
+      <strong>un</strong> — Unidad de Negocio · <strong>departamento</strong> — filtra el padrón al cargar participantes<br>
+      <strong>area</strong> — tema · <strong>fecha</strong> — DD/MM/AAAA · <strong>fecha_fin</strong> — DD/MM/AAAA<br>
+      <strong>bimestre</strong> — número 1 al 6 · <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
+      <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong><br>
+      <span style="color:#6B4F00">💡 Si se indica <strong>un</strong> (y opcionalmente <strong>departamento</strong>), se cargan automáticamente los participantes del padrón al importar.</span>
     </div>
   </div>
 <div class="config-section">
@@ -2017,7 +2018,7 @@ async function saveCap(id){
       if(i>=0)caps[i]={...caps[i],...obj};
       // Si cambió la UN o sector, ofrecer recargar participantes
       const capActual=caps[i];
-      if(capActual&&(capActual.un!==obj.un||capActual.sector!==obj.sector)&&obj.un){
+      if(capActual&&(capActual.un!==obj.un||capActual.departamento!==obj.departamento)&&obj.un){
         if(confirm('¿Actualizar participantes desde el padrón para la nueva UN/Departamento?')){
           await cargarParticipantesDesdePadron(Number(id),obj.un,obj.departamento);
         }
@@ -2372,10 +2373,18 @@ async function forzarRealizada(capId){
 }
 
 function exportPlantillaCaps(){
-  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',departamento:'DIME y Morosidad',area:'Operativos',fecha:'28/02/2026',fecha_fin:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:''}];
+  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',departamento:'DIME y Morosidad',area:'Operativos',fecha:'28/02/2026',fecha_fin:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:'Nota: si se indica UN y Departamento se cargan automaticamente los participantes del padron'}];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:22},{wch:14},{wch:12},{wch:12},{wch:8},{wch:22},{wch:10},{wch:14},{wch:14},{wch:8},{wch:55}];
+  // Add a note row explaining fields
+  XLSX.utils.sheet_add_aoa(ws,[
+    ['','','','','','','','','','','','','','',''],
+    ['CAMPOS REQUERIDOS (*):','titulo','tipo_codigo','','','','','','','','','','','',''],
+    ['CAMPOS OPCIONALES:','codigo_redmine','un','departamento (filtra padron)','area','fecha (DD/MM/AAAA)','fecha_fin (DD/MM/AAAA)','bimestre (1-6)','participantes_esperados','duracion (hs)','instructor','estado','nota_aprobacion','obs',''],
+    ['TIPOS VALIDOS:','REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','','','','','','','',''],
+    ['ESTADOS VALIDOS:','Programada','Pendiente','Realizada','','','','','','','','','','',''],
+  ], {origin:'A3'});
   XLSX.utils.book_append_sheet(wb,ws,'Plan');
   XLSX.writeFile(wb,'plantilla_plan_capacitacion.xlsx');
   toast('Plantilla descargada');
@@ -2453,7 +2462,10 @@ async function importarCaps(event){
             actualizadas++;
           }else{
             const nr=await api('POST','capacitaciones',obj,'');
-            const nv=Array.isArray(nr)?nr[0]:nr;if(nv)caps.push(nv);
+            const nv=Array.isArray(nr)?nr[0]:nr;if(nv){caps.push(nv);
+            // Auto-cargar participantes del padrón si hay UN
+            if(nv.un) await cargarParticipantesDesdePadron(nv.id, nv.un, nv.departamento||null);
+            }
             creadas++;
           }
           if(obj.un&&!uns.find(u=>u.nombre===obj.un)){

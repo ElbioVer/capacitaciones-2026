@@ -894,10 +894,9 @@ function renderResumen(){
       ${rows}
     </div>`;
   })()}
-  <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
-  <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
-  setTimeout(renderCharts, 100);
-}
+  `;
+  setTimeout(()=>renderCharts(dataMeses,evalData), 150);
+  setTimeout(()=>renderCharts(dataMeses,evalData), 150);
 
 
 
@@ -2209,16 +2208,14 @@ async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
 }
 
-function renderCharts(){
+function renderCharts(dm,ed){
   const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
   const textColor=isDark?'#aaa':'#888';
 
   const ctxL=document.getElementById('chart-linea');
-  const dmEl=document.getElementById('chart-data-linea');
-  if(ctxL&&dmEl){
+  if(ctxL&&dm){
     try{
-      const dm=JSON.parse(dmEl.textContent);
       if(window._chartLinea) window._chartLinea.destroy();
       window._chartLinea=new Chart(ctxL,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
         {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
@@ -2228,11 +2225,8 @@ function renderCharts(){
   }
 
   const ctxE=document.getElementById('chart-eval');
-  const edEl=document.getElementById('chart-data-eval');
-  if(ctxE&&edEl){
+  if(ctxE&&ed&&ed.length){
     try{
-      const ed=JSON.parse(edEl.textContent);
-      if(!ed.length)return;
       if(window._chartEval) window._chartEval.destroy();
       window._chartEval=new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
         {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},

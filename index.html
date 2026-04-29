@@ -576,7 +576,7 @@ function capCard(cap){
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
     <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron${posibles!==esp?` <span style="font-size:10px;color:#aaa">(${posibles} en lista)</span>`:""}</span><span class="asist-pct">${pct}%</span></div>
-    <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(estadoCap(c),pct)}" style="width:${Math.min(pct,100)}%"></div></div>
+    <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(estadoCap(cap),pct)}" style="width:${Math.min(pct,100)}%"></div></div>
   </div>`;
 }
 
@@ -1443,7 +1443,7 @@ function buildDetail(id){
   const a=getA(id),comp=a.filter(x=>x.completo).length;
   // posibles = total en la lista; esp = meta definida manualmente (o total si nunca se editó)
   const posibles=a.length;
-  const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
   const pct=esp?Math.round(comp/esp*100):0;
   const falt=a.filter(x=>!x.completo);
   const faltantesReal=Math.max(0,esp-comp); // faltantes respecto a la META, no al total

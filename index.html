@@ -1470,14 +1470,24 @@ function buildDetail(id){
   let repoHtml='';
   if(t.tiene_repositorio){
     const mats=getMat(id);
-    const matItems=mats.length?mats.map(m=>`<div class="material-item">
-      <span class="material-icon">${m.tipo==='link'?'🔗':'📄'}</span>
-      <div class="material-info"><div class="material-name">${esc(m.nombre)}</div><div class="material-meta">${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" style="color:#185FA5">${esc(m.url).substring(0,40)}...</a>`:m.tipo}</div></div>
-      <div class="material-actions">
-        ${m.tipo==='link'?`<button class="btn-sm blue" onclick="window.open('${esc(m.url)}','_blank')">Abrir</button>`:''}
-        ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
-      </div>
-    </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
+    const matItems=mats.length?mats.map(m=>{
+      const iconMap={pdf:'📄',video:'🎬',drive:'📁',link:'🔗',otro:'📎'};
+      const labelMap={pdf:'PDF',video:'Video',drive:'Drive/OneDrive',link:'Link',otro:'Archivo'};
+      const icon=iconMap[m.tipo]||'📎';
+      const label=labelMap[m.tipo]||m.tipo;
+      const urlShort=m.url?(m.url.length>45?m.url.substring(0,45)+'…':m.url):'';
+      return`<div class="material-item">
+        <span class="material-icon">${icon}</span>
+        <div class="material-info">
+          <div class="material-name">${esc(m.nombre)}</div>
+          <div class="material-meta" style="color:#888">${label} · <span style="color:#185FA5;font-size:10px">${urlShort}</span></div>
+        </div>
+        <div class="material-actions">
+          ${m.url?`<button class="btn-sm blue" onclick="window.open('${esc(m.url)}','_blank')">Abrir</button>`:''}
+          ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
+        </div>
+      </div>`;
+    }).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
     const addMatBtn=canEdit()?`<button class="btn-sm green" onclick="openAddMaterial(${id})">+ Material</button>`:'';
     repoHtml=`<div class="modal-section">
       <div style="display:flex;align-items:center;justify-content:space-between" class="modal-section-title"><span>Repositorio de materiales</span>${addMatBtn}</div>
@@ -1567,19 +1577,61 @@ function buildDetail(id){
 // MATERIALES
 async function openAddMaterial(capId){
   showModal(`<div class="modal-handle"></div>
-    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Agregar material</div>
-    <div class="form-group"><label class="form-label">Tipo</label>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">📎 Agregar material</div>
+    <div class="form-group"><label class="form-label">Tipo de material</label>
       <select class="form-input" id="mat-tipo" onchange="toggleMatTipo()">
-        <option value="link">Link / URL</option>
-        <option value="pdf">PDF (link a Drive/OneDrive)</option>
-        <option value="video">Video (YouTube/Vimeo)</option>
-        <option value="otro">Otro</option>
+        <option value="pdf">📄 PDF — presentación, manual, procedimiento</option>
+        <option value="video">🎬 Video — YouTube, Vimeo u otro</option>
+        <option value="drive">📁 Carpeta Drive / OneDrive / SharePoint</option>
+        <option value="link">🔗 Link / URL general</option>
+        <option value="otro">📎 Otro</option>
       </select>
     </div>
-    <div class="form-group"><label class="form-label">Nombre del material *</label><input class="form-input" id="mat-nombre" placeholder="Ej: Presentación SST 2026"></div>
-    <div class="form-group"><label class="form-label">URL / Link *</label><input class="form-input" id="mat-url" placeholder="https://..."></div>
-    <p style="font-size:11px;color:#888;margin-top:-6px">Para archivos, subílos a Google Drive o OneDrive y pegá el link de compartir.</p>
-    <div class="btn-row"><button class="btn-sec" onclick="buildDetail(${capId})">Cancelar</button><button class="btn-prim" onclick="saveMaterial(${capId})">Agregar</button></div>`);
+    <div class="form-group"><label class="form-label">Nombre del material *</label>
+      <input class="form-input" id="mat-nombre" placeholder="Ej: Manual de Seguridad Vial 2026">
+    </div>
+    <div class="form-group"><label class="form-label">Link de acceso *</label>
+      <input class="form-input" id="mat-url" placeholder="https://" oninput="previewMatUrl()">
+    </div>
+    <div id="mat-helper" style="background:#E6F1FB;border-radius:8px;padding:10px;font-size:11px;color:#185FA5;margin-bottom:10px;line-height:1.6">
+      <strong>📄 Para PDFs y archivos:</strong><br>
+      Subí el archivo a <strong>Google Drive</strong> o <strong>OneDrive</strong> y pegá el link de "Compartir" (modo lectura).<br>
+      <span style="color:#888">Los archivos NO se suben directamente al sistema para evitar problemas de peso y almacenamiento.</span>
+    </div>
+    <div id="mat-preview" style="display:none;background:#f4f4f2;border-radius:8px;padding:8px;font-size:11px;color:#444;margin-bottom:10px;word-break:break-all"></div>
+    <div class="btn-row">
+      <button class="btn-sec" onclick="buildDetail(${capId})">Cancelar</button>
+      <button class="btn-prim" onclick="saveMaterial(${capId})">Agregar material</button>
+    </div>`);
+}
+
+function toggleMatTipo(){
+  const tipo=document.getElementById('mat-tipo').value;
+  const helper=document.getElementById('mat-helper');
+  const urlInput=document.getElementById('mat-url');
+  const msgs={
+    pdf:`<strong>📄 Para PDFs:</strong><br>Subí el archivo a <strong>Google Drive</strong> o <strong>OneDrive</strong> → botón "Compartir" → "Cualquier persona con el enlace puede ver" → copiá el link.<br><span style="color:#888">El sistema guardará el link para que los participantes lo abran directamente.</span>`,
+    video:`<strong>🎬 Para videos de YouTube:</strong><br>Abrí el video → botón "Compartir" → copiá el link. Para otros servicios, copiá la URL de la página del video.`,
+    drive:`<strong>📁 Para carpetas de Drive/OneDrive:</strong><br>Abrí la carpeta → "Compartir" → "Cualquier persona con el enlace puede ver" → copiá el link.`,
+    link:`<strong>🔗 Link general:</strong><br>Pegá la URL completa incluyendo https://.`,
+    otro:`<strong>📎 Otro tipo:</strong><br>Pegá la URL de acceso al material.`
+  };
+  helper.innerHTML=msgs[tipo]||msgs.link;
+  urlInput.placeholder=tipo==='video'?'https://youtube.com/watch?v=...' : tipo==='drive'?'https://drive.google.com/drive/folders/...' : 'https://...';
+}
+
+function previewMatUrl(){
+  const url=document.getElementById('mat-url').value.trim();
+  const prev=document.getElementById('mat-preview');
+  if(!url){prev.style.display='none';return;}
+  let icon='🔗', label='Link';
+  if(url.includes('drive.google.com')){icon='📁';label='Google Drive';}
+  else if(url.includes('onedrive')||url.includes('sharepoint')){icon='📁';label='OneDrive';}
+  else if(url.includes('youtube.com')||url.includes('youtu.be')){icon='🎬';label='YouTube';}
+  else if(url.includes('vimeo')){icon='🎬';label='Vimeo';}
+  else if(url.endsWith('.pdf')){icon='📄';label='PDF';}
+  prev.style.display='block';
+  prev.innerHTML=`${icon} <strong>${label}</strong> detectado · <a href="${url}" target="_blank" style="color:#185FA5">Probar link</a>`;
 }
 
 async function saveMaterial(capId){
@@ -1628,7 +1680,7 @@ function openEditEval(evalId,capId){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   let pqsHtml=pqs.map((p,i)=>{
     const opts=p.opciones||[];
-    return`<div class="pregunta-item">
+    return`<div class="pregunta-item" data-pqid="${p.id}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="pregunta-num">Pregunta ${i+1}</div>
         <button class="btn-sm red" onclick="delPregunta(${p.id},${evalId},${capId})">×</button>
@@ -1642,8 +1694,13 @@ function openEditEval(evalId,capId){
       <div style="font-size:14px;font-weight:600;color:#111">${esc(ev.titulo)}</div>
       <button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail(${capId})">← Volver</button>
     </div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px">${pqs.length} preguntas · ${pqs.length<5?`<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>`:'Ok'}</div>
-    ${pqsHtml}
+    <div id="pq-counter" style="font-size:11px;color:#888;margin-bottom:8px">${pqs.length} preguntas · ${pqs.length<5?`<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>`:'Ok'}</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn-sm blue" onclick="importEvalExcel(${evalId},${capId})">📂 Importar Excel</button>
+      <button class="btn-sm green" onclick="exportPlantillaEval()">📥 Plantilla</button>
+      <button class="btn-sm" style="background:#7F77DD;color:#fff" onclick="exportEvalExcel(${evalId})">📊 Exportar</button>
+    </div>
+    <div id="pqs-container">${pqsHtml}</div>
     <div style="background:#f4f4f2;border-radius:10px;padding:12px;margin-top:8px">
       <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:8px">Agregar pregunta</div>
       <div class="form-group"><label class="form-label">Pregunta *</label><input class="form-input" id="pq-texto" placeholder="¿Cuál es el procedimiento correcto?"></div>
@@ -1656,7 +1713,7 @@ function openEditEval(evalId,capId){
           <option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option>
         </select>
       </div>
-      <button class="btn-prim" onclick="addPregunta(${evalId},${capId})">Agregar pregunta</button>
+      <button class="btn-prim" onclick="addPregunta(${evalId},${capId})">+ Agregar pregunta</button>
     </div>
     <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">Listo</button>`);
 }
@@ -1674,9 +1731,115 @@ async function addPregunta(evalId,capId){
   const orden=preguntas.filter(p=>p.evaluacion_id===evalId).length;
   try{
     const r=await api('POST','preguntas_evaluacion',{evaluacion_id:evalId,pregunta:texto,opciones,correcta,orden},'');
-    const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
-    toast('Pregunta agregada');openEditEval(evalId,capId);
-  }catch(e){toast('Error');}
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv){
+      preguntas.push(nv);
+      // Agregar la pregunta al DOM sin re-renderizar el modal completo
+      const pqCount=preguntas.filter(p=>p.evaluacion_id===evalId).length;
+      const pqContainer=document.getElementById('pqs-container');
+      if(pqContainer){
+        const div=document.createElement('div');
+        div.className='pregunta-item';
+        div.dataset.pqid=nv.id;
+        const opts=nv.opciones||[];
+        div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="pregunta-num">Pregunta ${pqCount}</div>
+          <button class="btn-sm red" onclick="delPregunta(${nv.id},${evalId},${capId})">×</button>
+        </div>
+        <div class="pregunta-texto">${esc(nv.pregunta)}</div>
+        ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===nv.correcta?'#E1F5EE':'#f4f4f2'};color:${j===nv.correcta?'#085041':'#555'}">${j===nv.correcta?'✓ ':''}${esc(o)}</div>`).join('')}`;
+        pqContainer.appendChild(div);
+        // Actualizar contador
+        const counter=document.getElementById('pq-counter');
+        if(counter)counter.innerHTML=`${pqCount} preguntas · ${pqCount<5?'<span style="color:#BA7517">Mínimo 5 recomendadas</span>':'Ok'}`;
+      }
+      // Limpiar formulario
+      ['pq-texto','pq-a','pq-b','pq-c','pq-d'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      document.getElementById('pq-correcta').value='0';
+      document.getElementById('pq-texto').focus();
+      toast('Pregunta agregada');
+    }
+  }catch(e){toast('Error al agregar pregunta');}
+}
+
+async function importEvalExcel(evalId,capId){
+  const input=document.createElement('input');
+  input.type='file';input.accept='.xlsx,.xls';
+  input.onchange=async()=>{
+    const file=input.files[0];if(!file)return;
+    try{
+      const data=await file.arrayBuffer();
+      const wb=XLSX.read(data,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      let agregadas=0,errores=0;
+      for(const row of rows){
+        const texto=String(row.pregunta||row.Pregunta||'').trim();
+        const a=String(row.opcion_a||row['Opción A']||row.opcionA||'').trim();
+        const b=String(row.opcion_b||row['Opción B']||row.opcionB||'').trim();
+        const c=String(row.opcion_c||row['Opción C']||row.opcionC||'').trim();
+        const d=String(row.opcion_d||row['Opción D']||row.opcionD||'').trim();
+        const corrStr=String(row.correcta||row.Correcta||'A').trim().toUpperCase();
+        const corrMap={A:0,B:1,C:2,D:3};
+        const correcta=corrMap[corrStr]??0;
+        if(!texto||!a||!b){errores++;continue;}
+        const opciones=[a,b];if(c)opciones.push(c);if(d)opciones.push(d);
+        const orden=preguntas.filter(p=>p.evaluacion_id===evalId).length;
+        try{
+          const r=await api('POST','preguntas_evaluacion',{evaluacion_id:evalId,pregunta:texto,opciones,correcta,orden},'');
+          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
+          agregadas++;
+        }catch(e){errores++;}
+      }
+      toast(`${agregadas} preguntas importadas${errores?` · ${errores} errores`:''}`);
+      openEditEval(evalId,capId);
+    }catch(e){toast('Error al leer el archivo');}
+  };
+  input.click();
+}
+
+function exportEvalExcel(evalId){
+  const ev=evaluaciones.find(e=>e.id===evalId);if(!ev)return;
+  const cap=caps.find(c=>c.id===ev.capacitacion_id);
+  const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
+  const rows=pqs.map(p=>{
+    const opts=p.opciones||[];
+    const letraCorrecta=['A','B','C','D'][p.correcta]||'A';
+    return{pregunta:p.pregunta,opcion_a:opts[0]||'',opcion_b:opts[1]||'',opcion_c:opts[2]||'',opcion_d:opts[3]||'',correcta:letraCorrecta};
+  });
+  const wb=XLSX.utils.book_new();
+  // Info sheet with cap reference
+  const infoRows=[
+    {campo:'Evaluación',valor:ev.titulo},
+    {campo:'Capacitación',valor:cap?cap.titulo:''},
+    {campo:'Código Redmine',valor:cap?cap.codigo_redmine||'':''},
+    {campo:'Tipo',valor:cap?cap.tipo_codigo||'':''},
+    {campo:'Bimestre',valor:cap?cap.bimestre||'':''},
+    {campo:'Total preguntas',valor:pqs.length},
+  ];
+  const wsInfo=XLSX.utils.json_to_sheet(infoRows);
+  wsInfo['!cols']=[{wch:20},{wch:50}];
+  XLSX.utils.book_append_sheet(wb,wsInfo,'Información');
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
+  const nombre=cap?(cap.codigo_redmine?`eval_${cap.codigo_redmine.replace(/[^a-z0-9]/gi,'_')}`:`eval_${cap.titulo.slice(0,30).replace(/\s+/g,'_').replace(/[^a-z0-9_]/gi,'')}`):`eval_${evalId}`;
+  XLSX.writeFile(wb,`${nombre}.xlsx`);
+  toast('Evaluación exportada');
+}
+
+function exportPlantillaEval(){
+  const rows=[
+    {pregunta:'¿Cuál es el procedimiento correcto ante un accidente?',opcion_a:'Llamar al supervisor',opcion_b:'Ignorarlo',opcion_c:'Avisar a un compañero',opcion_d:'Retirarse del área',correcta:'A'},
+    {pregunta:'¿Cada cuánto se realiza el mantenimiento preventivo?',opcion_a:'Cada 6 meses',opcion_b:'Cada año',opcion_c:'Nunca',opcion_d:'',correcta:'A'},
+    {pregunta:'¿Cuál es el EPP obligatorio en el área de planta?',opcion_a:'Solo guantes',opcion_b:'Casco, guantes y calzado de seguridad',opcion_c:'Ninguno',opcion_d:'Solo casco',correcta:'B'},
+  ];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'Evaluacion');
+  XLSX.writeFile(wb,'plantilla_evaluacion.xlsx');
+  toast('Plantilla de evaluación descargada');
 }
 
 async function delPregunta(pqId,evalId,capId){

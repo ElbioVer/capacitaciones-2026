@@ -1409,7 +1409,44 @@ function renderConfig(){
       <div><strong>completo</strong> — SI o NO</div>
       <div><strong>nota</strong> — del 1 al 10 (solo SST y Salud)</div>
     </div>
-  </div>`;
+  </div>
+  <div class="config-section">
+    <div class="config-title">Evaluaciones por código Redmine</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Cargá o reemplazá las preguntas de una evaluación identificando la capacitación por su código Redmine. Si la capacitación no tiene evaluación creada, se crea automáticamente.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn-sm green" onclick="exportPlantillaEval()">📥 Plantilla preguntas</button>
+      <label class="upload-label">📂 Importar evaluación<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importEvalDesdeConfig(event)"></label>
+    </div>
+    <div style="background:#E6F1FB;border-radius:8px;padding:10px;font-size:11px;line-height:1.8;color:#185FA5">
+      <strong>Estructura del Excel:</strong><br>
+      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
+      <strong>titulo_evaluacion</strong> — nombre de la evaluación (opcional, usa el título de la cap si se omite)<br>
+      <strong>pregunta *</strong> — texto de la pregunta<br>
+      <strong>opcion_a *</strong> · <strong>opcion_b *</strong> · <strong>opcion_c</strong> · <strong>opcion_d</strong> — opciones de respuesta<br>
+      <strong>correcta *</strong> — letra de la opción correcta: A, B, C o D<br>
+      <span style="color:#0D47A1">💡 Podés cargar preguntas para múltiples capacitaciones en un mismo Excel, una fila por pregunta.</span>
+    </div>
+    ${renderEvalConfigList()}
+  </div>`;}
+
+function renderEvalConfigList(){
+  if(!evaluaciones.length) return'<p style="font-size:11px;color:#aaa;margin-top:8px">Sin evaluaciones creadas aún.</p>';
+  const rows=evaluaciones.map(ev=>{
+    const cap=caps.find(c=>c.id===ev.capacitacion_id);
+    const pqs=preguntas.filter(p=>p.evaluacion_id===ev.id).length;
+    const redmine=cap?.codigo_redmine||'—';
+    return`<div class="plan-row-item" style="cursor:default;margin-top:4px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ev.titulo)}</div>
+        <div style="font-size:10px;color:#888">${cap?esc(cap.titulo):'Sin capacitación'} · Redmine: <strong>${esc(redmine)}</strong> · ${pqs} preguntas · ${ev.activa?'<span style="color:#1D9E75">Activa</span>':'<span style="color:#aaa">Inactiva</span>'}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-sm blue" onclick="openEditEval(${ev.id},${ev.capacitacion_id})">✎ Editar</button>
+        <button class="btn-sm green" onclick="exportEvalExcel(${ev.id})">📊 Exportar</button>
+      </div>
+    </div>`;
+  }).join('');
+  return`<div style="margin-top:10px"><div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">${evaluaciones.length} evaluaciones cargadas</div>${rows}</div>`;
 }
 
 function renderUsuarios(){
@@ -1762,6 +1799,71 @@ async function addPregunta(evalId,capId){
   }catch(e){toast('Error al agregar pregunta');}
 }
 
+async function importEvalDesdeConfig(event){
+  const file=event.target.files[0];if(!file)return;
+  event.target.value='';
+  try{
+    const data=await file.arrayBuffer();
+    const wb=XLSX.read(data,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){toast('El archivo está vacío');return;}
+
+    // Group rows by codigo_redmine
+    const byRedmine={};
+    for(const row of rows){
+      const redmine=String(row.codigo_redmine||row.Codigo_redmine||row['codigo_redmine']||'').trim();
+      if(!redmine){continue;}
+      if(!byRedmine[redmine]) byRedmine[redmine]={titulo:String(row.titulo_evaluacion||row.titulo||'').trim(), preguntas:[]};
+      const texto=String(row.pregunta||row.Pregunta||'').trim();
+      const a=String(row.opcion_a||row['Opción A']||'').trim();
+      const b=String(row.opcion_b||row['Opción B']||'').trim();
+      const c=String(row.opcion_c||row['Opción C']||'').trim();
+      const d=String(row.opcion_d||row['Opción D']||'').trim();
+      const corrStr=String(row.correcta||row.Correcta||'A').trim().toUpperCase();
+      const corrMap={A:0,B:1,C:2,D:3};
+      if(texto&&a&&b) byRedmine[redmine].preguntas.push({pregunta:texto,opciones:[a,b,...(c?[c]:[]),...(d?[d]:[])],correcta:corrMap[corrStr]??0});
+    }
+
+    let capsOk=0,capsErr=0,pqsOk=0;
+    for(const [redmine,{titulo,preguntas:pqs}] of Object.entries(byRedmine)){
+      // Find cap by codigo_redmine
+      const cap=caps.find(c=>c.codigo_redmine&&c.codigo_redmine.trim()===redmine);
+      if(!cap){toast(`⚠ No se encontró capacitación con Redmine: ${redmine}`);capsErr++;continue;}
+
+      // Find or create evaluacion for this cap
+      let ev=evaluaciones.find(e=>e.capacitacion_id===cap.id);
+      if(!ev){
+        const tituloEv=titulo||`Evaluación — ${cap.titulo}`;
+        try{
+          const r=await api('POST','evaluaciones',{capacitacion_id:cap.id,titulo:tituloEv,activa:false},'');
+          ev=Array.isArray(r)?r[0]:r;
+          if(ev) evaluaciones.push(ev);
+        }catch(e){capsErr++;continue;}
+      }
+      if(!ev){capsErr++;continue;}
+
+      // Delete existing questions and replace
+      try{
+        await api('DELETE','preguntas_evaluacion','',`?evaluacion_id=eq.${ev.id}`);
+        preguntas=preguntas.filter(p=>p.evaluacion_id!==ev.id);
+      }catch(e){}
+
+      // Insert new questions
+      for(let i=0;i<pqs.length;i++){
+        try{
+          const r=await api('POST','preguntas_evaluacion',{evaluacion_id:ev.id,...pqs[i],orden:i},'');
+          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
+          pqsOk++;
+        }catch(e){}
+      }
+      capsOk++;
+    }
+    toast(`✓ ${capsOk} evaluación/es cargadas · ${pqsOk} preguntas · ${capsErr} errores`);
+    renderContent();
+  }catch(e){toast('Error al leer el archivo');}
+}
+
 async function importEvalExcel(evalId,capId){
   const input=document.createElement('input');
   input.type='file';input.accept='.xlsx,.xls';
@@ -1830,14 +1932,21 @@ function exportEvalExcel(evalId){
 
 function exportPlantillaEval(){
   const rows=[
-    {pregunta:'¿Cuál es el procedimiento correcto ante un accidente?',opcion_a:'Llamar al supervisor',opcion_b:'Ignorarlo',opcion_c:'Avisar a un compañero',opcion_d:'Retirarse del área',correcta:'A'},
-    {pregunta:'¿Cada cuánto se realiza el mantenimiento preventivo?',opcion_a:'Cada 6 meses',opcion_b:'Cada año',opcion_c:'Nunca',opcion_d:'',correcta:'A'},
-    {pregunta:'¿Cuál es el EPP obligatorio en el área de planta?',opcion_a:'Solo guantes',opcion_b:'Casco, guantes y calzado de seguridad',opcion_c:'Ninguno',opcion_d:'Solo casco',correcta:'B'},
+    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el procedimiento correcto ante un incendio?',opcion_a:'Activar alarma y evacuar',opcion_b:'Ignorarlo',opcion_c:'Llamar a un compañero',opcion_d:'Apagarlo solo',correcta:'A'},
+    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cada cuánto se realizan los simulacros?',opcion_a:'Cada 6 meses',opcion_b:'Cada año',opcion_c:'Nunca',opcion_d:'',correcta:'A'},
+    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el EPP obligatorio en planta?',opcion_a:'Solo guantes',opcion_b:'Casco, guantes y calzado',opcion_c:'Ninguno',opcion_d:'Solo casco',correcta:'B'},
+    {codigo_redmine:'#35200',titulo_evaluacion:'Evaluación Medio Ambiente',pregunta:'¿Cómo se clasifican los residuos peligrosos?',opcion_a:'Por color de recipiente',opcion_b:'Por peso',opcion_c:'No se clasifican',opcion_d:'',correcta:'A'},
   ];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
-  XLSX.utils.book_append_sheet(wb,ws,'Evaluacion');
+  ws['!cols']=[{wch:14},{wch:35},{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
+  // Add a note row
+  XLSX.utils.sheet_add_aoa(ws,[
+    [''],
+    ['NOTA: codigo_redmine identifica la capacitación. Una fila por pregunta. Podés cargar varias evaluaciones en un mismo archivo.'],
+    ['CAMPOS: codigo_redmine* | titulo_evaluacion | pregunta* | opcion_a* | opcion_b* | opcion_c | opcion_d | correcta* (A/B/C/D)'],
+  ],{origin:`A${rows.length+2}`});
+  XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
   XLSX.writeFile(wb,'plantilla_evaluacion.xlsx');
   toast('Plantilla de evaluación descargada');
 }

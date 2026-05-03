@@ -547,6 +547,8 @@ function tipoBadge(codigo){
   return`<span class="tipo-badge tipo-${codigo||'OTRO'}">${t.codigo}</span>`;
 }
 
+let _searchQuery='';
+
 function capCard(cap){
   const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
   const posibles=a.length;
@@ -561,16 +563,16 @@ function capCard(cap){
   const _ffin=fechaFinCap(cap);
   const diasDesvio=desvioInfoExt(cap,_est,_ffin);
   const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
+  const redmineBadge=cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 6px;font-weight:700">${esc(cap.codigo_redmine)}</span>`:'';
   return`<div class="cap-card" data-capid="${cap.id}" onclick="openDetail(${cap.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(cap.titulo)}</div>
-      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
+      <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">${redmineBadge}${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
       <span>${esc(cap.area||'')}</span><span>·</span>
       <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
-      ${cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(cap.codigo_redmine)}</span>`:''}
       ${cap.bimestre?`<span class="chip-bim">${cap.bimestre.split('(')[0].trim()}</span>`:''}
       ${_ffin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(_ffin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
@@ -596,7 +598,22 @@ function renderContent(){
     const f=getFiltered();renderStats(f);
     const el=document.getElementById('content');
     if(!el) return;
-    if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
+    if(currentTab==='lista'){
+      const q=_searchQuery.toLowerCase().trim();
+      const filtered=q?f.filter(cap=>(cap.titulo||'').toLowerCase().includes(q)||(cap.codigo_redmine||'').toLowerCase().includes(q)||(cap.area||'').toLowerCase().includes(q)||(cap.instructor||'').toLowerCase().includes(q)):f;
+      const searchBar=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;background:#fff;border:1px solid #e5e5e0;border-radius:10px;padding:6px 10px">
+        <span style="color:#aaa;font-size:14px">🔍</span>
+        <input id="lista-search" type="text" placeholder="Buscar por título, código Redmine, instructor…" value="${esc(_searchQuery)}"
+          style="flex:1;border:none;outline:none;font-size:13px;color:#222;background:transparent"
+          oninput="_searchQuery=this.value;renderContent()">
+        ${_searchQuery?`<span style="cursor:pointer;color:#aaa;font-size:16px;line-height:1" onclick="_searchQuery='';document.getElementById('lista-search').value='';renderContent()">×</span>`:''}
+      </div>`;
+      const resultHtml=filtered.length?filtered.map(cap=>capCard(cap)).join(''):`<div class="empty-state"><div class="empty-num">🔍</div><div class="empty-t">Sin resultados para "${esc(_searchQuery)}"</div></div>`;
+      el.innerHTML=searchBar+resultHtml;
+      // Keep focus on search input after re-render
+      const inp=document.getElementById('lista-search');
+      if(inp&&_searchQuery){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
+    }
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
@@ -624,7 +641,7 @@ function renderPorTipo(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -650,7 +667,7 @@ function renderBim(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -711,7 +728,7 @@ function renderUN(){
         const capRows=capsDeDepto.length?capsDeDepto.map(cap=>{
           const as=getA(cap.id).filter(a=>a.un===un.nombre&&(a.departamento===dep||a.sector===dep));
           const comp=as.filter(a=>a.completo).length;
-          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
+          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
         }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones registradas</p>';
 
         const barColor=pct>=75?'#1D9E75':pct>=40?'#EF9F27':'#E05555';
@@ -737,7 +754,7 @@ function renderUN(){
       const a=getA(cap.id).filter(x=>x.un===un.nombre);
       return !a.some(x=>x.departamento||x.sector);
     });
-    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
+    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
 
     return`<div class="plan-block">
       <div class="plan-block-title">🏢 ${esc(un.nombre)}

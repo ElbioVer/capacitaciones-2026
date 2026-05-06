@@ -1734,19 +1734,41 @@ function openEditEval(evalId,capId){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   let pqsHtml=pqs.map((p,i)=>{
     const opts=p.opciones||[];
-    return`<div class="pregunta-item" data-pqid="${p.id}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    return`<div class="pregunta-item" id="pq-item-${p.id}" data-pqid="${p.id}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
         <div class="pregunta-num">Pregunta ${i+1}</div>
-        <button class="btn-sm red" onclick="delPregunta(${p.id},${evalId},${capId})">×</button>
+        <div style="display:flex;gap:4px">
+          <button class="btn-sm blue" style="padding:2px 7px;font-size:11px" onclick="toggleEditPregunta(${p.id},${evalId},${capId})">✎</button>
+          <button class="btn-sm red" style="padding:2px 7px;font-size:11px" onclick="delPregunta(${p.id},${evalId},${capId})">×</button>
+        </div>
       </div>
-      <div class="pregunta-texto">${esc(p.pregunta)}</div>
-      ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===p.correcta?'#E1F5EE':'#f4f4f2'};color:${j===p.correcta?'#085041':'#555'}">${j===p.correcta?'✓ ':''}${esc(o)}</div>`).join('')}
+      <div id="pq-view-${p.id}">
+        <div class="pregunta-texto">${esc(p.pregunta)}</div>
+        ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===p.correcta?'#E1F5EE':'#f4f4f2'};color:${j===p.correcta?'#085041':'#555'}">${j===p.correcta?'✓ ':''}${esc(o)}</div>`).join('')}
+      </div>
+      <div id="pq-edit-${p.id}" style="display:none;background:#f9f9f7;border-radius:8px;padding:8px;margin-top:4px">
+        <div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Pregunta</label>
+          <input class="form-input" id="pq-edit-texto-${p.id}" value="${esc(p.pregunta)}" style="font-size:12px"></div>
+        ${opts.map((o,j)=>`<div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Opción ${['A','B','C','D'][j]}</label>
+          <input class="form-input" id="pq-edit-opt-${p.id}-${j}" value="${esc(o)}" style="font-size:12px"></div>`).join('')}
+        <div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Correcta</label>
+          <select class="form-input" id="pq-edit-corr-${p.id}" style="font-size:12px">
+            ${opts.map((_,j)=>`<option value="${j}" ${j===p.correcta?'selected':''}>${['A','B','C','D'][j]}</option>`).join('')}
+          </select></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-prim" style="flex:1;font-size:12px" onclick="guardarEdicionPregunta(${p.id},${evalId},${capId})">💾 Guardar</button>
+          <button class="btn-sec" style="font-size:12px" onclick="toggleEditPregunta(${p.id},${evalId},${capId})">Cancelar</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-size:14px;font-weight:600;color:#111">${esc(ev.titulo)}</div>
-      <button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail(${capId})">← Volver</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn-sm red" style="font-size:11px" onclick="deleteEval(${evalId},${capId})">🗑 Eliminar evaluación</button>
+        <button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail(${capId})">← Volver</button>
+      </div>
     </div>
     <div id="pq-counter" style="font-size:11px;color:#888;margin-bottom:8px">${pqs.length} preguntas · ${pqs.length<5?`<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>`:'Ok'}</div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
@@ -1770,6 +1792,54 @@ function openEditEval(evalId,capId){
       <button class="btn-prim" onclick="addPregunta(${evalId},${capId})">+ Agregar pregunta</button>
     </div>
     <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">Listo</button>`);
+}
+
+
+function toggleEditPregunta(pqId, evalId, capId){
+  const view = document.getElementById('pq-view-'+pqId);
+  const edit = document.getElementById('pq-edit-'+pqId);
+  if(!view||!edit) return;
+  const isEditing = edit.style.display !== 'none';
+  view.style.display = isEditing ? '' : 'none';
+  edit.style.display = isEditing ? 'none' : '';
+}
+
+async function guardarEdicionPregunta(pqId, evalId, capId){
+  const texto = document.getElementById('pq-edit-texto-'+pqId)?.value.trim();
+  if(!texto){alert('El texto de la pregunta no puede estar vacío');return;}
+  // Recoger opciones
+  const opciones = [];
+  for(let j=0; j<4; j++){
+    const inp = document.getElementById('pq-edit-opt-'+pqId+'-'+j);
+    if(inp && inp.value.trim()) opciones.push(inp.value.trim());
+  }
+  if(opciones.length < 2){alert('Debe haber al menos 2 opciones');return;}
+  const correcta = parseInt(document.getElementById('pq-edit-corr-'+pqId)?.value||'0');
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','preguntas_evaluacion',{pregunta:texto,opciones,correcta},`?id=eq.${pqId}`);
+    const idx = preguntas.findIndex(p=>p.id===pqId);
+    if(idx>=0) preguntas[idx]={...preguntas[idx],pregunta:texto,opciones,correcta};
+    setSyncStatus('ok');
+    toast('Pregunta actualizada');
+    openEditEval(evalId, capId);
+  }catch(e){setSyncStatus('error');toast('Error al guardar');}
+}
+
+async function deleteEval(evalId, capId){
+  if(!confirm('¿Eliminar esta evaluación y todas sus preguntas? Esta acción no se puede deshacer.')) return;
+  try{
+    setSyncStatus('syncing');
+    // Eliminar preguntas primero
+    await api('DELETE','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}`);
+    preguntas = preguntas.filter(p=>p.evaluacion_id!==evalId);
+    // Eliminar evaluación
+    await api('DELETE','evaluaciones','',`?id=eq.${evalId}`);
+    evaluaciones = evaluaciones.filter(e=>e.id!==evalId);
+    setSyncStatus('ok');
+    toast('Evaluación eliminada');
+    buildDetail(capId);
+  }catch(e){setSyncStatus('error');toast('Error al eliminar la evaluación');}
 }
 
 async function addPregunta(evalId,capId){

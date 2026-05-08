@@ -330,7 +330,6 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Depto</div>
     <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
     <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
-    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
     <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
@@ -408,7 +407,6 @@ function showApp(){
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-indicadores').style.display='';
   document.getElementById('tab-indicadores').style.display='';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';

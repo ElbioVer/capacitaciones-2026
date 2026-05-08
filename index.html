@@ -329,6 +329,8 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
     <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Depto</div>
     <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
+    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
+    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
     <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
@@ -406,6 +408,8 @@ function showApp(){
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-indicadores').style.display='';
+  document.getElementById('tab-indicadores').style.display='';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
@@ -571,6 +575,7 @@ function capCard(cap){
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
+      <span style="font-size:10px;background:#F0F4FF;color:#1A2F6E;border-radius:4px;padding:1px 5px;font-weight:600">${esc(cap.un||'Sin UN')}</span><span style="color:#ccc">·</span>
       <span>${esc(cap.area||'')}</span><span>·</span>
       <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
       ${cap.bimestre?`<span class="chip-bim">${cap.bimestre.split('(')[0].trim()}</span>`:''}
@@ -586,7 +591,7 @@ function switchTab(t){
   try{
     if(t!=='padron') window._padronFiltro='todos';
     currentTab=t;
-    ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+    ['lista','tipo','bim','un','resumen','indicadores','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
     renderContent();
   }catch(err){
     console.error('switchTab error:',err);
@@ -618,7 +623,8 @@ function renderContent(){
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
     else if(currentTab==='resumen'){const _rd=renderResumen();el.innerHTML=_rd.html;setTimeout(()=>renderCharts(_rd.dataMeses,_rd.evalData),150);}
-    else if(currentTab==='padron') el.innerHTML=renderPadron();
+    else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,100);}
+  else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config') el.innerHTML=renderConfig();
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
   }catch(err){
@@ -1378,6 +1384,258 @@ async function importarPadron(event){
     }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
+}
+
+
+// ── INDICADORES ──────────────────────────────────────────────────────────────
+
+function getIndicadoresData(){
+  // Calcular datos por mes para todas las caps filtradas
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const year = new Date().getFullYear();
+
+  // Para cada mes: objetivoHs = sum(participantes_esperados * duracion) de caps cuya fecha_fin cae ese mes
+  // realizadasHs = sum(participantes * duracion) de caps Realizadas ese mes
+  const data = meses.map((m, i) => {
+    const mes = i+1;
+    // Caps planificadas para este mes (por fecha_fin calculada)
+    const capsDelMes = caps.filter(cap => {
+      const ff = fechaFinCap(cap)||cap.fecha;
+      if(!ff) return false;
+      const parts = ff.split('-');
+      return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
+    });
+    const objetivo = capsDelMes.reduce((s,cap) => {
+      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
+      return s + esp * Number(cap.duracion||1);
+    }, 0);
+    const realizado = capsDelMes.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
+      const comp = getA(cap.id).filter(a=>a.completo).length;
+      return s + comp * Number(cap.duracion||1);
+    }, 0);
+    return { m, mes, objetivo: Math.round(objetivo), realizado: Math.round(realizado) };
+  });
+  return data;
+}
+
+function getIndicadoresRemo(){
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const year = new Date().getFullYear();
+  return meses.map((m, i) => {
+    const mes = i+1;
+    const capsRemo = caps.filter(cap => {
+      if(cap.tipo_codigo !== 'REMO') return false;
+      const ff = fechaFinCap(cap)||cap.fecha;
+      if(!ff) return false;
+      const parts = ff.split('-');
+      return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
+    });
+    const objetivo = capsRemo.reduce((s,cap) => {
+      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
+      return s + esp * Number(cap.duracion||1);
+    }, 0);
+    const realizado = capsRemo.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
+      const comp = getA(cap.id).filter(a=>a.completo).length;
+      return s + comp * Number(cap.duracion||1);
+    }, 0);
+    return { m, mes, objetivo: Math.round(objetivo), realizado: Math.round(realizado) };
+  });
+}
+
+function getCuatriData(){
+  const data = getIndicadoresData();
+  // Cuatrimestre 1: meses 1-4, C2: 5-8, C3: 9-12
+  const cuatri = [
+    { label:'1er Cuatrim.', meses:[0,1,2,3] },
+    { label:'2do Cuatrim.', meses:[4,5,6,7] },
+    { label:'3er Cuatrim.', meses:[8,9,10,11] },
+  ];
+  return cuatri.map(q => {
+    const meta = q.meses.reduce((s,i) => s+data[i].objetivo, 0);
+    const real = q.meses.reduce((s,i) => s+data[i].realizado, 0);
+    return { label: q.label, meta, real };
+  });
+}
+
+function renderIndicadores(){
+  const data = getIndicadoresData();
+  const remo = getIndicadoresRemo();
+  const cuatri = getCuatriData();
+  const meses = data.map(d=>d.m);
+
+  function tableRows(rows){
+    return rows.map((d,i)=>{
+      const pend = Math.max(0, d.objetivo - d.realizado);
+      const pct = d.objetivo>0 ? (d.realizado/d.objetivo*100).toFixed(1) : '100.0';
+      const color = parseFloat(pct)>=75?'#0F6E56':parseFloat(pct)>=50?'#7A5000':'#CC0000';
+      return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
+        <td style="padding:5px 8px;font-size:11px;font-weight:600;color:#1A2F6E">${d.m}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right">${d.objetivo.toLocaleString()}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right">${d.realizado.toLocaleString()}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right">${pend.toLocaleString()}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:700;color:${color}">${pct}%</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function tableHead(){
+    return `<tr style="background:#1A2F6E;color:#fff">
+      <th style="padding:6px 8px;font-size:11px;text-align:left">Mes</th>
+      <th style="padding:6px 8px;font-size:11px;text-align:right">Objetivo Hs.</th>
+      <th style="padding:6px 8px;font-size:11px;text-align:right">Hs. Realizadas</th>
+      <th style="padding:6px 8px;font-size:11px;text-align:right">Hs. Pendientes</th>
+      <th style="padding:6px 8px;font-size:11px;text-align:right">% Realizado</th>
+    </tr>`;
+  }
+
+  const cuatriRows = cuatri.map((q,i)=>{
+    const pct = q.meta>0?(q.real/q.meta*100).toFixed(1):'100.0';
+    const color = parseFloat(pct)>=75?'#0F6E56':parseFloat(pct)>=50?'#7A5000':'#CC0000';
+    return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
+      <td style="padding:6px 10px;font-size:12px;font-weight:700;color:#1A2F6E">${q.label}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right">${q.meta.toLocaleString()}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right">${q.real.toLocaleString()}</td>
+      <td style="padding:6px 10px;font-size:12px;text-align:right;font-weight:700;color:${color}">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div style="display:flex;flex-direction:column;gap:20px">
+
+    <!-- GRÁFICO 1: GENERAL -->
+    <div class="plan-block">
+      <div class="plan-block-title">📊 Gráfico 1 — Plan de Capacitación General (Horas Hombre)
+        <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
+            <thead>${tableHead()}</thead>
+            <tbody>${tableRows(data)}</tbody>
+          </table>
+        </div>
+        <div><canvas id="chart-ind-general" style="max-height:300px"></canvas></div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO 2: REMO -->
+    <div class="plan-block">
+      <div class="plan-block-title">🔵 Gráfico 2 — Plan REMO (Horas Hombre)
+        <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
+            <thead>${tableHead()}</thead>
+            <tbody>${tableRows(remo)}</tbody>
+          </table>
+        </div>
+        <div><canvas id="chart-ind-remo" style="max-height:300px"></canvas></div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO 3: CUATRIMESTRES -->
+    <div class="plan-block">
+      <div class="plan-block-title">📅 Cierre por Cuatrimestre — ${new Date().getFullYear()}</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start">
+        <table style="border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;min-width:300px">
+          <thead><tr style="background:#1A2F6E;color:#fff">
+            <th style="padding:7px 10px;font-size:12px;text-align:left">Cuatrimestre</th>
+            <th style="padding:7px 10px;font-size:12px;text-align:right">Meta Hs.</th>
+            <th style="padding:7px 10px;font-size:12px;text-align:right">Realizado Hs.</th>
+            <th style="padding:7px 10px;font-size:12px;text-align:right">% Logro</th>
+          </tr></thead>
+          <tbody>${cuatriRows}</tbody>
+        </table>
+        <div><canvas id="chart-ind-cuatri" style="max-height:260px"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+  <span id="ind-data-general" style="display:none">${JSON.stringify(data)}</span>
+  <span id="ind-data-remo" style="display:none">${JSON.stringify(remo)}</span>
+  <span id="ind-data-cuatri" style="display:none">${JSON.stringify(cuatri)}</span>`;
+}
+
+function renderIndicadoresCharts(){
+  const generalEl = document.getElementById('ind-data-general');
+  const remoEl    = document.getElementById('ind-data-remo');
+  const cuatriEl  = document.getElementById('ind-data-cuatri');
+  if(!generalEl) return;
+
+  const data   = JSON.parse(generalEl.textContent);
+  const remo   = JSON.parse(remoEl.textContent);
+  const cuatri = JSON.parse(cuatriEl.textContent);
+  const labels = data.map(d=>d.m);
+
+  function makeLineChart(canvasId, labels, datasets){
+    const ctx = document.getElementById(canvasId);
+    if(!ctx) return;
+    if(ctx._chartInst) ctx._chartInst.destroy();
+    ctx._chartInst = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets },
+      options:{
+        responsive:true, maintainAspectRatio:true,
+        plugins:{ legend:{ position:'top', labels:{ font:{size:11}, boxWidth:12 } } },
+        scales:{
+          y:{ beginAtZero:true, ticks:{font:{size:10}},
+              title:{display:true,text:'Horas Hombre',font:{size:10}} },
+          x:{ ticks:{font:{size:10}} }
+        }
+      }
+    });
+  }
+
+  // Gráfico general
+  makeLineChart('chart-ind-general', labels, [
+    { label:'Objetivo', data:data.map(d=>d.objetivo),
+      borderColor:'#1A2F6E', backgroundColor:'rgba(26,47,110,0.08)',
+      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+    { label:'Realizado', data:data.map(d=>d.realizado),
+      borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)',
+      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+  ]);
+
+  // Gráfico REMO
+  makeLineChart('chart-ind-remo', labels, [
+    { label:'Objetivo REMO', data:remo.map(d=>d.objetivo),
+      borderColor:'#185FA5', backgroundColor:'rgba(24,95,165,0.08)',
+      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+    { label:'Realizado REMO', data:remo.map(d=>d.realizado),
+      borderColor:'#EF9F27', backgroundColor:'rgba(239,159,39,0.08)',
+      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+  ]);
+
+  // Gráfico cuatrimestral (barras agrupadas)
+  const ctxC = document.getElementById('chart-ind-cuatri');
+  if(ctxC){
+    if(ctxC._chartInst) ctxC._chartInst.destroy();
+    ctxC._chartInst = new Chart(ctxC, {
+      type:'bar',
+      data:{
+        labels: cuatri.map(q=>q.label),
+        datasets:[
+          { label:'Meta Hs.', data:cuatri.map(q=>q.meta),
+            backgroundColor:'rgba(26,47,110,0.7)', borderColor:'#1A2F6E',
+            borderWidth:1, borderRadius:4 },
+          { label:'Realizado Hs.', data:cuatri.map(q=>q.real),
+            backgroundColor:'rgba(29,158,117,0.7)', borderColor:'#1D9E75',
+            borderWidth:1, borderRadius:4 },
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:true,
+        plugins:{ legend:{ position:'top', labels:{font:{size:11},boxWidth:12} },
+          datalabels:false },
+        scales:{
+          y:{ beginAtZero:true, ticks:{font:{size:10}},
+              title:{display:true,text:'Horas Hombre',font:{size:10}} },
+          x:{ ticks:{font:{size:11}} }
+        }
+      }
+    });
+  }
 }
 
 function renderConfig(){

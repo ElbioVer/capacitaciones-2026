@@ -1930,7 +1930,7 @@ function exportPlantillaAsistentes(capId){
   toast('Plantilla descargada');
 }
 
-
+function exportFalt(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const falt=getA(capId).filter(a=>!a.completo);
   if(!falt.length){toast('No hay faltantes');return;}

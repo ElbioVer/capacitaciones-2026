@@ -46,8 +46,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 @media(max-width:640px){
   html,body{overflow-y:auto !important;overflow-x:hidden !important;height:auto !important}
   .app{height:auto !important;min-height:100vh;overflow:visible !important}
-  /* top-controls NO es sticky en mobile — scrollea con el contenido */
-  .top-controls{position:relative !important;z-index:1}
+  /* top-controls sticky en mobile — fija header+filtros+stats+tabs */
+  .top-controls{position:sticky !important;top:0;z-index:20 !important;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
   .app-body{flex-direction:column;height:auto !important;overflow:visible !important}
   .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;
     border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;
@@ -573,7 +573,8 @@ function capCard(cap){
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
-      <span>${esc(cap.area||'')}</span><span>·</span>
+      ${cap.un?`<span style="font-size:10px;font-weight:600;color:#1a2f6e;background:#E8F0FB;border-radius:4px;padding:1px 6px">🏢 ${esc(cap.un)}</span>`:''}
+      ${cap.area?`<span>${esc(cap.area)}</span><span>·</span>`:''}
       <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
       ${cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(cap.codigo_redmine)}</span>`:''}
       ${cap.bimestre?`<span class="chip-bim">${cap.bimestre.split('(')[0].trim()}</span>`:''}
@@ -630,7 +631,7 @@ function renderPorTipo(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -656,7 +657,7 @@ function renderBim(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -1520,7 +1521,7 @@ function buildDetail(id){
       <span class="material-icon">${m.tipo==='link'?'🔗':'📄'}</span>
       <div class="material-info"><div class="material-name">${esc(m.nombre)}</div><div class="material-meta">${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" style="color:#185FA5">${esc(m.url).substring(0,40)}...</a>`:m.tipo}</div></div>
       <div class="material-actions">
-        ${m.tipo==='link'?`<button class="btn-sm blue" onclick="window.open('${esc(m.url)}','_blank')">Abrir</button><button class="btn-sm" title="Copiar enlace" onclick="navigator.clipboard.writeText('${esc(m.url)}').then(()=>toast('¡Enlace copiado!'))">📋</button>`:''}
+        ${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" class="btn-sm blue" style="text-decoration:none">Abrir</a><button class="btn-sm" title="Copiar enlace" onclick="navigator.clipboard.writeText('${esc(m.url)}').then(()=>toast('¡Enlace copiado!'))">📋 Copiar</button><button class="btn-sm" title="Compartir por WhatsApp" onclick="window.open('https://wa.me/?text=${encodeURIComponent(m.nombre+'%0A'+m.url)}','_blank')">📲</button>`:''}
         ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
       </div>
     </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
@@ -1815,6 +1816,8 @@ function renderEvalPublica(evalId){
               <input class="form-input" id="pub-nombre" placeholder="Se completa automáticamente" readonly style="background:#f9f9f7">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+              <div><label class="form-label">CUIL</label><input class="form-input" id="pub-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
+              <div><label class="form-label">Departamento</label><input class="form-input" id="pub-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
               <div><label class="form-label">UN</label><input class="form-input" id="pub-un" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
               <div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>
             </div>
@@ -1834,6 +1837,8 @@ function validarLegajoPadron(legajo){
   const nombreInput=document.getElementById('pub-nombre');
   const unInput=document.getElementById('pub-un');
   const secInput=document.getElementById('pub-sector');
+  const cuilInput=document.getElementById('pub-cuil');
+  const deptoInput=document.getElementById('pub-depto');
   if(!lookup) return;
   const leg=String(legajo||'').trim();
   if(!leg){
@@ -1849,11 +1854,15 @@ function validarLegajoPadron(legajo){
       lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">⚠ Empleado con estado "${esc(emp.estado)}" — contactá a RRHH para regularizar</span>`;
       if(datos) datos.style.display='none';
     } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
       lookup.style.display='block';
       lookup.innerHTML=`<span style="color:#0F6E56;font-weight:600">✔ Legajo validado: ${esc(emp.nombre)}</span>`;
       if(nombreInput) nombreInput.value=emp.nombre;
       if(unInput) unInput.value=emp.un||'';
       if(secInput) secInput.value=emp.sector||'';
+      if(cuilInput) cuilInput.value=cuil;
+      if(deptoInput) deptoInput.value=depto;
       if(datos) datos.style.display='block';
     }
   } else if(padron.length>0){
@@ -1863,6 +1872,8 @@ function validarLegajoPadron(legajo){
     if(nombreInput) nombreInput.value='';
     if(unInput) unInput.value='';
     if(secInput) secInput.value='';
+    if(cuilInput) cuilInput.value='';
+    if(deptoInput) deptoInput.value='';
   } else {
     // Sin padrón: mostrar campos para completar manualmente
     lookup.style.display='block';
@@ -1891,6 +1902,9 @@ async function submitEval(evalId,totalPqs){
   }
   const pubUN=document.getElementById('pub-un')?document.getElementById('pub-un').value.trim():'';
   const pubSec=document.getElementById('pub-sector')?document.getElementById('pub-sector').value.trim():'';
+  const pubCuil=document.getElementById('pub-cuil')?document.getElementById('pub-cuil').value.trim():'';
+  const pubDepto=document.getElementById('pub-depto')?document.getElementById('pub-depto').value.trim():'';
+  const fechaEval=new Date().toISOString().slice(0,10);
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   let correctas=0;
   const respuestas={};
@@ -1914,9 +1928,9 @@ async function submitEval(evalId,totalPqs){
         const existing=await fetch(`${SUPA_URL}/rest/v1/asistentes?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`,{headers:H});
         const existingData=await existing.json();
         if(!existingData||!existingData.length){
-          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:pubUN||'',sector:pubSec||''},'');
+          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:pubUN||'',sector:pubSec||'',cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval},'');
         }else{
-          await api('PATCH','asistentes',{completo:true,nota:puntaje},`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
+          await api('PATCH','asistentes',{completo:true,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval},`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
         }
       }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
     }
@@ -1983,22 +1997,34 @@ async function deleteA(aid,capId){
 }
 
 function exportPlantillaAsistentes(capId){
+  // Sin capId: plantilla genérica desde Configurar
+  if(!capId){
+    const rows=[{
+      '#Redmine':'#35167','legajo':'9696','nombre':'GARCIA, JUAN CARLOS',
+      'cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad',
+      'sector':'SST - Planta','completo':'SI','nota':'','fecha_evaluacion':'DD/MM/AAAA',
+      'Capacitación':'Nombre de la capacitación','Tipo':'REMO','Bimestre':'1° Bimestre (Ene-Feb)'
+    }];
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:16},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:22}];
+    XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
+    XLSX.writeFile(wb,'plantilla_asistentes.xlsx');
+    toast('Plantilla descargada');
+    return;
+  }
   const c=caps.find(x=>x.id===capId);if(!c)return;
-  // Get current attendees or generate from padron if empty
   const aExist=getA(capId);
   let rows;
   if(aExist.length){
-    // Pre-fill with existing attendees so user can update
     rows=aExist.map(x=>({
-      '#Redmine':c.codigo_redmine||'',
-      'legajo':x.legajo,'nombre':x.nombre,'cuil':x.cuil||'',
+      '#Redmine':c.codigo_redmine||'','legajo':x.legajo,'nombre':x.nombre,'cuil':x.cuil||'',
       'un':x.un||'','departamento':x.departamento||x.sector||'','sector':x.sector||'',
       'completo':x.completo?'SI':'NO','nota':x.nota!=null?x.nota:'',
       'fecha_evaluacion':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
       'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
     }));
   } else {
-    // Try to pre-fill from padron
     const padronFilt=c.un?padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(p.un!==c.un) return false;
@@ -2007,15 +2033,16 @@ function exportPlantillaAsistentes(capId){
     }):[];
     if(padronFilt.length){
       rows=padronFilt.map(p=>({
-        '#Redmine':c.codigo_redmine||'',
-        'legajo':p.legajo,'nombre':p.nombre,'cuil':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+        '#Redmine':c.codigo_redmine||'','legajo':p.legajo,'nombre':p.nombre,
+        'cuil':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
         'un':p.un||'','departamento':p.departamento||p.datos_extra?.Departamento||'','sector':p.sector||'',
         'completo':'','nota':'','fecha_evaluacion':'',
         'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
       }));
     } else {
-      // Empty template row
-      rows=[{'#Redmine':c.codigo_redmine||'','legajo':'','nombre':'','cuil':'','un':c.un||'','departamento':c.departamento||'','sector':'','completo':'SI o NO','nota':'','fecha_evaluacion':'DD/MM/AAAA','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''}];
+      rows=[{'#Redmine':c.codigo_redmine||'','legajo':'','nombre':'','cuil':'','un':c.un||'',
+        'departamento':c.departamento||'','sector':'','completo':'SI o NO','nota':'',
+        'fecha_evaluacion':'DD/MM/AAAA','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''}];
     }
   }
   const wb=XLSX.utils.book_new();

@@ -51,10 +51,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .app-body{flex-direction:column;height:auto !important;overflow:visible !important}
   .tabs{flex-direction:row;width:100%;flex-shrink:0;min-height:auto;height:auto;
     border-right:none;border-bottom:2px solid #e5e5e0;overflow-x:auto;overflow-y:hidden;
-    padding:0 4px;position:relative;z-index:1;background:#fff}
+    padding:0 4px;position:sticky;top:0;z-index:15;background:#fff;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
   .tab{border-left:none;border-bottom:3px solid transparent;padding:8px 10px;
     white-space:nowrap;flex-shrink:0;font-size:11px}
-  .tab.active{border-left:none;border-bottom-color:#1D9E75;background:#F0FBF7}
+  .tab.active{border-left:none;border-bottom-color:#1D9E75;background:#F0FBF7;color:#1D9E75;font-weight:600}
   /* El content es normal — los clicks siempre llegan */
   .content{padding:8px 10px;overflow:visible !important;height:auto !important;position:relative;z-index:1}
   .cap-card{position:relative;z-index:2;cursor:pointer}
@@ -329,7 +331,6 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
     <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Depto</div>
     <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
-    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
     <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
@@ -407,7 +408,6 @@ function showApp(){
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-indicadores').style.display='';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
@@ -549,8 +549,6 @@ function tipoBadge(codigo){
   return`<span class="tipo-badge tipo-${codigo||'OTRO'}">${t.codigo}</span>`;
 }
 
-let _searchQuery='';
-
 function capCard(cap){
   const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
   const posibles=a.length;
@@ -565,17 +563,16 @@ function capCard(cap){
   const _ffin=fechaFinCap(cap);
   const diasDesvio=desvioInfoExt(cap,_est,_ffin);
   const desvBadge=diasDesvio?`<span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 5px;font-weight:600">⚠ ${diasDesvio}d fuera</span>`:'';
-  const redmineBadge=cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 6px;font-weight:700">${esc(cap.codigo_redmine)}</span>`:'';
   return`<div class="cap-card" data-capid="${cap.id}" onclick="openDetail(${cap.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(cap.titulo)}</div>
-      <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">${redmineBadge}${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
+      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
-      <span style="font-size:10px;background:#F0F4FF;color:#1A2F6E;border-radius:4px;padding:1px 5px;font-weight:600">${esc(cap.un||'Sin UN')}</span><span style="color:#ccc">·</span>
       <span>${esc(cap.area||'')}</span><span>·</span>
       <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
+      ${cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(cap.codigo_redmine)}</span>`:''}
       ${cap.bimestre?`<span class="chip-bim">${cap.bimestre.split('(')[0].trim()}</span>`:''}
       ${_ffin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(_ffin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
@@ -589,7 +586,7 @@ function switchTab(t){
   try{
     if(t!=='padron') window._padronFiltro='todos';
     currentTab=t;
-    ['lista','tipo','bim','un','resumen','indicadores','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+    ['lista','tipo','bim','un','resumen','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
     renderContent();
   }catch(err){
     console.error('switchTab error:',err);
@@ -601,28 +598,12 @@ function renderContent(){
     const f=getFiltered();renderStats(f);
     const el=document.getElementById('content');
     if(!el) return;
-    if(currentTab==='lista'){
-      const q=_searchQuery.toLowerCase().trim();
-      const filtered=q?f.filter(cap=>(cap.titulo||'').toLowerCase().includes(q)||(cap.codigo_redmine||'').toLowerCase().includes(q)||(cap.area||'').toLowerCase().includes(q)||(cap.instructor||'').toLowerCase().includes(q)):f;
-      const searchBar=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;background:#fff;border:1px solid #e5e5e0;border-radius:10px;padding:6px 10px">
-        <span style="color:#aaa;font-size:14px">🔍</span>
-        <input id="lista-search" type="text" placeholder="Buscar por título, código Redmine, instructor…" value="${esc(_searchQuery)}"
-          style="flex:1;border:none;outline:none;font-size:13px;color:#222;background:transparent"
-          oninput="_searchQuery=this.value;renderContent()">
-        ${_searchQuery?`<span style="cursor:pointer;color:#aaa;font-size:16px;line-height:1" onclick="_searchQuery='';document.getElementById('lista-search').value='';renderContent()">×</span>`:''}
-      </div>`;
-      const resultHtml=filtered.length?filtered.map(cap=>capCard(cap)).join(''):`<div class="empty-state"><div class="empty-num">🔍</div><div class="empty-t">Sin resultados para "${esc(_searchQuery)}"</div></div>`;
-      el.innerHTML=searchBar+resultHtml;
-      // Keep focus on search input after re-render
-      const inp=document.getElementById('lista-search');
-      if(inp&&_searchQuery){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
-    }
+    if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
-    else if(currentTab==='resumen'){const _rd=renderResumen();el.innerHTML=_rd.html;setTimeout(()=>renderCharts(_rd.dataMeses,_rd.evalData),150);}
-    else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,100);}
-  else if(currentTab==='padron') el.innerHTML=renderPadron();
+    else if(currentTab==='resumen') el.innerHTML=renderResumen();
+    else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config') el.innerHTML=renderConfig();
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
   }catch(err){
@@ -645,7 +626,7 @@ function renderPorTipo(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -671,7 +652,7 @@ function renderBim(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -732,7 +713,7 @@ function renderUN(){
         const capRows=capsDeDepto.length?capsDeDepto.map(cap=>{
           const as=getA(cap.id).filter(a=>a.un===un.nombre&&(a.departamento===dep||a.sector===dep));
           const comp=as.filter(a=>a.completo).length;
-          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
+          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
         }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones registradas</p>';
 
         const barColor=pct>=75?'#1D9E75':pct>=40?'#EF9F27':'#E05555';
@@ -758,7 +739,7 @@ function renderUN(){
       const a=getA(cap.id).filter(x=>x.un===un.nombre);
       return !a.some(x=>x.departamento||x.sector);
     });
-    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span>${cap.codigo_redmine?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;border-radius:5px;padding:1px 5px;font-weight:700;flex-shrink:0">${esc(cap.codigo_redmine)}</span>`:''}<span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
+    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
 
     return`<div class="plan-block">
       <div class="plan-block-title">🏢 ${esc(un.nombre)}
@@ -851,7 +832,7 @@ function renderResumen(){
     return{titulo:c.titulo.length>18?c.titulo.substring(0,18)+'…':c.titulo,prom,apr,tipo:c.tipo_codigo};
   }).filter(x=>x.prom!==null);
 
-  const html=`<div class="plan-block">
+  return`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
       <span style="font-size:12px;color:#888">Capacitaciones realizadas${contexto?` <span style="font-size:10px;background:#E8F5FF;color:#185FA5;border-radius:4px;padding:1px 6px">${contexto}</span>`:""}</span>
       <span style="font-size:15px;font-weight:700;color:#1D9E75">${pctCaps}%</span>
@@ -904,7 +885,7 @@ function renderResumen(){
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
     const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(cap=>{
       const d=desvioInfoExt(cap,estadoCap(cap),fechaFinCap(cap));
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
     }).join('');
     return`<div class="plan-block" style="border-left:3px solid #EF9F27">
       <div class="plan-block-title">⚠ Desvío de planificación</div>
@@ -915,9 +896,9 @@ function renderResumen(){
       ${rows}
     </div>`;
   })()}
-  `;
-  setTimeout(()=>renderCharts(dataMeses,evalData), 150);
-  return {html, dataMeses, evalData};
+  <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
+  <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
+  setTimeout(renderCharts, 100);
 }
 
 
@@ -947,6 +928,7 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
         capacitacion_id:capId,
         legajo:String(p.legajo),
         nombre:p.nombre,
+        cuil:p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||null,
         un:p.un||'',
         sector:p.sector||'',
         departamento:p.departamento||p.datos_extra?.Departamento||'',
@@ -1384,258 +1366,6 @@ async function importarPadron(event){
   reader.readAsArrayBuffer(file);
 }
 
-
-// ── INDICADORES ──────────────────────────────────────────────────────────────
-
-function getIndicadoresData(){
-  // Calcular datos por mes para todas las caps filtradas
-  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const year = new Date().getFullYear();
-
-  // Para cada mes: objetivoHs = sum(participantes_esperados * duracion) de caps cuya fecha_fin cae ese mes
-  // realizadasHs = sum(participantes * duracion) de caps Realizadas ese mes
-  const data = meses.map((m, i) => {
-    const mes = i+1;
-    // Caps planificadas para este mes (por fecha_fin calculada)
-    const capsDelMes = caps.filter(cap => {
-      const ff = fechaFinCap(cap)||cap.fecha;
-      if(!ff) return false;
-      const parts = ff.split('-');
-      return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
-    });
-    const objetivo = capsDelMes.reduce((s,cap) => {
-      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
-      return s + esp * Number(cap.duracion||1);
-    }, 0);
-    const realizado = capsDelMes.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
-      const comp = getA(cap.id).filter(a=>a.completo).length;
-      return s + comp * Number(cap.duracion||1);
-    }, 0);
-    return { m, mes, objetivo: Math.round(objetivo), realizado: Math.round(realizado) };
-  });
-  return data;
-}
-
-function getIndicadoresRemo(){
-  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const year = new Date().getFullYear();
-  return meses.map((m, i) => {
-    const mes = i+1;
-    const capsRemo = caps.filter(cap => {
-      if(cap.tipo_codigo !== 'REMO') return false;
-      const ff = fechaFinCap(cap)||cap.fecha;
-      if(!ff) return false;
-      const parts = ff.split('-');
-      return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
-    });
-    const objetivo = capsRemo.reduce((s,cap) => {
-      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
-      return s + esp * Number(cap.duracion||1);
-    }, 0);
-    const realizado = capsRemo.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
-      const comp = getA(cap.id).filter(a=>a.completo).length;
-      return s + comp * Number(cap.duracion||1);
-    }, 0);
-    return { m, mes, objetivo: Math.round(objetivo), realizado: Math.round(realizado) };
-  });
-}
-
-function getCuatriData(){
-  const data = getIndicadoresData();
-  // Cuatrimestre 1: meses 1-4, C2: 5-8, C3: 9-12
-  const cuatri = [
-    { label:'1er Cuatrim.', meses:[0,1,2,3] },
-    { label:'2do Cuatrim.', meses:[4,5,6,7] },
-    { label:'3er Cuatrim.', meses:[8,9,10,11] },
-  ];
-  return cuatri.map(q => {
-    const meta = q.meses.reduce((s,i) => s+data[i].objetivo, 0);
-    const real = q.meses.reduce((s,i) => s+data[i].realizado, 0);
-    return { label: q.label, meta, real };
-  });
-}
-
-function renderIndicadores(){
-  const data = getIndicadoresData();
-  const remo = getIndicadoresRemo();
-  const cuatri = getCuatriData();
-  const meses = data.map(d=>d.m);
-
-  function tableRows(rows){
-    return rows.map((d,i)=>{
-      const pend = Math.max(0, d.objetivo - d.realizado);
-      const pct = d.objetivo>0 ? (d.realizado/d.objetivo*100).toFixed(1) : '100.0';
-      const color = parseFloat(pct)>=75?'#0F6E56':parseFloat(pct)>=50?'#7A5000':'#CC0000';
-      return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
-        <td style="padding:5px 8px;font-size:11px;font-weight:600;color:#1A2F6E">${d.m}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right">${d.objetivo.toLocaleString()}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right">${d.realizado.toLocaleString()}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right">${pend.toLocaleString()}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:700;color:${color}">${pct}%</td>
-      </tr>`;
-    }).join('');
-  }
-
-  function tableHead(){
-    return `<tr style="background:#1A2F6E;color:#fff">
-      <th style="padding:6px 8px;font-size:11px;text-align:left">Mes</th>
-      <th style="padding:6px 8px;font-size:11px;text-align:right">Objetivo Hs.</th>
-      <th style="padding:6px 8px;font-size:11px;text-align:right">Hs. Realizadas</th>
-      <th style="padding:6px 8px;font-size:11px;text-align:right">Hs. Pendientes</th>
-      <th style="padding:6px 8px;font-size:11px;text-align:right">% Realizado</th>
-    </tr>`;
-  }
-
-  const cuatriRows = cuatri.map((q,i)=>{
-    const pct = q.meta>0?(q.real/q.meta*100).toFixed(1):'100.0';
-    const color = parseFloat(pct)>=75?'#0F6E56':parseFloat(pct)>=50?'#7A5000':'#CC0000';
-    return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
-      <td style="padding:6px 10px;font-size:12px;font-weight:700;color:#1A2F6E">${q.label}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right">${q.meta.toLocaleString()}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right">${q.real.toLocaleString()}</td>
-      <td style="padding:6px 10px;font-size:12px;text-align:right;font-weight:700;color:${color}">${pct}%</td>
-    </tr>`;
-  }).join('');
-
-  return `
-  <div style="display:flex;flex-direction:column;gap:20px">
-
-    <!-- GRÁFICO 1: GENERAL -->
-    <div class="plan-block">
-      <div class="plan-block-title">📊 Gráfico 1 — Plan de Capacitación General (Horas Hombre)
-        <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
-            <thead>${tableHead()}</thead>
-            <tbody>${tableRows(data)}</tbody>
-          </table>
-        </div>
-        <div><canvas id="chart-ind-general" style="max-height:300px"></canvas></div>
-      </div>
-    </div>
-
-    <!-- GRÁFICO 2: REMO -->
-    <div class="plan-block">
-      <div class="plan-block-title">🔵 Gráfico 2 — Plan REMO (Horas Hombre)
-        <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
-            <thead>${tableHead()}</thead>
-            <tbody>${tableRows(remo)}</tbody>
-          </table>
-        </div>
-        <div><canvas id="chart-ind-remo" style="max-height:300px"></canvas></div>
-      </div>
-    </div>
-
-    <!-- GRÁFICO 3: CUATRIMESTRES -->
-    <div class="plan-block">
-      <div class="plan-block-title">📅 Cierre por Cuatrimestre — ${new Date().getFullYear()}</div>
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start">
-        <table style="border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;min-width:300px">
-          <thead><tr style="background:#1A2F6E;color:#fff">
-            <th style="padding:7px 10px;font-size:12px;text-align:left">Cuatrimestre</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">Meta Hs.</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">Realizado Hs.</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">% Logro</th>
-          </tr></thead>
-          <tbody>${cuatriRows}</tbody>
-        </table>
-        <div><canvas id="chart-ind-cuatri" style="max-height:260px"></canvas></div>
-      </div>
-    </div>
-
-  </div>
-  <span id="ind-data-general" style="display:none">${JSON.stringify(data)}</span>
-  <span id="ind-data-remo" style="display:none">${JSON.stringify(remo)}</span>
-  <span id="ind-data-cuatri" style="display:none">${JSON.stringify(cuatri)}</span>`;
-}
-
-function renderIndicadoresCharts(){
-  const generalEl = document.getElementById('ind-data-general');
-  const remoEl    = document.getElementById('ind-data-remo');
-  const cuatriEl  = document.getElementById('ind-data-cuatri');
-  if(!generalEl) return;
-
-  const data   = JSON.parse(generalEl.textContent);
-  const remo   = JSON.parse(remoEl.textContent);
-  const cuatri = JSON.parse(cuatriEl.textContent);
-  const labels = data.map(d=>d.m);
-
-  function makeLineChart(canvasId, labels, datasets){
-    const ctx = document.getElementById(canvasId);
-    if(!ctx) return;
-    if(ctx._chartInst) ctx._chartInst.destroy();
-    ctx._chartInst = new Chart(ctx, {
-      type:'line',
-      data:{ labels, datasets },
-      options:{
-        responsive:true, maintainAspectRatio:true,
-        plugins:{ legend:{ position:'top', labels:{ font:{size:11}, boxWidth:12 } } },
-        scales:{
-          y:{ beginAtZero:true, ticks:{font:{size:10}},
-              title:{display:true,text:'Horas Hombre',font:{size:10}} },
-          x:{ ticks:{font:{size:10}} }
-        }
-      }
-    });
-  }
-
-  // Gráfico general
-  makeLineChart('chart-ind-general', labels, [
-    { label:'Objetivo', data:data.map(d=>d.objetivo),
-      borderColor:'#1A2F6E', backgroundColor:'rgba(26,47,110,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
-    { label:'Realizado', data:data.map(d=>d.realizado),
-      borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
-  ]);
-
-  // Gráfico REMO
-  makeLineChart('chart-ind-remo', labels, [
-    { label:'Objetivo REMO', data:remo.map(d=>d.objetivo),
-      borderColor:'#185FA5', backgroundColor:'rgba(24,95,165,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
-    { label:'Realizado REMO', data:remo.map(d=>d.realizado),
-      borderColor:'#EF9F27', backgroundColor:'rgba(239,159,39,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
-  ]);
-
-  // Gráfico cuatrimestral (barras agrupadas)
-  const ctxC = document.getElementById('chart-ind-cuatri');
-  if(ctxC){
-    if(ctxC._chartInst) ctxC._chartInst.destroy();
-    ctxC._chartInst = new Chart(ctxC, {
-      type:'bar',
-      data:{
-        labels: cuatri.map(q=>q.label),
-        datasets:[
-          { label:'Meta Hs.', data:cuatri.map(q=>q.meta),
-            backgroundColor:'rgba(26,47,110,0.7)', borderColor:'#1A2F6E',
-            borderWidth:1, borderRadius:4 },
-          { label:'Realizado Hs.', data:cuatri.map(q=>q.real),
-            backgroundColor:'rgba(29,158,117,0.7)', borderColor:'#1D9E75',
-            borderWidth:1, borderRadius:4 },
-        ]
-      },
-      options:{
-        responsive:true, maintainAspectRatio:true,
-        plugins:{ legend:{ position:'top', labels:{font:{size:11},boxWidth:12} },
-          datalabels:false },
-        scales:{
-          y:{ beginAtZero:true, ticks:{font:{size:10}},
-              title:{display:true,text:'Horas Hombre',font:{size:10}} },
-          x:{ ticks:{font:{size:11}} }
-        }
-      }
-    });
-  }
-}
-
 function renderConfig(){
   if(!isAdmin())return'';
   const unTags=uns.map(u=>`<div class="tag">${esc(u.nombre)}<span class="tag-del" onclick="delUN(${u.id},'${esc(u.nombre)}')">×</span></div>`).join('');
@@ -1659,11 +1389,10 @@ function renderConfig(){
       <strong>codigo_redmine</strong> — ej: #35167 (identificador único)<br>
       <strong>titulo *</strong> — nombre de la capacitación<br>
       <strong>tipo_codigo *</strong> — REMO, SST, SALUD, AMBIENTE, CALIFICACION, INDUCCION<br>
-      <strong>un</strong> — Unidad de Negocio · <strong>departamento</strong> — filtra el padrón al cargar participantes<br>
-      <strong>area</strong> — tema · <strong>fecha</strong> — DD/MM/AAAA · <strong>fecha_fin</strong> — DD/MM/AAAA<br>
-      <strong>bimestre</strong> — número 1 al 6 · <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
-      <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong><br>
-      <span style="color:#6B4F00">💡 Si se indica <strong>un</strong> (y opcionalmente <strong>departamento</strong>), se cargan automáticamente los participantes del padrón al importar.</span>
+      <strong>un</strong> — Unidad de Negocio · <strong>area</strong> — tema<br>
+      <strong>fecha</strong> — DD/MM/AAAA · <strong>bimestre</strong> — número 1 al 6<br>
+      <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
+      <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong>
     </div>
   </div>
 <div class="config-section">
@@ -1674,52 +1403,17 @@ function renderConfig(){
     <p style="font-size:11px;color:#888;margin-top:4px">Asigna fecha fin por bimestre y actualiza estados (Programada/Vencida) en Supabase para todas las capacitaciones.</p>
   </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
-    <button class="btn-sm green" onclick="exportPlantillaAsistentes()" style="margin-bottom:8px">📥 Plantilla Excel asistentes</button>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
+      <div><strong>#Redmine</strong> — código de la capacitación (ej: #35167)</div>
       <div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div>
-      <div><strong>un</strong> — Unidad de Negocio</div><div><strong>departamento</strong> — departamento (impacta en reportes y cumplimiento)</div>
+      <div><strong>cuil</strong> — número de CUIL del empleado</div>
+      <div><strong>un</strong> — Unidad de Negocio</div><div><strong>departamento</strong> — departamento</div>
       <div><strong>sector</strong> — sector</div>
       <div><strong>completo</strong> — SI o NO</div>
       <div><strong>nota</strong> — del 1 al 10 (solo SST y Salud)</div>
+      <div><strong>fecha_evaluacion</strong> — DD/MM/AAAA (se completa automáticamente al cargar desde papel)</div>
     </div>
-  </div>
-  <div class="config-section">
-    <div class="config-title">Evaluaciones por código Redmine</div>
-    <p style="font-size:12px;color:#777;margin-bottom:10px">Cargá o reemplazá las preguntas de una evaluación identificando la capacitación por su código Redmine. Si la capacitación no tiene evaluación creada, se crea automáticamente.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      <button class="btn-sm green" onclick="exportPlantillaEval()">📥 Plantilla preguntas</button>
-      <label class="upload-label">📂 Importar evaluación<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importEvalDesdeConfig(event)"></label>
-    </div>
-    <div style="background:#E6F1FB;border-radius:8px;padding:10px;font-size:11px;line-height:1.8;color:#185FA5">
-      <strong>Estructura del Excel:</strong><br>
-      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
-      <strong>titulo_evaluacion</strong> — nombre de la evaluación (opcional, usa el título de la cap si se omite)<br>
-      <strong>pregunta *</strong> — texto de la pregunta<br>
-      <strong>opcion_a *</strong> · <strong>opcion_b *</strong> · <strong>opcion_c</strong> · <strong>opcion_d</strong> — opciones de respuesta<br>
-      <strong>correcta *</strong> — letra de la opción correcta: A, B, C o D<br>
-      <span style="color:#0D47A1">💡 Podés cargar preguntas para múltiples capacitaciones en un mismo Excel, una fila por pregunta.</span>
-    </div>
-    ${renderEvalConfigList()}
-  </div>`;}
-
-function renderEvalConfigList(){
-  if(!evaluaciones.length) return'<p style="font-size:11px;color:#aaa;margin-top:8px">Sin evaluaciones creadas aún.</p>';
-  const rows=evaluaciones.map(ev=>{
-    const cap=caps.find(c=>c.id===ev.capacitacion_id);
-    const pqs=preguntas.filter(p=>p.evaluacion_id===ev.id).length;
-    const redmine=cap?.codigo_redmine||'—';
-    return`<div class="plan-row-item" style="cursor:default;margin-top:4px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ev.titulo)}</div>
-        <div style="font-size:10px;color:#888">${cap?esc(cap.titulo):'Sin capacitación'} · Redmine: <strong>${esc(redmine)}</strong> · ${pqs} preguntas · ${ev.activa?'<span style="color:#1D9E75">Activa</span>':'<span style="color:#aaa">Inactiva</span>'}</div>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn-sm blue" onclick="openEditEval(${ev.id},${ev.capacitacion_id})">✎ Editar</button>
-        <button class="btn-sm green" onclick="exportEvalExcel(${ev.id})">📊 Exportar</button>
-      </div>
-    </div>`;
-  }).join('');
-  return`<div style="margin-top:10px"><div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">${evaluaciones.length} evaluaciones cargadas</div>${rows}</div>`;
+  </div>`;
 }
 
 function renderUsuarios(){
@@ -1766,38 +1460,30 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const tblRows=a.map(x=>{
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=nota_aprobacion?'nota-ok':'nota-fail'}">${x.nota}</span>`:'<span style="color:#bbb">—</span>'):'';
-    const delCell=canEdit()?`<td><button class="del-btn" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";
+    const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";
     const compBadge=canManageParticipants()
       ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" title="Clic para cambiar" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
-    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td><td style="font-size:10px">${esc(x.sector||'')}</td><td>${compBadge}</td>${notaCell}${delCell}</tr>`;
+    const cuilCell=`<td style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
+    const fechaEvalCell=`<td style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
   }).join('');
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
-  const colDel=canEdit()?'<th style="width:24px"></th>':'';
-  const tbl=a.length?`<div style="overflow-x:auto;margin-top:6px"><table class="legajo-table"><thead><tr><th style="width:52px">Legajo</th><th>Nombre</th><th style="width:75px">Sector</th><th style="width:45px">Comp.</th>${colNota}${colDel}</tr></thead><tbody>${tblRows}</tbody></table></div>`:`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-top:6px">${canManageParticipants()?'Sin asistentes. Importá desde Excel o registrá con ✍ Papel.':'Sin asistentes registrados.'}</div>`;
+  const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
+  const tbl=a.length?`<div style="overflow-x:auto;margin-top:6px"><table class="legajo-table"><thead><tr><th style="width:52px">Legajo</th><th>Nombre</th><th style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th style="width:72px">F.Evaluac.</th>${colDel}</tr></thead><tbody>${tblRows}</tbody></table></div>`:`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-top:6px">${canManageParticipants()?'Sin asistentes. Importá desde Excel o registrá con ✍ Papel.':'Sin asistentes registrados.'}</div>`;
 
   // repositorio
   let repoHtml='';
   if(t.tiene_repositorio){
     const mats=getMat(id);
-    const matItems=mats.length?mats.map(m=>{
-      const iconMap={pdf:'📄',video:'🎬',drive:'📁',link:'🔗',otro:'📎'};
-      const labelMap={pdf:'PDF',video:'Video',drive:'Drive/OneDrive',link:'Link',otro:'Archivo'};
-      const icon=iconMap[m.tipo]||'📎';
-      const label=labelMap[m.tipo]||m.tipo;
-      const urlShort=m.url?(m.url.length>45?m.url.substring(0,45)+'…':m.url):'';
-      return`<div class="material-item">
-        <span class="material-icon">${icon}</span>
-        <div class="material-info">
-          <div class="material-name">${esc(m.nombre)}</div>
-          <div class="material-meta" style="color:#888">${label} · <span style="color:#185FA5;font-size:10px">${urlShort}</span></div>
-        </div>
-        <div class="material-actions">
-          ${m.url?`<button class="btn-sm blue" onclick="window.open('${esc(m.url)}','_blank')">Abrir</button>`:''}
-          ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
-        </div>
-      </div>`;
-    }).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
+    const matItems=mats.length?mats.map(m=>`<div class="material-item">
+      <span class="material-icon">${m.tipo==='link'?'🔗':'📄'}</span>
+      <div class="material-info"><div class="material-name">${esc(m.nombre)}</div><div class="material-meta">${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" style="color:#185FA5">${esc(m.url).substring(0,40)}...</a>`:m.tipo}</div></div>
+      <div class="material-actions">
+        ${m.tipo==='link'?`<button class="btn-sm blue" onclick="window.open('${esc(m.url)}','_blank')">Abrir</button><button class="btn-sm" title="Copiar enlace" onclick="navigator.clipboard.writeText('${esc(m.url)}').then(()=>toast('¡Enlace copiado!'))">📋</button>`:''}
+        ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
+      </div>
+    </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
     const addMatBtn=canEdit()?`<button class="btn-sm green" onclick="openAddMaterial(${id})">+ Material</button>`:'';
     repoHtml=`<div class="modal-section">
       <div style="display:flex;align-items:center;justify-content:space-between" class="modal-section-title"><span>Repositorio de materiales</span>${addMatBtn}</div>
@@ -1849,6 +1535,7 @@ function buildDetail(id){
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
   const exportBtn=faltantesReal>0?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${faltantesReal})</button>`:'';
   const exportAllBtn=canExportParticipants()&&a.length?`<button class="btn-export" onclick="exportAll(${id})">📊 Exportar participantes</button>`:'';
+  const plantillaBtn=canManageParticipants()?`<button class="btn-sm" onclick="exportPlantillaAsistentes(${id})" title="Plantilla para cargar asistentes">📥 Plantilla</button>`:'';
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
 
@@ -1878,7 +1565,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes (${a.length})</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${forzarBtn}${importBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${plantillaBtn}${forzarBtn}${importBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -1887,61 +1574,19 @@ function buildDetail(id){
 // MATERIALES
 async function openAddMaterial(capId){
   showModal(`<div class="modal-handle"></div>
-    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">📎 Agregar material</div>
-    <div class="form-group"><label class="form-label">Tipo de material</label>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Agregar material</div>
+    <div class="form-group"><label class="form-label">Tipo</label>
       <select class="form-input" id="mat-tipo" onchange="toggleMatTipo()">
-        <option value="pdf">📄 PDF — presentación, manual, procedimiento</option>
-        <option value="video">🎬 Video — YouTube, Vimeo u otro</option>
-        <option value="drive">📁 Carpeta Drive / OneDrive / SharePoint</option>
-        <option value="link">🔗 Link / URL general</option>
-        <option value="otro">📎 Otro</option>
+        <option value="link">Link / URL</option>
+        <option value="pdf">PDF (link a Drive/OneDrive)</option>
+        <option value="video">Video (YouTube/Vimeo)</option>
+        <option value="otro">Otro</option>
       </select>
     </div>
-    <div class="form-group"><label class="form-label">Nombre del material *</label>
-      <input class="form-input" id="mat-nombre" placeholder="Ej: Manual de Seguridad Vial 2026">
-    </div>
-    <div class="form-group"><label class="form-label">Link de acceso *</label>
-      <input class="form-input" id="mat-url" placeholder="https://" oninput="previewMatUrl()">
-    </div>
-    <div id="mat-helper" style="background:#E6F1FB;border-radius:8px;padding:10px;font-size:11px;color:#185FA5;margin-bottom:10px;line-height:1.6">
-      <strong>📄 Para PDFs y archivos:</strong><br>
-      Subí el archivo a <strong>Google Drive</strong> o <strong>OneDrive</strong> y pegá el link de "Compartir" (modo lectura).<br>
-      <span style="color:#888">Los archivos NO se suben directamente al sistema para evitar problemas de peso y almacenamiento.</span>
-    </div>
-    <div id="mat-preview" style="display:none;background:#f4f4f2;border-radius:8px;padding:8px;font-size:11px;color:#444;margin-bottom:10px;word-break:break-all"></div>
-    <div class="btn-row">
-      <button class="btn-sec" onclick="buildDetail(${capId})">Cancelar</button>
-      <button class="btn-prim" onclick="saveMaterial(${capId})">Agregar material</button>
-    </div>`);
-}
-
-function toggleMatTipo(){
-  const tipo=document.getElementById('mat-tipo').value;
-  const helper=document.getElementById('mat-helper');
-  const urlInput=document.getElementById('mat-url');
-  const msgs={
-    pdf:`<strong>📄 Para PDFs:</strong><br>Subí el archivo a <strong>Google Drive</strong> o <strong>OneDrive</strong> → botón "Compartir" → "Cualquier persona con el enlace puede ver" → copiá el link.<br><span style="color:#888">El sistema guardará el link para que los participantes lo abran directamente.</span>`,
-    video:`<strong>🎬 Para videos de YouTube:</strong><br>Abrí el video → botón "Compartir" → copiá el link. Para otros servicios, copiá la URL de la página del video.`,
-    drive:`<strong>📁 Para carpetas de Drive/OneDrive:</strong><br>Abrí la carpeta → "Compartir" → "Cualquier persona con el enlace puede ver" → copiá el link.`,
-    link:`<strong>🔗 Link general:</strong><br>Pegá la URL completa incluyendo https://.`,
-    otro:`<strong>📎 Otro tipo:</strong><br>Pegá la URL de acceso al material.`
-  };
-  helper.innerHTML=msgs[tipo]||msgs.link;
-  urlInput.placeholder=tipo==='video'?'https://youtube.com/watch?v=...' : tipo==='drive'?'https://drive.google.com/drive/folders/...' : 'https://...';
-}
-
-function previewMatUrl(){
-  const url=document.getElementById('mat-url').value.trim();
-  const prev=document.getElementById('mat-preview');
-  if(!url){prev.style.display='none';return;}
-  let icon='🔗', label='Link';
-  if(url.includes('drive.google.com')){icon='📁';label='Google Drive';}
-  else if(url.includes('onedrive')||url.includes('sharepoint')){icon='📁';label='OneDrive';}
-  else if(url.includes('youtube.com')||url.includes('youtu.be')){icon='🎬';label='YouTube';}
-  else if(url.includes('vimeo')){icon='🎬';label='Vimeo';}
-  else if(url.endsWith('.pdf')){icon='📄';label='PDF';}
-  prev.style.display='block';
-  prev.innerHTML=`${icon} <strong>${label}</strong> detectado · <a href="${url}" target="_blank" style="color:#185FA5">Probar link</a>`;
+    <div class="form-group"><label class="form-label">Nombre del material *</label><input class="form-input" id="mat-nombre" placeholder="Ej: Presentación SST 2026"></div>
+    <div class="form-group"><label class="form-label">URL / Link *</label><input class="form-input" id="mat-url" placeholder="https://..."></div>
+    <p style="font-size:11px;color:#888;margin-top:-6px">Para archivos, subílos a Google Drive o OneDrive y pegá el link de compartir.</p>
+    <div class="btn-row"><button class="btn-sec" onclick="buildDetail(${capId})">Cancelar</button><button class="btn-prim" onclick="saveMaterial(${capId})">Agregar</button></div>`);
 }
 
 async function saveMaterial(capId){
@@ -1990,49 +1635,22 @@ function openEditEval(evalId,capId){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   let pqsHtml=pqs.map((p,i)=>{
     const opts=p.opciones||[];
-    return`<div class="pregunta-item" id="pq-item-${p.id}" data-pqid="${p.id}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+    return`<div class="pregunta-item">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="pregunta-num">Pregunta ${i+1}</div>
-        <div style="display:flex;gap:4px">
-          <button class="btn-sm blue" style="padding:2px 7px;font-size:11px" onclick="toggleEditPregunta(${p.id},${evalId},${capId})">✎</button>
-          <button class="btn-sm red" style="padding:2px 7px;font-size:11px" onclick="delPregunta(${p.id},${evalId},${capId})">×</button>
-        </div>
+        <button class="btn-sm red" onclick="delPregunta(${p.id},${evalId},${capId})">×</button>
       </div>
-      <div id="pq-view-${p.id}">
-        <div class="pregunta-texto">${esc(p.pregunta)}</div>
-        ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===p.correcta?'#E1F5EE':'#f4f4f2'};color:${j===p.correcta?'#085041':'#555'}">${j===p.correcta?'✓ ':''}${esc(o)}</div>`).join('')}
-      </div>
-      <div id="pq-edit-${p.id}" style="display:none;background:#f9f9f7;border-radius:8px;padding:8px;margin-top:4px">
-        <div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Pregunta</label>
-          <input class="form-input" id="pq-edit-texto-${p.id}" value="${esc(p.pregunta)}" style="font-size:12px"></div>
-        ${opts.map((o,j)=>`<div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Opción ${['A','B','C','D'][j]}</label>
-          <input class="form-input" id="pq-edit-opt-${p.id}-${j}" value="${esc(o)}" style="font-size:12px"></div>`).join('')}
-        <div class="form-group" style="margin-bottom:6px"><label class="form-label" style="font-size:11px">Correcta</label>
-          <select class="form-input" id="pq-edit-corr-${p.id}" style="font-size:12px">
-            ${opts.map((_,j)=>`<option value="${j}" ${j===p.correcta?'selected':''}>${['A','B','C','D'][j]}</option>`).join('')}
-          </select></div>
-        <div style="display:flex;gap:6px">
-          <button class="btn-prim" style="flex:1;font-size:12px" onclick="guardarEdicionPregunta(${p.id},${evalId},${capId})">💾 Guardar</button>
-          <button class="btn-sec" style="font-size:12px" onclick="toggleEditPregunta(${p.id},${evalId},${capId})">Cancelar</button>
-        </div>
-      </div>
+      <div class="pregunta-texto">${esc(p.pregunta)}</div>
+      ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===p.correcta?'#E1F5EE':'#f4f4f2'};color:${j===p.correcta?'#085041':'#555'}">${j===p.correcta?'✓ ':''}${esc(o)}</div>`).join('')}
     </div>`;
   }).join('');
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-size:14px;font-weight:600;color:#111">${esc(ev.titulo)}</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn-sm red" style="font-size:11px" onclick="deleteEval(${evalId},${capId})">🗑 Eliminar evaluación</button>
-        <button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail(${capId})">← Volver</button>
-      </div>
+      <button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail(${capId})">← Volver</button>
     </div>
-    <div id="pq-counter" style="font-size:11px;color:#888;margin-bottom:8px">${pqs.length} preguntas · ${pqs.length<5?`<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>`:'Ok'}</div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-      <button class="btn-sm blue" onclick="importEvalExcel(${evalId},${capId})">📂 Importar Excel</button>
-      <button class="btn-sm green" onclick="exportPlantillaEval()">📥 Plantilla</button>
-      <button class="btn-sm" style="background:#7F77DD;color:#fff" onclick="exportEvalExcel(${evalId})">📊 Exportar</button>
-    </div>
-    <div id="pqs-container">${pqsHtml}</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">${pqs.length} preguntas · ${pqs.length<5?`<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>`:'Ok'}</div>
+    ${pqsHtml}
     <div style="background:#f4f4f2;border-radius:10px;padding:12px;margin-top:8px">
       <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:8px">Agregar pregunta</div>
       <div class="form-group"><label class="form-label">Pregunta *</label><input class="form-input" id="pq-texto" placeholder="¿Cuál es el procedimiento correcto?"></div>
@@ -2045,57 +1663,9 @@ function openEditEval(evalId,capId){
           <option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option>
         </select>
       </div>
-      <button class="btn-prim" onclick="addPregunta(${evalId},${capId})">+ Agregar pregunta</button>
+      <button class="btn-prim" onclick="addPregunta(${evalId},${capId})">Agregar pregunta</button>
     </div>
     <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">Listo</button>`);
-}
-
-
-function toggleEditPregunta(pqId, evalId, capId){
-  const view = document.getElementById('pq-view-'+pqId);
-  const edit = document.getElementById('pq-edit-'+pqId);
-  if(!view||!edit) return;
-  const isEditing = edit.style.display !== 'none';
-  view.style.display = isEditing ? '' : 'none';
-  edit.style.display = isEditing ? 'none' : '';
-}
-
-async function guardarEdicionPregunta(pqId, evalId, capId){
-  const texto = document.getElementById('pq-edit-texto-'+pqId)?.value.trim();
-  if(!texto){alert('El texto de la pregunta no puede estar vacío');return;}
-  // Recoger opciones
-  const opciones = [];
-  for(let j=0; j<4; j++){
-    const inp = document.getElementById('pq-edit-opt-'+pqId+'-'+j);
-    if(inp && inp.value.trim()) opciones.push(inp.value.trim());
-  }
-  if(opciones.length < 2){alert('Debe haber al menos 2 opciones');return;}
-  const correcta = parseInt(document.getElementById('pq-edit-corr-'+pqId)?.value||'0');
-  try{
-    setSyncStatus('syncing');
-    await api('PATCH','preguntas_evaluacion',{pregunta:texto,opciones,correcta},`?id=eq.${pqId}`);
-    const idx = preguntas.findIndex(p=>p.id===pqId);
-    if(idx>=0) preguntas[idx]={...preguntas[idx],pregunta:texto,opciones,correcta};
-    setSyncStatus('ok');
-    toast('Pregunta actualizada');
-    openEditEval(evalId, capId);
-  }catch(e){setSyncStatus('error');toast('Error al guardar');}
-}
-
-async function deleteEval(evalId, capId){
-  if(!confirm('¿Eliminar esta evaluación y todas sus preguntas? Esta acción no se puede deshacer.')) return;
-  try{
-    setSyncStatus('syncing');
-    // Eliminar preguntas primero
-    await api('DELETE','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}`);
-    preguntas = preguntas.filter(p=>p.evaluacion_id!==evalId);
-    // Eliminar evaluación
-    await api('DELETE','evaluaciones','',`?id=eq.${evalId}`);
-    evaluaciones = evaluaciones.filter(e=>e.id!==evalId);
-    setSyncStatus('ok');
-    toast('Evaluación eliminada');
-    buildDetail(capId);
-  }catch(e){setSyncStatus('error');toast('Error al eliminar la evaluación');}
 }
 
 async function addPregunta(evalId,capId){
@@ -2111,187 +1681,9 @@ async function addPregunta(evalId,capId){
   const orden=preguntas.filter(p=>p.evaluacion_id===evalId).length;
   try{
     const r=await api('POST','preguntas_evaluacion',{evaluacion_id:evalId,pregunta:texto,opciones,correcta,orden},'');
-    const nv=Array.isArray(r)?r[0]:r;
-    if(nv){
-      preguntas.push(nv);
-      // Agregar la pregunta al DOM sin re-renderizar el modal completo
-      const pqCount=preguntas.filter(p=>p.evaluacion_id===evalId).length;
-      const pqContainer=document.getElementById('pqs-container');
-      if(pqContainer){
-        const div=document.createElement('div');
-        div.className='pregunta-item';
-        div.dataset.pqid=nv.id;
-        const opts=nv.opciones||[];
-        div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div class="pregunta-num">Pregunta ${pqCount}</div>
-          <button class="btn-sm red" onclick="delPregunta(${nv.id},${evalId},${capId})">×</button>
-        </div>
-        <div class="pregunta-texto">${esc(nv.pregunta)}</div>
-        ${opts.map((o,j)=>`<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:${j===nv.correcta?'#E1F5EE':'#f4f4f2'};color:${j===nv.correcta?'#085041':'#555'}">${j===nv.correcta?'✓ ':''}${esc(o)}</div>`).join('')}`;
-        pqContainer.appendChild(div);
-        // Actualizar contador
-        const counter=document.getElementById('pq-counter');
-        if(counter)counter.innerHTML=`${pqCount} preguntas · ${pqCount<5?'<span style="color:#BA7517">Mínimo 5 recomendadas</span>':'Ok'}`;
-      }
-      // Limpiar formulario
-      ['pq-texto','pq-a','pq-b','pq-c','pq-d'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-      document.getElementById('pq-correcta').value='0';
-      document.getElementById('pq-texto').focus();
-      toast('Pregunta agregada');
-    }
-  }catch(e){toast('Error al agregar pregunta');}
-}
-
-async function importEvalDesdeConfig(event){
-  const file=event.target.files[0];if(!file)return;
-  event.target.value='';
-  try{
-    const data=await file.arrayBuffer();
-    const wb=XLSX.read(data,{type:'array'});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-    if(!rows.length){toast('El archivo está vacío');return;}
-
-    // Group rows by codigo_redmine
-    const byRedmine={};
-    for(const row of rows){
-      const redmine=String(row.codigo_redmine||row.Codigo_redmine||row['codigo_redmine']||'').trim();
-      if(!redmine){continue;}
-      if(!byRedmine[redmine]) byRedmine[redmine]={titulo:String(row.titulo_evaluacion||row.titulo||'').trim(), preguntas:[]};
-      const texto=String(row.pregunta||row.Pregunta||'').trim();
-      const a=String(row.opcion_a||row['Opción A']||'').trim();
-      const b=String(row.opcion_b||row['Opción B']||'').trim();
-      const c=String(row.opcion_c||row['Opción C']||'').trim();
-      const d=String(row.opcion_d||row['Opción D']||'').trim();
-      const corrStr=String(row.correcta||row.Correcta||'A').trim().toUpperCase();
-      const corrMap={A:0,B:1,C:2,D:3};
-      if(texto&&a&&b) byRedmine[redmine].preguntas.push({pregunta:texto,opciones:[a,b,...(c?[c]:[]),...(d?[d]:[])],correcta:corrMap[corrStr]??0});
-    }
-
-    let capsOk=0,capsErr=0,pqsOk=0;
-    for(const [redmine,{titulo,preguntas:pqs}] of Object.entries(byRedmine)){
-      // Find cap by codigo_redmine
-      const cap=caps.find(c=>c.codigo_redmine&&c.codigo_redmine.trim()===redmine);
-      if(!cap){toast(`⚠ No se encontró capacitación con Redmine: ${redmine}`);capsErr++;continue;}
-
-      // Find or create evaluacion for this cap
-      let ev=evaluaciones.find(e=>e.capacitacion_id===cap.id);
-      if(!ev){
-        const tituloEv=titulo||`Evaluación — ${cap.titulo}`;
-        try{
-          const r=await api('POST','evaluaciones',{capacitacion_id:cap.id,titulo:tituloEv,activa:false},'');
-          ev=Array.isArray(r)?r[0]:r;
-          if(ev) evaluaciones.push(ev);
-        }catch(e){capsErr++;continue;}
-      }
-      if(!ev){capsErr++;continue;}
-
-      // Delete existing questions and replace
-      try{
-        await api('DELETE','preguntas_evaluacion','',`?evaluacion_id=eq.${ev.id}`);
-        preguntas=preguntas.filter(p=>p.evaluacion_id!==ev.id);
-      }catch(e){}
-
-      // Insert new questions
-      for(let i=0;i<pqs.length;i++){
-        try{
-          const r=await api('POST','preguntas_evaluacion',{evaluacion_id:ev.id,...pqs[i],orden:i},'');
-          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
-          pqsOk++;
-        }catch(e){}
-      }
-      capsOk++;
-    }
-    toast(`✓ ${capsOk} evaluación/es cargadas · ${pqsOk} preguntas · ${capsErr} errores`);
-    renderContent();
-  }catch(e){toast('Error al leer el archivo');}
-}
-
-async function importEvalExcel(evalId,capId){
-  const input=document.createElement('input');
-  input.type='file';input.accept='.xlsx,.xls';
-  input.onchange=async()=>{
-    const file=input.files[0];if(!file)return;
-    try{
-      const data=await file.arrayBuffer();
-      const wb=XLSX.read(data,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-      let agregadas=0,errores=0;
-      for(const row of rows){
-        const texto=String(row.pregunta||row.Pregunta||'').trim();
-        const a=String(row.opcion_a||row['Opción A']||row.opcionA||'').trim();
-        const b=String(row.opcion_b||row['Opción B']||row.opcionB||'').trim();
-        const c=String(row.opcion_c||row['Opción C']||row.opcionC||'').trim();
-        const d=String(row.opcion_d||row['Opción D']||row.opcionD||'').trim();
-        const corrStr=String(row.correcta||row.Correcta||'A').trim().toUpperCase();
-        const corrMap={A:0,B:1,C:2,D:3};
-        const correcta=corrMap[corrStr]??0;
-        if(!texto||!a||!b){errores++;continue;}
-        const opciones=[a,b];if(c)opciones.push(c);if(d)opciones.push(d);
-        const orden=preguntas.filter(p=>p.evaluacion_id===evalId).length;
-        try{
-          const r=await api('POST','preguntas_evaluacion',{evaluacion_id:evalId,pregunta:texto,opciones,correcta,orden},'');
-          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
-          agregadas++;
-        }catch(e){errores++;}
-      }
-      toast(`${agregadas} preguntas importadas${errores?` · ${errores} errores`:''}`);
-      openEditEval(evalId,capId);
-    }catch(e){toast('Error al leer el archivo');}
-  };
-  input.click();
-}
-
-function exportEvalExcel(evalId){
-  const ev=evaluaciones.find(e=>e.id===evalId);if(!ev)return;
-  const cap=caps.find(c=>c.id===ev.capacitacion_id);
-  const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
-  const rows=pqs.map(p=>{
-    const opts=p.opciones||[];
-    const letraCorrecta=['A','B','C','D'][p.correcta]||'A';
-    return{pregunta:p.pregunta,opcion_a:opts[0]||'',opcion_b:opts[1]||'',opcion_c:opts[2]||'',opcion_d:opts[3]||'',correcta:letraCorrecta};
-  });
-  const wb=XLSX.utils.book_new();
-  // Info sheet with cap reference
-  const infoRows=[
-    {campo:'Evaluación',valor:ev.titulo},
-    {campo:'Capacitación',valor:cap?cap.titulo:''},
-    {campo:'Código Redmine',valor:cap?cap.codigo_redmine||'':''},
-    {campo:'Tipo',valor:cap?cap.tipo_codigo||'':''},
-    {campo:'Bimestre',valor:cap?cap.bimestre||'':''},
-    {campo:'Total preguntas',valor:pqs.length},
-  ];
-  const wsInfo=XLSX.utils.json_to_sheet(infoRows);
-  wsInfo['!cols']=[{wch:20},{wch:50}];
-  XLSX.utils.book_append_sheet(wb,wsInfo,'Información');
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
-  XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
-  const nombre=cap?(cap.codigo_redmine?`eval_${cap.codigo_redmine.replace(/[^a-z0-9]/gi,'_')}`:`eval_${cap.titulo.slice(0,30).replace(/\s+/g,'_').replace(/[^a-z0-9_]/gi,'')}`):`eval_${evalId}`;
-  XLSX.writeFile(wb,`${nombre}.xlsx`);
-  toast('Evaluación exportada');
-}
-
-function exportPlantillaEval(){
-  const rows=[
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el procedimiento correcto ante un incendio?',opcion_a:'Activar alarma y evacuar',opcion_b:'Ignorarlo',opcion_c:'Llamar a un compañero',opcion_d:'Apagarlo solo',correcta:'A'},
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cada cuánto se realizan los simulacros?',opcion_a:'Cada 6 meses',opcion_b:'Cada año',opcion_c:'Nunca',opcion_d:'',correcta:'A'},
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el EPP obligatorio en planta?',opcion_a:'Solo guantes',opcion_b:'Casco, guantes y calzado',opcion_c:'Ninguno',opcion_d:'Solo casco',correcta:'B'},
-    {codigo_redmine:'#35200',titulo_evaluacion:'Evaluación Medio Ambiente',pregunta:'¿Cómo se clasifican los residuos peligrosos?',opcion_a:'Por color de recipiente',opcion_b:'Por peso',opcion_c:'No se clasifican',opcion_d:'',correcta:'A'},
-  ];
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:14},{wch:35},{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:10}];
-  // Add a note row
-  XLSX.utils.sheet_add_aoa(ws,[
-    [''],
-    ['NOTA: codigo_redmine identifica la capacitación. Una fila por pregunta. Podés cargar varias evaluaciones en un mismo archivo.'],
-    ['CAMPOS: codigo_redmine* | titulo_evaluacion | pregunta* | opcion_a* | opcion_b* | opcion_c | opcion_d | correcta* (A/B/C/D)'],
-  ],{origin:`A${rows.length+2}`});
-  XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
-  XLSX.writeFile(wb,'plantilla_evaluacion.xlsx');
-  toast('Plantilla de evaluación descargada');
+    const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
+    toast('Pregunta agregada');openEditEval(evalId,capId);
+  }catch(e){toast('Error');}
 }
 
 async function delPregunta(pqId,evalId,capId){
@@ -2490,16 +1882,61 @@ async function toggleCompleto(asistId, capId, nuevoEstado){
 }
 
 async function deleteA(aid,capId){
-  if(!canEdit()||!confirm('¿Eliminar este participante?'))return;
+  if(!canManageParticipants()||!confirm('¿Eliminar este participante?'))return;
   try{await api('DELETE','asistentes','',`?id=eq.${aid}`);asistentes=asistentes.filter(a=>a.id!==aid);toast('Eliminado');buildDetail(capId);renderContent();}catch(e){toast('Error');}
 }
 
-function exportFalt(capId){
+function exportPlantillaAsistentes(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  // Get current attendees or generate from padron if empty
+  const aExist=getA(capId);
+  let rows;
+  if(aExist.length){
+    // Pre-fill with existing attendees so user can update
+    rows=aExist.map(x=>({
+      '#Redmine':c.codigo_redmine||'',
+      'legajo':x.legajo,'nombre':x.nombre,'cuil':x.cuil||'',
+      'un':x.un||'','departamento':x.departamento||x.sector||'','sector':x.sector||'',
+      'completo':x.completo?'SI':'NO','nota':x.nota!=null?x.nota:'',
+      'fecha_evaluacion':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
+      'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
+    }));
+  } else {
+    // Try to pre-fill from padron
+    const padronFilt=c.un?padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(p.un!==c.un) return false;
+      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      return true;
+    }):[];
+    if(padronFilt.length){
+      rows=padronFilt.map(p=>({
+        '#Redmine':c.codigo_redmine||'',
+        'legajo':p.legajo,'nombre':p.nombre,'cuil':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+        'un':p.un||'','departamento':p.departamento||p.datos_extra?.Departamento||'','sector':p.sector||'',
+        'completo':'','nota':'','fecha_evaluacion':'',
+        'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
+      }));
+    } else {
+      // Empty template row
+      rows=[{'#Redmine':c.codigo_redmine||'','legajo':'','nombre':'','cuil':'','un':c.un||'','departamento':c.departamento||'','sector':'','completo':'SI o NO','nota':'','fecha_evaluacion':'DD/MM/AAAA','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''}];
+    }
+  }
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
+  XLSX.writeFile(wb,`plantilla_asistentes_${(c.titulo||'cap').replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
+  toast('Plantilla descargada');
+}
+
+
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const falt=getA(capId).filter(a=>!a.completo);
   if(!falt.length){toast('No hay faltantes');return;}
-  const rows=falt.map(a=>({'Legajo':a.legajo,'Nombre':a.nombre,'UN':a.un||'','Departamento':a.departamento||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
+  const rows=falt.map(a=>({'#Redmine':c.codigo_redmine||'','Legajo':a.legajo,'Nombre':a.nombre,'CUIL':a.cuil||'','UN':a.un||'','Departamento':a.departamento||a.sector||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''}));
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:12},{wch:35},{wch:10},{wch:10},{wch:22}];
   XLSX.utils.book_append_sheet(wb,ws,'Faltantes');
   XLSX.writeFile(wb,`faltantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
   toast('Excel descargado');
@@ -2509,8 +1946,9 @@ function exportAll(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const a=getA(capId);
   if(!a.length){toast('No hay participantes');return;}
-  const rows=a.map(x=>({'Legajo':x.legajo,'Nombre':x.nombre,'UN':x.un||'','Departamento':x.departamento||'','Sector':x.sector||'','Completó':x.completo?'Sí':'No','Nota':x.nota!=null?x.nota:'','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha||'','Bimestre':c.bimestre||''}));
+  const rows=a.map(x=>({'#Redmine':c.codigo_redmine||'','Legajo':x.legajo,'Nombre':x.nombre,'CUIL':x.cuil||'','UN':x.un||'','Departamento':x.departamento||x.sector||'','Sector':x.sector||'','Completó':x.completo?'Sí':'No','Nota':x.nota!=null?x.nota:'','Fecha Evaluación':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''}));
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:10},{wch:22}];
   XLSX.utils.book_append_sheet(wb,ws,'Participantes');
   XLSX.writeFile(wb,`participantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
   toast('Excel descargado');
@@ -2528,11 +1966,13 @@ async function importExcel(event,capId){
         capacitacion_id:capId,
         legajo:String(r.legajo||r.Legajo||r.LEGAJO||'').trim(),
         nombre:String(r.nombre||r.Nombre||r.NOMBRE||'').trim(),
+        cuil:String(r.cuil||r.CUIL||r.Cuil||'').trim()||null,
         un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim(),
         sector:String(r.sector||r.Sector||r.SECTOR||'').trim(),
         departamento:String(r.departamento||r.Departamento||r.DEPARTAMENTO||'').trim()||null,
         completo:['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim()),
-        nota:parseFloat(r.nota||r.Nota||r.NOTA||'')||null
+        nota:parseFloat(r.nota||r.Nota||r.NOTA||'')||null,
+        fecha_evaluacion:(()=>{const fv=String(r.fecha_evaluacion||r['Fecha Evaluación']||r.fecha_eval||'').trim();if(!fv)return null;if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(fv))return fv;return null;})()
       })).filter(r=>r.legajo);
       if(!nuevos.length){alert('No se encontraron registros con columna "legajo".');return;}
       setSyncStatus('syncing');toast('Importando...',10000);
@@ -2636,7 +2076,7 @@ async function saveCap(id){
       if(i>=0)caps[i]={...caps[i],...obj};
       // Si cambió la UN o sector, ofrecer recargar participantes
       const capActual=caps[i];
-      if(capActual&&(capActual.un!==obj.un||capActual.departamento!==obj.departamento)&&obj.un){
+      if(capActual&&(capActual.un!==obj.un||capActual.sector!==obj.sector)&&obj.un){
         if(confirm('¿Actualizar participantes desde el padrón para la nueva UN/Departamento?')){
           await cargarParticipantesDesdePadron(Number(id),obj.un,obj.departamento);
         }
@@ -2828,14 +2268,16 @@ async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
 }
 
-function renderCharts(dm,ed){
+function renderCharts(){
   const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
   const textColor=isDark?'#aaa':'#888';
 
   const ctxL=document.getElementById('chart-linea');
-  if(ctxL&&dm){
+  const dmEl=document.getElementById('chart-data-linea');
+  if(ctxL&&dmEl){
     try{
+      const dm=JSON.parse(dmEl.textContent);
       if(window._chartLinea) window._chartLinea.destroy();
       window._chartLinea=new Chart(ctxL,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
         {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
@@ -2845,8 +2287,11 @@ function renderCharts(dm,ed){
   }
 
   const ctxE=document.getElementById('chart-eval');
-  if(ctxE&&ed&&ed.length){
+  const edEl=document.getElementById('chart-data-eval');
+  if(ctxE&&edEl){
     try{
+      const ed=JSON.parse(edEl.textContent);
+      if(!ed.length)return;
       if(window._chartEval) window._chartEval.destroy();
       window._chartEval=new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
         {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
@@ -2877,6 +2322,7 @@ function openForzarCumplimiento(capId){
       <input class="form-input" id="fp-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
     </div>
     <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label class="form-label">CUIL</label><input class="form-input" id="fp-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
       <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="fp-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
       <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="fp-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
       <div class="form-group"><label class="form-label">Sector</label><input class="form-input" id="fp-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
@@ -2897,6 +2343,7 @@ function validarLegajoPapel(legajo){
   const unInput=document.getElementById('fp-un');
   const deptoInput=document.getElementById('fp-depto');
   const secInput=document.getElementById('fp-sector');
+  const cuilInput=document.getElementById('fp-cuil');
   if(!lookup) return;
   if(!legajo||legajo.length<2){
     lookup.innerHTML='';
@@ -2904,6 +2351,7 @@ function validarLegajoPapel(legajo){
     if(unInput) unInput.value='';
     if(deptoInput) deptoInput.value='';
     if(secInput) secInput.value='';
+    if(cuilInput) cuilInput.value='';
     return;
   }
   const emp=getPadronEmpleado(legajo);
@@ -2911,13 +2359,16 @@ function validarLegajoPapel(legajo){
     if(emp.estado&&emp.estado!=='Vigente'){
       lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
       if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+      if(cuilInput) cuilInput.value='';
     } else {
       const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
       lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)} / ${esc(emp.sector||'')}</span>`;
       if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
       if(unInput) unInput.value=emp.un||'';
       if(deptoInput) deptoInput.value=depto;
       if(secInput) secInput.value=emp.sector||'';
+      if(cuilInput) cuilInput.value=cuil;
     }
   } else if(padron.length>0){
     lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
@@ -2925,6 +2376,7 @@ function validarLegajoPapel(legajo){
     if(unInput) unInput.value='';
     if(deptoInput) deptoInput.value='';
     if(secInput) secInput.value='';
+    if(cuilInput) cuilInput.value='';
   } else {
     lookup.innerHTML='';
     if(nombreInput) nombreInput.readOnly=false;
@@ -2937,6 +2389,8 @@ async function agregarParticipantePapel(capId){
   const un=document.getElementById('fp-un').value.trim();
   const depto=document.getElementById('fp-depto')?document.getElementById('fp-depto').value.trim():'';
   const sector=document.getElementById('fp-sector').value.trim();
+  const cuil=document.getElementById('fp-cuil')?document.getElementById('fp-cuil').value.trim():'';
+  const fechaEval=new Date().toISOString().slice(0,10);
   if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
   // Bloquear si el empleado no está vigente según el padrón
   if(padron.length>0){
@@ -2948,12 +2402,12 @@ async function agregarParticipantePapel(capId){
   try{
     const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
     if(existing&&existing.length){
-      await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+      await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
       const i=asistentes.findIndex(a=>a.capacitacion_id===capId&&a.legajo===legajo);
-      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector,departamento:depto};
+      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval};
       toast('Participante actualizado');
     }else{
-      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,completo:true},'');
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval,completo:true},'');
       const nv=Array.isArray(r)?r[0]:r;if(nv)asistentes.push(nv);
       // Si el nuevo total supera participantes_esperados, actualizar
       const totalNuevo=getA(capId).length;
@@ -2990,32 +2444,11 @@ async function forzarRealizada(capId){
   }catch(e){toast('Error');}
 }
 
-function exportPlantillaAsistentes(){
-  const rows=[
-    {legajo:'6462',nombre:'APELLIDO, Nombre Ejemplo',un:'Dist y Logistica',departamento:'DIME y Morosidad',sector:'Dist. Mvo. Este',completo:'NO',nota:''},
-    {legajo:'9177',nombre:'OTRO, Ejemplo Con Nota',un:'Dist y Logistica',departamento:'DIME y Morosidad',sector:'Dist. Mvo. Este',completo:'SI',nota:8},
-  ];
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:10},{wch:35},{wch:22},{wch:22},{wch:20},{wch:10},{wch:8}];
-  XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
-  XLSX.writeFile(wb,'plantilla_asistentes.xlsx');
-  toast('Plantilla de asistentes descargada');
-}
-
 function exportPlantillaCaps(){
-  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',departamento:'DIME y Morosidad',area:'Operativos',fecha:'28/02/2026',fecha_fin:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:'Nota: si se indica UN y Departamento se cargan automaticamente los participantes del padron'}];
+  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',departamento:'DIME y Morosidad',area:'Operativos',fecha:'28/02/2026',fecha_fin:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:''}];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:22},{wch:14},{wch:12},{wch:12},{wch:8},{wch:22},{wch:10},{wch:14},{wch:14},{wch:8},{wch:55}];
-  // Add a note row explaining fields
-  XLSX.utils.sheet_add_aoa(ws,[
-    ['','','','','','','','','','','','','','',''],
-    ['CAMPOS REQUERIDOS (*):','titulo','tipo_codigo','','','','','','','','','','','',''],
-    ['CAMPOS OPCIONALES:','codigo_redmine','un','departamento (filtra padron)','area','fecha (DD/MM/AAAA)','fecha_fin (DD/MM/AAAA)','bimestre (1-6)','participantes_esperados','duracion (hs)','instructor','estado','nota_aprobacion','obs',''],
-    ['TIPOS VALIDOS:','REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','','','','','','','',''],
-    ['ESTADOS VALIDOS:','Programada','Pendiente','Realizada','','','','','','','','','','',''],
-  ], {origin:'A3'});
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,'Plan');
   XLSX.writeFile(wb,'plantilla_plan_capacitacion.xlsx');
   toast('Plantilla descargada');
@@ -3093,10 +2526,7 @@ async function importarCaps(event){
             actualizadas++;
           }else{
             const nr=await api('POST','capacitaciones',obj,'');
-            const nv=Array.isArray(nr)?nr[0]:nr;if(nv){caps.push(nv);
-            // Auto-cargar participantes del padrón si hay UN
-            if(nv.un) await cargarParticipantesDesdePadron(nv.id, nv.un, nv.departamento||null);
-            }
+            const nv=Array.isArray(nr)?nr[0]:nr;if(nv)caps.push(nv);
             creadas++;
           }
           if(obj.un&&!uns.find(u=>u.nombre===obj.un)){
@@ -3177,13 +2607,28 @@ setInterval(()=>{if(currentUser)loadAll();},30000);
 init();
 </script>
 <script>
-// PWA install prompt (sin ServiceWorker por incompatibilidad con GitHub Pages)
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();
-  window._installPrompt=e;
-  const btn=document.getElementById('install-pwa-btn');
-  if(btn)btn.style.display='flex';
-});
+if('serviceWorker' in navigator){
+  const swCode=`
+const CACHE='cap-v1';
+const ASSETS=['/'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{})));self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{if(resp&&resp.status===200){const rc=resp.clone();caches.open(CACHE).then(c=>c.put(e.request,rc));}return resp;}).catch(()=>caches.match('/'))));});
+`;
+  const blob=new Blob([swCode],{type:'application/javascript'});
+  const swUrl=URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).then(r=>{
+    console.log('SW registered');
+    // Show install prompt
+    window.addEventListener('beforeinstallprompt',e=>{
+      e.preventDefault();
+      window._installPrompt=e;
+      // Show install banner after login
+      const btn=document.getElementById('install-pwa-btn');
+      if(btn)btn.style.display='flex';
+    });
+  }).catch(e=>console.log('SW error:',e));
+}
 </script>
 <div id="install-pwa-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1D9E75;color:#fff;border:none;border-radius:12px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);align-items:center;gap:8px;z-index:9999;white-space:nowrap" onclick="installPWA()">
   <span>📲</span> Instalar app en el celular

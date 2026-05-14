@@ -885,7 +885,7 @@ function renderResumen(){
     const promDias=conDesvio.length?Math.round(totalDias/conDesvio.length):0;
     const rows=conDesvio.sort((a,b)=>(desvioInfoExt(b,estadoCap(b),fechaFinCap(b))||0)-(desvioInfoExt(a,estadoCap(a),fechaFinCap(a))||0)).map(cap=>{
       const d=desvioInfoExt(cap,estadoCap(cap),fechaFinCap(cap));
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(c.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(c.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:5px;padding:1px 6px;font-weight:600">+${d}d</span></div>`;
     }).join('');
     return`<div class="plan-block" style="border-left:3px solid #EF9F27">
       <div class="plan-block-title">⚠ Desvío de planificación</div>
@@ -1538,6 +1538,7 @@ function buildDetail(id){
   const plantillaBtn=canManageParticipants()?`<button class="btn-sm" onclick="exportPlantillaAsistentes(${id})" title="Plantilla para cargar asistentes">📥 Plantilla</button>`:'';
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
+  const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
@@ -1565,7 +1566,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes (${a.length})</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${plantillaBtn}${forzarBtn}${importBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -1879,6 +1880,34 @@ async function toggleCompleto(asistId, capId, nuevoEstado){
     buildDetail(capId);
     renderContent();
   }catch(e){setSyncStatus('error');toast('Error al actualizar');}
+}
+
+async function limpiarParticipantes(capId, total){
+  if(!canManageParticipants()) return;
+  const c=caps.find(x=>x.id===capId);
+  if(!c) return;
+  // Primera advertencia
+  const ok1=confirm(`⚠️ ADVERTENCIA\n\nEstás por eliminar los ${total} participante${total!==1?'s':''} de:\n\n"${c.titulo}"\n\nEsta acción NO se puede deshacer.\n\n¿Querés continuar?`);
+  if(!ok1) return;
+  // Segunda confirmación
+  const ok2=confirm(`🚨 CONFIRMACIÓN FINAL\n\nSe eliminarán TODOS los registros de asistencia de esta capacitación.\n\n¿Estás completamente seguro?`);
+  if(!ok2) return;
+  try{
+    setSyncStatus('syncing');
+    await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
+    asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
+    // Resetear participantes_esperados a 0
+    await api('PATCH','capacitaciones',{participantes_esperados:0},`?id=eq.${capId}`);
+    const cIdx=caps.findIndex(x=>x.id===capId);
+    if(cIdx>=0) caps[cIdx].participantes_esperados=0;
+    setSyncStatus('ok');
+    toast(`${total} participante${total!==1?'s':''} eliminado${total!==1?'s':''}`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    toast('Error al eliminar: '+e.message);
+  }
 }
 
 async function deleteA(aid,capId){

@@ -357,10 +357,37 @@ let currentUser=null;
 let _searchQuery='';
 // Texto de WhatsApp configurable — se guarda en localStorage
 const WA_TEXT_KEY='cap_wa_text';
-const WA_TEXT_DEFAULT='📚 *Material de lectura*\n\n*{nombre}*\n\nAccedé al material desde el siguiente enlace:\n{url}\n\n_EMA Servicios — Plan de Capacitación 2026_';
+const WA_TEXT_DEFAULT='📚 *{titulo}*\n{bimestre}\n\n{materiales}{eval}_EMA Servicios — Plan de Capacitación 2026_';
 function getWAText(){return localStorage.getItem(WA_TEXT_KEY)||WA_TEXT_DEFAULT;}
 function setWAText(t){localStorage.setItem(WA_TEXT_KEY,t);}
-function buildWAMsg(nombre,url){return getWAText().replace('{nombre}',nombre).replace('{url}',url);}
+// Arma el mensaje completo de una capacitación (materiales + evaluación)
+function buildWAMsgCap(capId){
+  const c=caps.find(x=>x.id===capId);if(!c) return '';
+  const mats=getMat(capId).filter(m=>m.url);
+  const ev=getEval(capId);
+  const evalLink=ev&&ev.activa?`${window.location.origin}${window.location.pathname}?eval=${ev.id}`:'';
+  // Bloque materiales
+  let matsBlock='';
+  if(mats.length){
+    matsBlock='📎 *Material de lectura:*\n';
+    mats.forEach(m=>{ matsBlock+=`• ${m.nombre}\n  ${m.url}\n`; });
+    matsBlock+='\n';
+  }
+  // Bloque evaluación
+  let evalBlock='';
+  if(evalLink){
+    evalBlock=`📝 *Evaluación de comprensión:*\n${evalLink}\n\n`;
+  }
+  const bimestre=c.bimestre?`_${c.bimestre}_\n`:'';
+  return getWAText()
+    .replace('{titulo}',c.titulo||'')
+    .replace('{bimestre}',bimestre)
+    .replace('{materiales}',matsBlock)
+    .replace('{eval}',evalBlock);
+}
+// Función legacy para botón individual por material (backward compat)
+function buildWAMsg(nombre,url){return getWAText().replace('{titulo}',nombre).replace('{bimestre}','').replace('{materiales}','📎 '+nombre+'\n'+url+'\n\n').replace('{eval}','');}
+function compartirWACap(capId){const msg=buildWAMsgCap(capId);if(!msg){toast('Sin materiales ni evaluación para compartir');return;}window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');}
 function compartirWA(nombre,url){window.open('https://wa.me/?text='+encodeURIComponent(buildWAMsg(nombre,url)),'_blank');}
 
 function isAdmin(){return currentUser&&currentUser.rol==='admin';}
@@ -1465,7 +1492,11 @@ function renderConfig(){
   </div>
   <div class="config-section">
     <div class="config-title">📲 Mensaje de WhatsApp para materiales</div>
-    <p style="font-size:12px;color:#777;margin-bottom:10px">Este texto se usa al compartir materiales de lectura por WhatsApp. Podés usar <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{nombre}</code> para el nombre del material y <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{url}</code> para el enlace.</p>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Este texto se usa al compartir una capacitación por WhatsApp. Variables disponibles:<br>
+    <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{titulo}</code> nombre de la capacitación &nbsp;
+    <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{bimestre}</code> bimestre &nbsp;
+    <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{materiales}</code> lista de materiales con links &nbsp;
+    <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{eval}</code> link de la evaluación (si está activa)</p>
     <div class="form-group">
       <label class="form-label">Texto del mensaje</label>
       <textarea class="form-input" id="wa-texto" rows="6" style="font-size:12px;font-family:monospace" oninput="previewWAMsg()">${esc(getWAText())}</textarea>
@@ -1486,8 +1517,10 @@ function previewWAMsg(){
   const pre=document.getElementById('wa-preview');
   if(!txt||!pre) return;
   pre.textContent=txt.value
-    .replace('{nombre}','Uso y Conservación de EPP')
-    .replace('{url}','https://drive.google.com/ejemplo');
+    .replace('{titulo}','Uso y Conservación de EPP y EPC')
+    .replace('{bimestre}','_3° Bimestre (May-Jun)_\n')
+    .replace('{materiales}','📎 *Material de lectura:*\n• Uso y Conservación de EPP\n  https://drive.google.com/ejemplo\n\n')
+    .replace('{eval}','📝 *Evaluación de comprensión:*\nhttps://elbiover.github.io/capacitaciones-2026/?eval=4\n\n');
 }
 function guardarWAText(){
   const txt=document.getElementById('wa-texto');
@@ -1505,8 +1538,10 @@ function resetWAText(){
 function probarWAText(){
   const txt=document.getElementById('wa-texto');
   const msg=(txt?txt.value:getWAText())
-    .replace('{nombre}','Uso y Conservación de EPP')
-    .replace('{url}','https://drive.google.com/ejemplo');
+    .replace('{titulo}','Uso y Conservación de EPP y EPC')
+    .replace('{bimestre}','_3° Bimestre (May-Jun)_\n')
+    .replace('{materiales}','📎 *Material de lectura:*\n• Uso y Conservación de EPP\n  https://drive.google.com/ejemplo\n\n')
+    .replace('{eval}','📝 *Evaluación de comprensión:*\nhttps://elbiover.github.io/capacitaciones-2026/?eval=4\n\n');
   window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
 }
 
@@ -1579,8 +1614,9 @@ function buildDetail(id){
       </div>
     </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
     const addMatBtn=canEdit()?`<button class="btn-sm green" onclick="openAddMaterial(${id})">+ Material</button>`:'';
+    const waMatBtn=`<button class="btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-weight:600" onclick="compartirWACap(${id})" title="Compartir materiales y evaluación por WhatsApp">📲 Compartir</button>`;
     repoHtml=`<div class="modal-section">
-      <div style="display:flex;align-items:center;justify-content:space-between" class="modal-section-title"><span>Repositorio de materiales</span>${addMatBtn}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Repositorio de materiales</span><div style="display:flex;gap:5px">${waMatBtn}${addMatBtn}</div></div>
       ${matItems}
     </div>`;
   }

@@ -355,6 +355,13 @@ let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=
 let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='';
 let currentUser=null;
 let _searchQuery='';
+// Texto de WhatsApp configurable — se guarda en localStorage
+const WA_TEXT_KEY='cap_wa_text';
+const WA_TEXT_DEFAULT='📚 *Material de lectura*\n\n*{nombre}*\n\nAccedé al material desde el siguiente enlace:\n{url}\n\n_EMA Servicios — Plan de Capacitación 2026_';
+function getWAText(){return localStorage.getItem(WA_TEXT_KEY)||WA_TEXT_DEFAULT;}
+function setWAText(t){localStorage.setItem(WA_TEXT_KEY,t);}
+function buildWAMsg(nombre,url){return getWAText().replace('{nombre}',nombre).replace('{url}',url);}
+function compartirWA(nombre,url){window.open('https://wa.me/?text='+encodeURIComponent(buildWAMsg(nombre,url)),'_blank');}
 
 function isAdmin(){return currentUser&&currentUser.rol==='admin';}
 function isCapacitador(){return currentUser&&currentUser.rol==='capacitador';}
@@ -609,7 +616,7 @@ function renderContent(){
     else if(currentTab==='resumen') el.innerHTML=renderResumen();
     else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,100);}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
-    else if(currentTab==='config') el.innerHTML=renderConfig();
+    else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
   }catch(err){
     console.error('renderContent error en tab',currentTab,':',err);
@@ -1455,7 +1462,53 @@ function renderConfig(){
       <span style="color:#0D47A1">💡 Podés cargar preguntas para múltiples capacitaciones en un mismo Excel, una fila por pregunta.</span>
     </div>
     ${renderEvalConfigList()}
+  </div>
+  <div class="config-section">
+    <div class="config-title">📲 Mensaje de WhatsApp para materiales</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Este texto se usa al compartir materiales de lectura por WhatsApp. Podés usar <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{nombre}</code> para el nombre del material y <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{url}</code> para el enlace.</p>
+    <div class="form-group">
+      <label class="form-label">Texto del mensaje</label>
+      <textarea class="form-input" id="wa-texto" rows="6" style="font-size:12px;font-family:monospace" oninput="previewWAMsg()">${esc(getWAText())}</textarea>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn-prim" style="flex:none;padding:8px 16px;font-size:12px" onclick="guardarWAText()">💾 Guardar</button>
+      <button class="btn-sec" style="flex:none;padding:8px 12px;font-size:12px" onclick="resetWAText()">↺ Restablecer</button>
+      <button class="btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-size:12px" onclick="probarWAText()">📲 Probar</button>
+    </div>
+    <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;color:#555">
+      <div style="font-size:10px;color:#999;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Vista previa</div>
+      <pre id="wa-preview" style="margin:0;white-space:pre-wrap;font-family:inherit;font-size:12px;color:#111;line-height:1.6"></pre>
+    </div>
   </div>`;}
+
+function previewWAMsg(){
+  const txt=document.getElementById('wa-texto');
+  const pre=document.getElementById('wa-preview');
+  if(!txt||!pre) return;
+  pre.textContent=txt.value
+    .replace('{nombre}','Uso y Conservación de EPP')
+    .replace('{url}','https://drive.google.com/ejemplo');
+}
+function guardarWAText(){
+  const txt=document.getElementById('wa-texto');
+  if(!txt) return;
+  setWAText(txt.value);
+  toast('Mensaje guardado ✓');
+}
+function resetWAText(){
+  if(!confirm('¿Restablecer el mensaje predeterminado?')) return;
+  localStorage.removeItem(WA_TEXT_KEY);
+  const txt=document.getElementById('wa-texto');
+  if(txt){txt.value=WA_TEXT_DEFAULT;previewWAMsg();}
+  toast('Mensaje restablecido');
+}
+function probarWAText(){
+  const txt=document.getElementById('wa-texto');
+  const msg=(txt?txt.value:getWAText())
+    .replace('{nombre}','Uso y Conservación de EPP')
+    .replace('{url}','https://drive.google.com/ejemplo');
+  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+}
 
 function renderUsuarios(){
   if(!isAdmin())return'';
@@ -1521,7 +1574,7 @@ function buildDetail(id){
       <span class="material-icon">${m.tipo==='link'?'🔗':'📄'}</span>
       <div class="material-info"><div class="material-name">${esc(m.nombre)}</div><div class="material-meta">${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" style="color:#185FA5">${esc(m.url).substring(0,40)}...</a>`:m.tipo}</div></div>
       <div class="material-actions">
-        ${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" class="btn-sm blue" style="text-decoration:none">Abrir</a><button class="btn-sm" title="Copiar enlace" onclick="navigator.clipboard.writeText('${esc(m.url)}').then(()=>toast('¡Enlace copiado!'))">📋 Copiar</button><button class="btn-sm" title="Compartir por WhatsApp" onclick="window.open('https://wa.me/?text=${encodeURIComponent(m.nombre+'%0A'+m.url)}','_blank')">📲</button>`:''}
+        ${m.tipo==='link'?`<a href="${esc(m.url)}" target="_blank" class="btn-sm blue" style="text-decoration:none">Abrir</a><button class="btn-sm" title="Copiar enlace" onclick="navigator.clipboard.writeText('${esc(m.url)}').then(()=>toast('¡Enlace copiado!'))">📋 Copiar</button><button class="btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" title="Compartir por WhatsApp" onclick="compartirWA('${esc(m.nombre)}','${esc(m.url)}')">📲 WhatsApp</button>`:''}
         ${canEdit()?`<button class="btn-sm red" onclick="delMaterial(${m.id},${id})">×</button>`:''}
       </div>
     </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';

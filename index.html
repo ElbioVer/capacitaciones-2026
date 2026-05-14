@@ -175,6 +175,7 @@ select.form-input{cursor:pointer}
 .config-section{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:12px;margin-bottom:8px}
 .config-title{font-size:13px;font-weight:600;color:#111;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
 .tag-list{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.tag-list.scrollable{max-height:120px;overflow-y:auto;border:1px solid #e5e5e0;border-radius:8px;padding:7px;background:#fafafa}
 .tag{background:#f4f4f2;border:1px solid #e0e0da;border-radius:99px;padding:3px 9px;font-size:11px;color:#111;display:flex;align-items:center;gap:4px}
 .tag-del{color:#bbb;cursor:pointer;font-size:13px;line-height:1}
 .tag-del:hover{color:#A32D2D}
@@ -214,6 +215,9 @@ select.form-input{cursor:pointer}
 .result-score.ok{color:#1D9E75}
 .result-score.fail{color:#E24B4A}
 @media(max-width:400px){.stats-bar{grid-template-columns:repeat(2,1fr)}.form-row{grid-template-columns:1fr}.form-row-3{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){
+  [style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"],[style*="grid-template-columns:minmax(0,auto) minmax(0,1fr)"]{grid-template-columns:1fr !important}
+}
 </style>
   <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBsYW4gZGUgQ2FwYWNpdGFjaW9uIEVNQSIsCiAgInNob3J0X25hbWUiOiAiQ2FwYWNpdGFjaW9uIiwKICAiZGVzY3JpcHRpb24iOiAiUGxhbiBkZSBDYXBhY2l0YWNpb24gMjAyNiAtIEVNQSBTZXJ2aWNpb3MiLAogICJzdGFydF91cmwiOiAiLi8iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiNmNGY0ZjIiLAogICJ0aGVtZV9jb2xvciI6ICIjMUQ5RTc1IiwKICAib3JpZW50YXRpb24iOiAicG9ydHJhaXQtcHJpbWFyeSIKfQ==">
   <meta name="mobile-web-app-capable" content="yes">
@@ -1130,6 +1134,7 @@ function renderPadron(filtro){
   const filas=sorted.map((p,i)=>`<tr>
     <td style="${tdS(i)};font-weight:600">${esc(String(p.legajo||''))}</td>
     <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
+    <td style="${tdS(i)}">${esc(p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'')}</td>
     <td style="${tdS(i)}">${p.fecha_ingreso?fmtF(p.fecha_ingreso.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${p.fecha_egreso?fmtF(p.fecha_egreso.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${esc(p.sector||'')}</td>
@@ -1177,6 +1182,7 @@ function renderPadron(filtro){
       <thead><tr>
         <th style="${thS}">Legajo</th>
         <th style="${thS}">Nombre</th>
+        <th style="${thS}">CUIL</th>
         <th style="${thS}">Fecha de Ingreso</th>
         <th style="${thS}">Fecha de egreso</th>
         <th style="${thS}">Sector</th>
@@ -1199,6 +1205,7 @@ function renderPadron(filtro){
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo *</strong> — número de legajo (campo único)</div>
       <div><strong>nombre *</strong> — nombre y apellido completo</div>
+      <div><strong>CUIL</strong> — número de CUIL (ej: 20-12345678-9)</div>
       <div><strong>Fecha de Ingreso</strong> — DD/MM/AAAA</div>
       <div><strong>Fecha de egreso</strong> — DD/MM/AAAA</div>
       <div><strong>Sector</strong> — sector del empleado</div>
@@ -1215,6 +1222,7 @@ async function exportPlantillaPadron(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet([{
     legajo:'12345',nombre:'García Juan',
+    'CUIL':'20-12345678-9',
     'Fecha de Ingreso':'01/03/2020','Fecha de egreso':'',
     Sector:'Operaciones',Departamento:'Distribución',
     'Estado Empleado':'Vigente','Unidad de Negocio':'Servicios Electricos',
@@ -1231,6 +1239,7 @@ async function exportarPadron(){
   const rows=sorted.map(p=>({
     legajo:p.legajo,
     nombre:p.nombre,
+    'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
     'Fecha de Ingreso':p.fecha_ingreso||'',
     'Fecha de egreso':p.fecha_egreso||'',
     'Sector':p.sector||'',
@@ -1357,7 +1366,7 @@ async function importarPadron(event){
       };
       // getF: devuelve valor RAW del row (sin String()) para que parseFecha reciba Date/number
       const getF=(r,...keys)=>{for(const k of keys){const v=r[k];if(v!==undefined&&v!==null&&v!=='')return v;}return null;};
-      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento'];
+      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil'];
       const nuevos=rows.map(r=>{
         const legajo=get(r,'legajo','Legajo','LEGAJO');
         const nombre=get(r,'nombre','Nombre','NOMBRE');
@@ -1368,6 +1377,7 @@ async function importarPadron(event){
         });
         return{
           legajo,nombre,
+          cuil:get(r,'CUIL','cuil','Cuil','cuil')||null,
           un:get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null,
           sector:get(r,'Sector','sector','SECTOR')||null,
           departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,
@@ -1432,8 +1442,8 @@ function renderConfig(){
   const deptTags=departamentos.map(d=>`<div class="tag" style="background:#E8F5FF;border-color:#90CAF9">${esc(d)}<span class="tag-del" onclick="delDepto('${esc(d)}')">×</span></div>`).join('')||'<span style="font-size:11px;color:#aaa">Sin departamentos (se cargan desde el padrón)</span>';
   const tipoRows=tipos.map(t=>`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><div style="display:flex;gap:4px">${t.tiene_evaluacion?'<span class="badge realizada" style="font-size:10px">Eval</span>':''}${t.tiene_repositorio?'<span class="badge programada" style="font-size:10px">Repo</span>':''}</div></div>`).join('');
   return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
-  <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list">${deptTags}</div></div>
-  <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list">${secTags}</div></div>
+  <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list scrollable">${deptTags}</div></div>
+  <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list scrollable">${secTags}</div></div>
   <div class="config-section"><div class="config-title">Tipos de capacitación<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addTipo()">+ Nuevo tipo</button></div>${tipoRows}</div>
   <div class="config-section">
     <div class="config-title">Importar / Exportar plan</div>
@@ -1465,11 +1475,17 @@ function renderConfig(){
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <button class="btn-sm green" onclick="exportPlantillaAsistentes()" style="margin-bottom:8px">📥 Plantilla Excel asistentes</button>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
-      <div><strong>legajo</strong> — número de legajo</div><div><strong>nombre</strong> — nombre y apellido</div>
-      <div><strong>un</strong> — Unidad de Negocio</div><div><strong>departamento</strong> — departamento (impacta en reportes y cumplimiento)</div>
+      <div><strong>#Redmine</strong> — código de la capacitación (ej: #35167)</div>
+      <div><strong>legajo</strong> — número de legajo</div>
+      <div><strong>nombre</strong> — nombre y apellido</div>
+      <div><strong>cuil</strong> — CUIL del empleado (ej: 20-12345678-9)</div>
+      <div><strong>un</strong> — Unidad de Negocio</div>
+      <div><strong>departamento</strong> — departamento (impacta en reportes y cumplimiento)</div>
       <div><strong>sector</strong> — sector</div>
       <div><strong>completo</strong> — SI o NO</div>
       <div><strong>nota</strong> — del 1 al 10 (solo SST y Salud)</div>
+      <div><strong>fecha_evaluacion</strong> — fecha de la evaluación DD/MM/AAAA</div>
+      <div><strong>Capacitación</strong> · <strong>Tipo</strong> · <strong>Bimestre</strong> — datos de la capacitación (solo lectura)</div>
     </div>
   </div>
   <div class="config-section">
@@ -2920,14 +2936,14 @@ function renderIndicadores(){
       <div class="plan-block-title">📊 Gráfico 1 — Plan de Capacitación General (Horas Hombre)
         <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-        <div style="overflow-x:auto">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
+        <div style="overflow-x:auto;min-width:0">
           <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
             <thead>${tableHead()}</thead>
             <tbody>${tableRows(data)}</tbody>
           </table>
         </div>
-        <div><canvas id="chart-ind-general" style="max-height:300px"></canvas></div>
+        <div style="min-width:0;min-height:200px"><canvas id="chart-ind-general" style="max-height:300px;width:100%"></canvas></div>
       </div>
     </div>
 
@@ -2936,31 +2952,33 @@ function renderIndicadores(){
       <div class="plan-block-title">🔵 Gráfico 2 — Plan REMO (Horas Hombre)
         <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-        <div style="overflow-x:auto">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
+        <div style="overflow-x:auto;min-width:0">
           <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
             <thead>${tableHead()}</thead>
             <tbody>${tableRows(remo)}</tbody>
           </table>
         </div>
-        <div><canvas id="chart-ind-remo" style="max-height:300px"></canvas></div>
+        <div style="min-width:0;min-height:200px"><canvas id="chart-ind-remo" style="max-height:300px;width:100%"></canvas></div>
       </div>
     </div>
 
     <!-- GRÁFICO 3: CUATRIMESTRES -->
     <div class="plan-block">
       <div class="plan-block-title">📅 Cierre por Cuatrimestre — ${new Date().getFullYear()}</div>
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start">
-        <table style="border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;min-width:300px">
-          <thead><tr style="background:#1A2F6E;color:#fff">
-            <th style="padding:7px 10px;font-size:12px;text-align:left">Cuatrimestre</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">Meta Hs.</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">Realizado Hs.</th>
-            <th style="padding:7px 10px;font-size:12px;text-align:right">% Logro</th>
-          </tr></thead>
-          <tbody>${cuatriRows}</tbody>
-        </table>
-        <div><canvas id="chart-ind-cuatri" style="max-height:260px"></canvas></div>
+      <div style="display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:16px;align-items:start">
+        <div style="overflow-x:auto;min-width:0">
+          <table style="border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;min-width:260px">
+            <thead><tr style="background:#1A2F6E;color:#fff">
+              <th style="padding:7px 10px;font-size:12px;text-align:left">Cuatrimestre</th>
+              <th style="padding:7px 10px;font-size:12px;text-align:right">Meta Hs.</th>
+              <th style="padding:7px 10px;font-size:12px;text-align:right">Realizado Hs.</th>
+              <th style="padding:7px 10px;font-size:12px;text-align:right">% Logro</th>
+            </tr></thead>
+            <tbody>${cuatriRows}</tbody>
+          </table>
+        </div>
+        <div style="min-width:0;min-height:180px"><canvas id="chart-ind-cuatri" style="max-height:260px;width:100%"></canvas></div>
       </div>
     </div>
 

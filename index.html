@@ -1375,9 +1375,14 @@ async function importarPadron(event){
         Object.keys(r).forEach(k=>{
           if(!CAMPOS_BASE.includes(k.toLowerCase().trim())&&r[k]!==''&&r[k]!==null) datos_extra[k]=r[k];
         });
+        const cuilVal=get(r,'CUIL','cuil','Cuil')||null;
+        // Limpiar CUIL de datos_extra para no duplicar si ya viene como columna
+        if(datos_extra.CUIL) delete datos_extra.CUIL;
+        if(datos_extra.Cuil) delete datos_extra.Cuil;
+        if(datos_extra.cuil) delete datos_extra.cuil;
         return{
           legajo,nombre,
-          cuil:get(r,'CUIL','cuil','Cuil','cuil')||null,
+          cuil:cuilVal,
           un:get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null,
           sector:get(r,'Sector','sector','SECTOR')||null,
           departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,

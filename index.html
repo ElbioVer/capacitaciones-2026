@@ -2068,6 +2068,7 @@ async function submitEval(evalId,totalPqs){
           <div style="font-size:14px;color:#777">Resultado de ${esc(nombre)}</div>
           <div class="result-score ${aprobado?'ok':'fail'}">${puntaje}/10</div>
           <div style="font-size:15px;font-weight:600;color:${aprobado?'#1D9E75':'#E24B4A'};margin-bottom:8px">${aprobado?'✓ Aprobado':'✗ Desaprobado'}</div>
+          ${!aprobado?`<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:10px 14px;margin:8px 0 4px;font-size:14px;font-weight:700;color:#CC0000;letter-spacing:0.2px">⚠️ Debés repetir la evaluación para poder aprobarla.<br><span style="font-size:12px;font-weight:500;color:#AA0000">Revisá las respuestas incorrectas y volvé a intentarlo.</span></div>`:''}
           <div style="font-size:13px;color:#777">${correctas} de ${pqs.length} respuestas correctas</div>
           <div style="margin-top:8px;font-size:12px;color:#888">Tus respuestas fueron registradas correctamente.</div>
           ${incorrectasHtml}

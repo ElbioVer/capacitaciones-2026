@@ -2044,6 +2044,24 @@ async function submitEval(evalId,totalPqs){
         }
       }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
     }
+    // Armar detalle de incorrectas
+    const incorrectas=pqs.filter(p=>respuestas[p.id]!==p.correcta);
+    const incorrectasHtml=incorrectas.length===0?'':`
+      <div style="margin-top:20px;text-align:left;border-top:1px solid #e5e5e0;padding-top:16px">
+        <div style="font-size:13px;font-weight:700;color:#CC0000;margin-bottom:10px">❌ Respuestas incorrectas (${incorrectas.length})</div>
+        ${incorrectas.map((p,i)=>{
+          const opciones=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
+          const respondidaIdx=respuestas[p.id];
+          const correctaIdx=p.correcta;
+          const respondidaTxt=opciones[respondidaIdx]!==undefined?opciones[respondidaIdx]:'—';
+          const correctaTxt=opciones[correctaIdx]!==undefined?opciones[correctaIdx]:'—';
+          return`<div style="background:#FFF5F5;border:1px solid #FFD0D0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+            <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">${i+1}. ${esc(p.enunciado||p.pregunta||'')}</div>
+            <div style="font-size:11px;color:#CC0000;margin-bottom:3px">✗ Tu respuesta: <span style="font-weight:600">${esc(respondidaTxt)}</span></div>
+            <div style="font-size:11px;color:#1D9E75">✓ Correcta: <span style="font-weight:600">${esc(correctaTxt)}</span></div>
+          </div>`;
+        }).join('')}
+      </div>`;
     document.body.innerHTML=`<div class="eval-public-wrap">
       <div class="eval-public-card">
         <div class="result-card">
@@ -2051,7 +2069,8 @@ async function submitEval(evalId,totalPqs){
           <div class="result-score ${aprobado?'ok':'fail'}">${puntaje}/10</div>
           <div style="font-size:15px;font-weight:600;color:${aprobado?'#1D9E75':'#E24B4A'};margin-bottom:8px">${aprobado?'✓ Aprobado':'✗ Desaprobado'}</div>
           <div style="font-size:13px;color:#777">${correctas} de ${pqs.length} respuestas correctas</div>
-          <div style="margin-top:16px;font-size:12px;color:#888">Tus respuestas fueron registradas correctamente.</div>
+          <div style="margin-top:8px;font-size:12px;color:#888">Tus respuestas fueron registradas correctamente.</div>
+          ${incorrectasHtml}
         </div>
       </div>
     </div>`;

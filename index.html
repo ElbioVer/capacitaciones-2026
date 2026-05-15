@@ -329,6 +329,17 @@ select.form-input{cursor:pointer}
     <div class="stat"><div class="stat-num pend" id="st-pend">—</div><div class="stat-lbl">Pendientes</div></div>
     <div class="stat"><div class="stat-num miss" id="st-venc">—</div><div class="stat-lbl">Vencidas</div></div>
   </div>
+  <div class="search-bar" id="search-bar-wrap">
+    <div style="position:relative;display:flex;align-items:center">
+      <span style="position:absolute;left:10px;color:#bbb;font-size:13px;pointer-events:none">🔍</span>
+      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…"
+        oninput="applyFilters()"
+        style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
+        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#e0e0dc'">
+      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
+        style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
+    </div>
+  </div>
   </div><!-- /top-controls -->
   <div class="app-body">
   <div class="tabs">
@@ -341,17 +352,6 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
-  </div>
-  <div class="search-bar" id="search-bar-wrap">
-    <div style="position:relative;display:flex;align-items:center">
-      <span style="position:absolute;left:10px;color:#bbb;font-size:13px;pointer-events:none">🔍</span>
-      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…"
-        oninput="applyFilters()"
-        style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
-        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#e0e0dc'">
-      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
-        style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
-    </div>
   </div>
   <div class="content" id="content"><div class="loading">Cargando...</div></div>
   </div>
@@ -678,7 +678,7 @@ function renderContent(){
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
-    else if(currentTab==='resumen') el.innerHTML=renderResumen();
+    else if(currentTab==='resumen'){el.innerHTML=renderResumen();requestAnimationFrame(()=>setTimeout(renderCharts,50));}
     else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,100);}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
@@ -984,7 +984,6 @@ function renderResumen(){
   })()}
   <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
   <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
-  setTimeout(renderCharts, 100);
 }
 
 
@@ -1652,7 +1651,7 @@ function buildDetail(id){
   // tabla asistentes
   const hasNota=t.tiene_evaluacion;
   const tblRows=a.map(x=>{
-    const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=nota_aprobacion?'nota-ok':'nota-fail'}">${x.nota}</span>`:'<span style="color:#bbb">—</span>'):'';
+    const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion||6)?'nota-ok':'nota-fail'}" title="${x.nota<(nota_aprobacion||6)?'Desaprobado':''}">${x.nota}${x.nota<(nota_aprobacion||6)?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:"";const notaCell=hasNota?`<td>${notaHtml}</td>`:"";
     const compBadge=canManageParticipants()
       ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" title="Clic para cambiar" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
@@ -2048,7 +2047,6 @@ async function submitEval(evalId,totalPqs){
   const nombre=document.getElementById('pub-nombre').value.trim();
   if(!legajo){alert('Ingresá tu legajo para continuar');return;}
   if(!nombre){alert('No se pudo validar el legajo. Verificá que sea correcto.');return;}
-  // Verificar que el empleado esté vigente si hay padrón
   if(padron.length>0){
     const emp=getPadronEmpleado(legajo);
     if(emp&&emp.estado&&emp.estado!=='Vigente'){alert('Tu legajo figura con estado "'+emp.estado+'". Contactá a RRHH.');return;}
@@ -2069,57 +2067,85 @@ async function submitEval(evalId,totalPqs){
     if(val===p.correcta)correctas++;
   }
   const puntaje=Math.round(correctas/pqs.length*10*10)/10;
-  try{
-    await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas,puntaje},'');
-    const ev=evaluaciones.find(e=>e.id===evalId);
-    const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
-    const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
-    const aprobado=puntaje>=nota_aprobacion;
-    // Auto-registrar como asistente si completó la evaluación
-    if(cap){
-      try{
-        const existing=await fetch(`${SUPA_URL}/rest/v1/asistentes?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`,{headers:H});
-        const existingData=await existing.json();
-        if(!existingData||!existingData.length){
-          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,completo:true,nota:puntaje,un:pubUN||'',sector:pubSec||'',cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval},'');
-        }else{
-          await api('PATCH','asistentes',{completo:true,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval},`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
-        }
-      }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
-    }
-    // Armar detalle de incorrectas
+  const ev=evaluaciones.find(e=>e.id===evalId);
+  const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
+  const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
+  const aprobado=puntaje>=nota_aprobacion;
+  // Registrar respuesta
+  try{ await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas,puntaje},''); }catch(e){ console.warn('Error registrando respuesta',e); }
+  // Control de intentos por sesión
+  const intentoKey='eval_intento_'+evalId+'_'+legajo;
+  const esSegundoIntento=sessionStorage.getItem(intentoKey)==='1';
+  if(!aprobado&&!esSegundoIntento){
+    // PRIMER DESAPROBADO: sin mostrar incorrectas, dar segunda oportunidad
+    sessionStorage.setItem(intentoKey,'1');
+    sessionStorage.setItem(intentoKey+'_nota',String(puntaje));
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'+
+      '<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'+
+      '<div class="result-score fail">'+puntaje+'/10</div>'+
+      '<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">&#10007; Desaprobado</div>'+
+      '<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'+
+        '<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">&#9888;&#65039; No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'+
+        '<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.<br>Revisá el material de lectura antes de volver a intentarlo.</div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:#888;margin-bottom:20px">'+correctas+' de '+pqs.length+' respuestas correctas en este intento</div>'+
+      '<button onclick="location.reload()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">&#128260; Volver a intentar</button>'+
+    '</div></div></div>';
+    return;
+  }
+  // APROBADO o SEGUNDO INTENTO
+  sessionStorage.removeItem(intentoKey);
+  const notaPrimerIntento=sessionStorage.getItem(intentoKey+'_nota');
+  sessionStorage.removeItem(intentoKey+'_nota');
+  // Respuestas incorrectas — solo mostrar en 2do intento desaprobado
+  let incorrectasHtml='';
+  if(!aprobado){
     const incorrectas=pqs.filter(p=>respuestas[p.id]!==p.correcta);
-    const incorrectasHtml=incorrectas.length===0?'':`
-      <div style="margin-top:20px;text-align:left;border-top:1px solid #e5e5e0;padding-top:16px">
-        <div style="font-size:13px;font-weight:700;color:#CC0000;margin-bottom:10px">❌ Respuestas incorrectas (${incorrectas.length})</div>
-        ${incorrectas.map((p,i)=>{
-          const opciones=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
-          const respondidaIdx=respuestas[p.id];
-          const correctaIdx=p.correcta;
-          const respondidaTxt=opciones[respondidaIdx]!==undefined?opciones[respondidaIdx]:'—';
-          const correctaTxt=opciones[correctaIdx]!==undefined?opciones[correctaIdx]:'—';
-          return`<div style="background:#FFF5F5;border:1px solid #FFD0D0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
-            <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">${i+1}. ${esc(p.enunciado||p.pregunta||'')}</div>
-            <div style="font-size:11px;color:#CC0000;margin-bottom:3px">✗ Tu respuesta: <span style="font-weight:600">${esc(respondidaTxt)}</span></div>
-            <div style="font-size:11px;color:#1D9E75">✓ Correcta: <span style="font-weight:600">${esc(correctaTxt)}</span></div>
-          </div>`;
-        }).join('')}
-      </div>`;
-    document.body.innerHTML=`<div class="eval-public-wrap">
-      <div class="eval-public-card">
-        <div class="result-card">
-          <div style="font-size:14px;color:#777">Resultado de ${esc(nombre)}</div>
-          <div class="result-score ${aprobado?'ok':'fail'}">${puntaje}/10</div>
-          <div style="font-size:15px;font-weight:600;color:${aprobado?'#1D9E75':'#E24B4A'};margin-bottom:8px">${aprobado?'✓ Aprobado':'✗ Desaprobado'}</div>
-          ${!aprobado?`<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:10px 14px;margin:8px 0 4px;font-size:14px;font-weight:700;color:#CC0000;letter-spacing:0.2px">⚠️ Debés repetir la evaluación para poder aprobarla.<br><span style="font-size:12px;font-weight:500;color:#AA0000">Revisá las respuestas incorrectas y volvé a intentarlo.</span></div>`:''}
-          <div style="font-size:13px;color:#777">${correctas} de ${pqs.length} respuestas correctas</div>
-          <div style="margin-top:8px;font-size:12px;color:#888">Tus respuestas fueron registradas correctamente.</div>
-          ${incorrectasHtml}
-        </div>
-      </div>
-    </div>`;
-  }catch(e){alert('Error al enviar. Intentá de nuevo.');}
+    incorrectasHtml=incorrectas.map((p,i)=>{
+      const opciones=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
+      const respondidaTxt=opciones[respuestas[p.id]]!==undefined?opciones[respuestas[p.id]]:'—';
+      const correctaTxt=opciones[p.correcta]!==undefined?opciones[p.correcta]:'—';
+      return'<div style="background:#FFF5F5;border:1px solid #FFD0D0;border-radius:8px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">'+(i+1)+'. '+esc(p.enunciado||p.pregunta||'')+'</div>'+
+        '<div style="font-size:11px;color:#CC0000;margin-bottom:3px">&#10007; Tu respuesta: <strong>'+esc(respondidaTxt)+'</strong></div>'+
+        '<div style="font-size:11px;color:#1D9E75">&#10003; Correcta: <strong>'+esc(correctaTxt)+'</strong></div>'+
+      '</div>';
+    }).join('');
+    if(incorrectasHtml) incorrectasHtml='<div style="margin-top:16px;text-align:left;border-top:1px solid #e5e5e0;padding-top:14px"><div style="font-size:13px;font-weight:700;color:#CC0000;margin-bottom:10px">&#10060; Respuestas incorrectas ('+incorrectas.length+')</div>'+incorrectasHtml+'</div>';
+  }
+  // Registrar/actualizar asistente
+  if(cap){
+    try{
+      const existing=await fetch(SUPA_URL+'/rest/v1/asistentes?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo),{headers:H});
+      const existingData=await existing.json();
+      const campos={completo:aprobado,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval};
+      if(!aprobado&&notaPrimerIntento){
+        campos.observaciones='1er intento: '+notaPrimerIntento+' | 2do intento: '+puntaje+' | Resultado: Desaprobado';
+      }
+      if(!existingData||!existingData.length){
+        await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,un:pubUN||'',sector:pubSec||'',...campos},'');
+      }else{
+        await api('PATCH','asistentes',campos,'?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo));
+      }
+    }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
+  }
+  document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'+
+    '<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'+
+    '<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'+
+    '<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'&#10003; Aprobado':'&#10007; Desaprobado')+'</div>'+
+    (aprobado
+      ?'<div style="font-size:13px;color:#777;margin-bottom:8px">'+correctas+' de '+pqs.length+' respuestas correctas</div><div style="margin-top:8px;font-size:12px;color:#888">&#9989; Tus respuestas fueron registradas correctamente.</div>'
+      :'<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:12px 14px;margin:8px 0 12px;text-align:left">'+
+          '<div style="font-size:14px;font-weight:700;color:#CC0000;margin-bottom:4px">&#128532; Lamentamos que no hayas podido aprobar</div>'+
+          '<div style="font-size:13px;color:#AA0000">Agotaste los dos intentos disponibles. Un superior evaluará la situación y coordinará una nueva instancia de capacitación cuando corresponda.</div>'+
+        '</div>'+
+        '<div style="font-size:12px;color:#888;margin-bottom:4px">'+correctas+' de '+pqs.length+' respuestas correctas</div>'+
+        (notaPrimerIntento?'<div style="font-size:11px;color:#aaa;margin-bottom:8px">1° intento: '+parseFloat(notaPrimerIntento)+'/10 &middot; 2° intento: '+puntaje+'/10</div>':'')+
+        incorrectasHtml
+    )+
+  '</div></div></div>';
 }
+
 
 // CRUD CAPS
 
@@ -2569,61 +2595,53 @@ function renderCharts(){
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
   const textColor=isDark?'#aaa':'#888';
 
-  // Helper: destruir instancia existente y resetear el canvas
-  function resetCanvas(id){
-    const el=document.getElementById(id);
-    if(!el) return null;
-    // Destruir instancia Chart.js si existe
-    const existing=Chart.getChart(el);
-    if(existing) existing.destroy();
-    // Clonar el canvas para limpiar cualquier estado interno
-    const parent=el.parentNode;
-    const clone=el.cloneNode(false);
-    parent.replaceChild(clone,el);
-    return clone;
+  function makeChart(canvasId, dataSpanId, builder){
+    const canvas=document.getElementById(canvasId);
+    const span=document.getElementById(dataSpanId);
+    if(!canvas||!span) return;
+    try{
+      // Destruir instancia previa de Chart.js si existe
+      const prev=Chart.getChart(canvasId);
+      if(prev) prev.destroy();
+      const raw=span.textContent.trim();
+      if(!raw||raw==='null'||raw==='[]') return;
+      const data=JSON.parse(raw);
+      builder(canvas, data);
+    }catch(e){ console.warn(canvasId+' error:', e); }
   }
 
-  // ── Gráfico de línea — Evolución mensual ────────────────────────────────
-  const dmEl=document.getElementById('chart-data-linea');
-  const ctxL=resetCanvas('chart-linea');
-  if(ctxL&&dmEl){
-    try{
-      const dm=JSON.parse(dmEl.textContent||'[]');
-      // Si todos los meses tienen 0 caps, mostrar aviso en lugar del chart vacío
-      const hayDatos=dm.some(d=>d.planificadas>0);
-      if(!hayDatos){
-        ctxL.parentNode.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">Sin datos para el año actual con los filtros activos</p>';
-      } else {
-        new Chart(ctxL,{type:'line',data:{
-          labels:dm.map(d=>d.m),
-          datasets:[
-            {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
-            {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
-          ]
-        },options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
-      }
-    }catch(e){console.warn('chart-linea error',e);}
-  }
+  makeChart('chart-linea','chart-data-linea',(canvas,dm)=>{
+    const hayDatos=dm.some(d=>d.planificadas>0);
+    if(!hayDatos){
+      const p=document.createElement('p');
+      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:8px';
+      p.textContent='Sin capacitaciones planificadas para este año con los filtros activos';
+      canvas.replaceWith(p); return;
+    }
+    new Chart(canvas,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
+      {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
+      {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
+    ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},
+              x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+  });
 
-  // ── Gráfico de barras — Efectividad de evaluaciones ─────────────────────
-  const edEl=document.getElementById('chart-data-eval');
-  const ctxE=resetCanvas('chart-eval');
-  if(ctxE&&edEl){
-    try{
-      const ed=JSON.parse(edEl.textContent||'[]');
-      if(!ed.length){
-        ctxE.parentNode.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">Sin evaluaciones con notas registradas</p>';
-      } else {
-        new Chart(ctxE,{type:'bar',data:{
-          labels:ed.map(d=>d.titulo),
-          datasets:[
-            {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
-            {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
-          ]
-        },options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
-      }
-    }catch(e){console.warn('chart-eval error',e);}
-  }
+  makeChart('chart-eval','chart-data-eval',(canvas,ed)=>{
+    if(!ed.length){
+      const p=document.createElement('p');
+      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:8px';
+      p.textContent='Sin evaluaciones con notas registradas';
+      canvas.replaceWith(p); return;
+    }
+    new Chart(canvas,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
+      {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
+      {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
+    ]},options:{indexAxis:'y',responsive:true,
+      plugins:{legend:{labels:{font:{size:11},color:textColor}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},
+      scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
+              x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+  });
 }
 
 function openForzarCumplimiento(capId){
@@ -2947,8 +2965,9 @@ function getIndicadoresData(){
       return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
     });
     const objetivo = capsDelMes.reduce((s,cap) => {
-      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
-      return s + esp * Number(cap.duracion||1);
+      // HH objetivo = duración × posibles (lista) — cantidad real de asistentes cargados
+      const posibles = getA(cap.id).length || (cap.participantes_esperados||0);
+      return s + posibles * Number(cap.duracion||1);
     }, 0);
     const realizado = capsDelMes.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
       const comp = getA(cap.id).filter(a=>a.completo).length;

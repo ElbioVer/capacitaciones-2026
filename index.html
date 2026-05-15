@@ -784,12 +784,15 @@ function renderUN(){
     });
     const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
 
-    return`<div class="plan-block">
-      <div class="plan-block-title">🏢 ${esc(un.nombre)}
-        <span style="font-size:11px;font-weight:400;color:#888">· ${activosUN} empleados activos · ${todasCapsUN.length} cap.</span>
+    return`<div class="plan-block" style="padding:10px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:#1A2F6E">🏢 ${esc(un.nombre)}</div>
+        <span style="font-size:11px;color:#888">${activosUN} empleados · ${todasCapsUN.length} cap.</span>
       </div>
-      ${deptosUN.length===0?'<p style="font-size:11px;color:#bbb">Sin departamentos en el padrón</p>':deptoRows}
-      ${sinDepRows}
+      <div style="max-height:420px;overflow-y:auto;padding-right:2px">
+        ${deptosUN.length===0?'<p style="font-size:11px;color:#bbb">Sin departamentos en el padrón</p>':deptoRows}
+        ${sinDepRows}
+      </div>
     </div>`;
   }).join('');
 }
@@ -848,14 +851,22 @@ function renderResumen(){
 
   // Datos para grafico de linea mensual
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const thisYear=new Date().getFullYear();
+  function parseFechaResumen(fecha){
+    if(!fecha) return null;
+    const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(fecha);
+    if(iso) return{y:parseInt(iso[1]),m:parseInt(iso[2])};
+    const dmy=/^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(fecha);
+    if(dmy) return{y:parseInt(dmy[3]),m:parseInt(dmy[2])};
+    return null;
+  }
   const dataMeses=meses.map((m,i)=>{
     const mes=i+1;
-    // Incluir cap en el mes según su fecha_fin (o calculada), no su fecha de realización
     const capsDelMes=f.filter(c=>{
       const ff=fechaFinCap(c)||c.fecha;
-      if(!ff) return false;
-      const cm=parseInt(ff.split('-')[1]);
-      return cm===mes;
+      const p=parseFechaResumen(ff);
+      if(!p) return false;
+      return p.m===mes&&p.y===thisYear;
     });
     const realizadas=capsDelMes.filter(c=>estadoCap(c)==='Realizada').length;
     const vencidas=capsDelMes.filter(c=>estadoCap(c)==='Vencida').length;
@@ -863,17 +874,15 @@ function renderResumen(){
     return{m,realizadas,vencidas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
   });
 
-  // Datos para grafico de efectividad
-  const capsConEval=f.filter(c=>{
-    const t=getTipo(c.tipo_codigo);
-    return t.tiene_evaluacion;
-  });
-  const evalData=capsConEval.map(c=>{
+  // Datos para grafico de efectividad — todas las caps con al menos un asistente con nota
+  const evalData=f.map(c=>{
     const a=getA(c.id).filter(x=>x.nota!=null);
-    const prom=a.length?(a.reduce((s,x)=>s+x.nota,0)/a.length):null;
-    const apr=a.length?Math.round(a.filter(x=>x.nota>=(c.nota_aprobacion||6)).length/a.length*100):null;
-    return{titulo:c.titulo.length>18?c.titulo.substring(0,18)+'…':c.titulo,prom,apr,tipo:c.tipo_codigo};
-  }).filter(x=>x.prom!==null);
+    if(!a.length) return null;
+    const prom=a.reduce((s,x)=>s+x.nota,0)/a.length;
+    const apr=Math.round(a.filter(x=>x.nota>=(c.nota_aprobacion||6)).length/a.length*100);
+    const label=c.titulo.length>22?c.titulo.substring(0,22)+'…':c.titulo;
+    return{titulo:label,prom,apr,tipo:c.tipo_codigo};
+  }).filter(Boolean);
 
   return`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">

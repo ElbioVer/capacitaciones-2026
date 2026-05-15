@@ -65,6 +65,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .filter-bar{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;padding:6px 8px;align-items:center}
   .filter-bar label{font-size:10px;white-space:nowrap}
   .filter-bar select{font-size:10px;padding:3px 4px;width:100%}
+  .filter-bar div[style*="flex:1"]{grid-column:1/-1;max-width:100% !important}
   .stats-bar{padding:4px 8px;gap:3px}
   .stat-num{font-size:18px !important}
   .stat-lbl{font-size:9px !important}
@@ -320,6 +321,14 @@ select.form-input{cursor:pointer}
     <select id="flt-un" onchange="applyFilters()"><option value="">Todas</option></select>
     <label>Depto</label>
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
+    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:160px;max-width:320px">
+      <input id="flt-search" type="text" placeholder="🔍 Buscar por título, UN, Redmine…" value=""
+        oninput="applyFilters()"
+        style="width:100%;font-size:11px;padding:4px 9px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
+        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#ddd'">
+      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
+        style="display:none;background:none;border:none;cursor:pointer;font-size:14px;color:#bbb;padding:2px 4px;line-height:1">×</button>
+    </div>
   </div>
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
@@ -510,10 +519,15 @@ function getEval(capId){return evaluaciones.find(e=>e.capacitacion_id===capId);}
 function getTipo(codigo){return tipos.find(t=>t.codigo===codigo)||{codigo:'OTRO',nombre:'Otro',tiene_evaluacion:false,tiene_repositorio:false};}
 
 function getFiltered(){
+  const q=_searchQuery.toLowerCase().trim();
   return caps.filter(c=>{
     const _e=estadoCap(c);
     if(fltTipo&&c.tipo_codigo!==fltTipo) return false;
     if(fltBim&&c.bimestre!==fltBim) return false;
+    if(q){
+      const haystack=[c.titulo,c.un,c.departamento,c.codigo_redmine,c.tipo_codigo,c.area,c.instructor,c.bimestre].filter(Boolean).join(' ').toLowerCase();
+      if(!haystack.includes(q)) return false;
+    }
     if(fltUN||fltSec){
       if(fltUN&&c.un){
         if(c.un!==fltUN) return false;
@@ -544,9 +558,22 @@ function applyFilters(){
   fltBim=document.getElementById('flt-bim').value;
   const prevUN=fltUN;
   fltUN=document.getElementById('flt-un').value;
-  // Si cambió la UN, resetear depto y refrescar opciones
   if(prevUN!==fltUN){fltSec='';populateFilters();}
   else{fltSec=document.getElementById('flt-sec').value;}
+  const srch=document.getElementById('flt-search');
+  if(srch){
+    _searchQuery=srch.value;
+    const clr=document.getElementById('flt-search-clear');
+    if(clr) clr.style.display=_searchQuery?'inline':'none';
+  }
+  renderContent();
+}
+function clearSearch(){
+  _searchQuery='';
+  const srch=document.getElementById('flt-search');
+  if(srch) srch.value='';
+  const clr=document.getElementById('flt-search-clear');
+  if(clr) clr.style.display='none';
   renderContent();
 }
 
@@ -2535,30 +2562,59 @@ function renderCharts(){
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
   const textColor=isDark?'#aaa':'#888';
 
-  const ctxL=document.getElementById('chart-linea');
+  // Helper: destruir instancia existente y resetear el canvas
+  function resetCanvas(id){
+    const el=document.getElementById(id);
+    if(!el) return null;
+    // Destruir instancia Chart.js si existe
+    const existing=Chart.getChart(el);
+    if(existing) existing.destroy();
+    // Clonar el canvas para limpiar cualquier estado interno
+    const parent=el.parentNode;
+    const clone=el.cloneNode(false);
+    parent.replaceChild(clone,el);
+    return clone;
+  }
+
+  // ── Gráfico de línea — Evolución mensual ────────────────────────────────
   const dmEl=document.getElementById('chart-data-linea');
+  const ctxL=resetCanvas('chart-linea');
   if(ctxL&&dmEl){
     try{
-      const dm=JSON.parse(dmEl.textContent);
-      if(window._chartLinea) window._chartLinea.destroy();
-      window._chartLinea=new Chart(ctxL,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
-        {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
-        {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
-      ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+      const dm=JSON.parse(dmEl.textContent||'[]');
+      // Si todos los meses tienen 0 caps, mostrar aviso en lugar del chart vacío
+      const hayDatos=dm.some(d=>d.planificadas>0);
+      if(!hayDatos){
+        ctxL.parentNode.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">Sin datos para el año actual con los filtros activos</p>';
+      } else {
+        new Chart(ctxL,{type:'line',data:{
+          labels:dm.map(d=>d.m),
+          datasets:[
+            {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
+            {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
+          ]
+        },options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+      }
     }catch(e){console.warn('chart-linea error',e);}
   }
 
-  const ctxE=document.getElementById('chart-eval');
+  // ── Gráfico de barras — Efectividad de evaluaciones ─────────────────────
   const edEl=document.getElementById('chart-data-eval');
+  const ctxE=resetCanvas('chart-eval');
   if(ctxE&&edEl){
     try{
-      const ed=JSON.parse(edEl.textContent);
-      if(!ed.length)return;
-      if(window._chartEval) window._chartEval.destroy();
-      window._chartEval=new Chart(ctxE,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
-        {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
-        {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
-      ]},options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+      const ed=JSON.parse(edEl.textContent||'[]');
+      if(!ed.length){
+        ctxE.parentNode.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">Sin evaluaciones con notas registradas</p>';
+      } else {
+        new Chart(ctxE,{type:'bar',data:{
+          labels:ed.map(d=>d.titulo),
+          datasets:[
+            {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
+            {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
+          ]
+        },options:{indexAxis:'y',responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+      }
     }catch(e){console.warn('chart-eval error',e);}
   }
 }

@@ -30,6 +30,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .filter-bar label{font-size:11px;color:#888;white-space:nowrap}
 .filter-bar select{font-size:11px;padding:4px 7px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;cursor:pointer}
 .filter-bar select:focus{outline:none;border-color:#1D9E75}
+.search-bar{padding:7px 16px 6px;background:#fff;border-bottom:1px solid #e5e5e0;flex-shrink:0}
 .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:8px 16px;background:#fff;border-bottom:1px solid #e5e5e0}
 .stat{background:#f4f4f2;border-radius:8px;padding:7px;text-align:center}
 .stat-num{font-size:18px;font-weight:600;color:#111}
@@ -65,7 +66,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .filter-bar{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;padding:6px 8px;align-items:center}
   .filter-bar label{font-size:10px;white-space:nowrap}
   .filter-bar select{font-size:10px;padding:3px 4px;width:100%}
-  .filter-bar div[style*="flex:1"]{grid-column:1/-1;max-width:100% !important}
+  .search-bar{padding:6px 8px}
   .stats-bar{padding:4px 8px;gap:3px}
   .stat-num{font-size:18px !important}
   .stat-lbl{font-size:9px !important}
@@ -321,14 +322,6 @@ select.form-input{cursor:pointer}
     <select id="flt-un" onchange="applyFilters()"><option value="">Todas</option></select>
     <label>Depto</label>
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
-    <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:160px;max-width:320px">
-      <input id="flt-search" type="text" placeholder="🔍 Buscar por título, UN, Redmine…" value=""
-        oninput="applyFilters()"
-        style="width:100%;font-size:11px;padding:4px 9px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
-        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#ddd'">
-      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
-        style="display:none;background:none;border:none;cursor:pointer;font-size:14px;color:#bbb;padding:2px 4px;line-height:1">×</button>
-    </div>
   </div>
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
@@ -348,6 +341,17 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
+  </div>
+  <div class="search-bar" id="search-bar-wrap">
+    <div style="position:relative;display:flex;align-items:center">
+      <span style="position:absolute;left:10px;color:#bbb;font-size:13px;pointer-events:none">🔍</span>
+      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…"
+        oninput="applyFilters()"
+        style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
+        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#e0e0dc'">
+      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
+        style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
+    </div>
   </div>
   <div class="content" id="content"><div class="loading">Cargando...</div></div>
   </div>
@@ -656,6 +660,9 @@ function switchTab(t){
     if(t!=='padron') window._padronFiltro='todos';
     currentTab=t;
     ['lista','tipo','bim','un','resumen','indicadores','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+    // Mostrar buscador solo en tabs de listas de capacitaciones
+    const sbWrap=document.getElementById('search-bar-wrap');
+    if(sbWrap) sbWrap.style.display=['lista','tipo','bim','un'].includes(t)?'block':'none';
     renderContent();
   }catch(err){
     console.error('switchTab error:',err);

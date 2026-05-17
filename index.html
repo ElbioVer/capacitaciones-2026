@@ -926,15 +926,25 @@ function renderResumen(){
     return{m,realizadas,vencidas,planificadas,pct:planificadas?Math.round(realizadas/planificadas*100):null};
   });
 
-  // Datos para grafico de efectividad — todas las caps con al menos un asistente con nota
-  const evalData=f.map(c=>{
-    const a=getA(c.id).filter(x=>x.nota!=null);
-    if(!a.length) return null;
-    const prom=a.reduce((s,x)=>s+x.nota,0)/a.length;
-    const apr=Math.round(a.filter(x=>x.nota>=(c.nota_aprobacion||6)).length/a.length*100);
-    const label=c.titulo.length>22?c.titulo.substring(0,22)+'…':c.titulo;
-    return{titulo:label,prom,apr,tipo:c.tipo_codigo};
-  }).filter(Boolean);
+  // Datos consolidados para efectividad — agrupados por tipo de cap
+  const todosConNota=f.flatMap(c=>getA(c.id).filter(x=>x.nota!=null).map(x=>({...x,nota_aprobacion:c.nota_aprobacion||6,tipo:c.tipo_codigo})));
+  // Resumen global
+  const totalEval=todosConNota.length;
+  const promGlobal=totalEval?Math.round(todosConNota.reduce((s,x)=>s+x.nota,0)/totalEval*10)/10:0;
+  const aprGlobal=totalEval?Math.round(todosConNota.filter(x=>x.nota>=x.nota_aprobacion).length/totalEval*100):0;
+  // Agrupado por tipo
+  const tiposConEval=[...new Set(todosConNota.map(x=>x.tipo))].filter(Boolean);
+  const evalData=tiposConEval.length>0
+    ?[
+        {titulo:'📊 General',prom:promGlobal,apr:aprGlobal},
+        ...tiposConEval.map(tipo=>{
+          const rows=todosConNota.filter(x=>x.tipo===tipo);
+          const prom=Math.round(rows.reduce((s,x)=>s+x.nota,0)/rows.length*10)/10;
+          const apr=Math.round(rows.filter(x=>x.nota>=x.nota_aprobacion).length/rows.length*100);
+          return{titulo:tipo,prom,apr};
+        })
+      ]
+    :(totalEval?[{titulo:'General',prom:promGlobal,apr:aprGlobal}]:[]);
 
   return`<div class="plan-block">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
@@ -967,12 +977,14 @@ function renderResumen(){
     <div class="detail-row"><span class="detail-key">UNs activas</span><span class="detail-val">${uns.length}</span></div>
   </div>
   <div class="plan-block">
-    <div class="plan-block-title" style="margin-bottom:12px">Evolución de cumplimiento mensual</div>
-    <canvas id="chart-linea" height="180"></canvas>
-  </div>
+  <div class="plan-block" style="padding:10px 14px">
+    <div class="plan-block-title" style="margin-bottom:6px">Evolución de cumplimiento mensual</div>
+    <canvas id="chart-linea" height="120"></canvas>
   ${evalData.length?`<div class="plan-block">
-    <div class="plan-block-title" style="margin-bottom:12px">Efectividad de evaluaciones</div>
-    <canvas id="chart-eval" height="${Math.max(160,evalData.length*44)}"></canvas>
+    <div class="plan-block-title" style="margin-bottom:8px">Efectividad de evaluaciones
+      <span style="font-size:10px;font-weight:400;color:#888">${totalEval} evaluados</span>
+    </div>
+    <canvas id="chart-eval" height="140"></canvas>
   </div>`:`<div class="plan-block">
     <div class="plan-block-title" style="margin-bottom:8px">Efectividad de evaluaciones</div>
     <p style="font-size:11px;color:#bbb;text-align:center;padding:12px 0">Sin evaluaciones con notas registradas aún</p>
@@ -1111,7 +1123,12 @@ function updatePadronPreview(){
   if(!prev) return;
   const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
   const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
-  if(!un&&!dep){prev.style.display='none';return;}
+  const lblTomar=document.getElementById('lbl-tomar-padron');
+  if(!un&&!dep){
+    prev.style.display='none';
+    if(lblTomar) lblTomar.style.display='none';
+    return;
+  }
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
     if(un&&p.un!==un) return false;
@@ -1129,6 +1146,43 @@ function updatePadronPreview(){
       <input type="checkbox" id="chk-cargar-padron" checked style="width:15px;height:15px;cursor:pointer">
       Cargar estos participantes a la lista al guardar
     </label>`:'');
+  // Mostrar el checkbox "usar cantidad del padrón como meta"
+  if(lblTomar&&n>0){
+    lblTomar.style.display='flex';
+    // Actualizar el campo f-par si el checkbox está marcado
+    const chkTomar=document.getElementById('chk-tomar-padron');
+    if(chkTomar&&chkTomar.checked){
+      const parInput=document.getElementById('f-par');
+      if(parInput) parInput.value=n;
+    }
+  } else if(lblTomar){
+    lblTomar.style.display='none';
+  }
+}
+
+function toggleParField(){
+  const chk=document.getElementById('chk-tomar-padron');
+  const inp=document.getElementById('f-par');
+  if(!chk||!inp) return;
+  if(chk.checked){
+    // Calcular activos del padrón según selección actual
+    const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
+    const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
+    const n=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(un&&p.un!==un) return false;
+      if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+      return true;
+    }).length;
+    inp.value=n;
+    inp.readOnly=true;
+    inp.style.background='#f4f4f2';
+    inp.title='Tomado del padrón — destildá para ingresar manualmente';
+  } else {
+    inp.readOnly=false;
+    inp.style.background='';
+    inp.title='';
+  }
 }
 
 
@@ -2523,7 +2577,17 @@ function showForm(c){
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Duración (hs)</label><input class="form-input" id="f-dur" type="number" min="0.5" step="0.5" value="${c?c.duracion:4}"></div>
-      <div class="form-group"><label class="form-label">Participantes esperados</label><input class="form-input" id="f-par" type="number" min="1" value="${c?Math.max(getA(c.id).length,c.participantes_esperados||0):10}"><div style="font-size:10px;color:#888;margin-top:2px">${c&&getA(c.id).length?`Asistentes cargados: ${getA(c.id).length}`:""}</div></div>
+      <div class="form-group">
+      <label class="form-label">Participantes esperados</label>
+      <div id="par-wrapper">
+        <input class="form-input" id="f-par" type="number" min="1" value="${c?Math.max(getA(c.id).length,c.participantes_esperados||0):10}" style="margin-bottom:5px">
+        <div style="font-size:10px;color:#888;margin-bottom:5px">${c&&getA(c.id).length?`Asistentes cargados: ${getA(c.id).length}`:''}</div>
+        <label id="lbl-tomar-padron" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:600;color:#185FA5">
+          <input type="checkbox" id="chk-tomar-padron" style="width:14px;height:14px;cursor:pointer" onchange="toggleParField()">
+          Usar cantidad del padrón como meta
+        </label>
+      </div>
+    </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
@@ -2883,13 +2947,15 @@ function renderCharts(){
       canvas.replaceWith(p); return;
     }
     new Chart(canvas,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
-      {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:'rgba(127,119,221,0.75)',borderColor:'#7F77DD',borderWidth:1.5,borderRadius:4},
-      {label:'% Aprobados',data:ed.map(d=>d.apr||0),backgroundColor:'rgba(29,158,117,0.65)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4}
-    ]},options:{indexAxis:'y',responsive:true,
-      plugins:{legend:{labels:{font:{size:11},color:textColor}},
-        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.x+'/10':ctx.parsed.x+'%')}}},
-      scales:{y:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
-              x:{beginAtZero:true,max:100,ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
+      {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:['rgba(29,158,117,0.8)','rgba(127,119,221,0.75)','rgba(133,183,235,0.8)','rgba(239,159,39,0.75)','rgba(226,75,74,0.7)'].slice(0,ed.length),borderColor:['#1D9E75','#7F77DD','#85B7EB','#EF9F27','#E24B4A'].slice(0,ed.length),borderWidth:1.5,borderRadius:5,yAxisID:'y'},
+      {label:'% Aprobados',data:ed.map(d=>d.apr||0),type:'line',borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',borderWidth:2,pointRadius:5,pointBackgroundColor:'#185FA5',tension:0.3,fill:true,yAxisID:'y1'}
+    ]},options:{responsive:true,plugins:{
+      legend:{labels:{font:{size:10},color:textColor}},
+      tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.y+'/10':ctx.parsed.y+'%')}}
+    },scales:{
+      y:{beginAtZero:true,max:10,title:{display:true,text:'Nota /10',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}},
+      y1:{beginAtZero:true,max:100,position:'right',title:{display:true,text:'% Aprobados',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
+    }}});
   });
 }
 

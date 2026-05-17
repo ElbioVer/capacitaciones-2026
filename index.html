@@ -1012,7 +1012,6 @@ function renderResumen(){
 
 async function cargarParticipantesDesdePadron(capId, un, departamento){
   if(!un&&!departamento) return;
-  // Filtrar activos por UN y opcionalmente por departamento
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
     if(un&&p.un!==un) return false;
@@ -1023,13 +1022,13 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
     return true;
   });
   if(!activos.length){
-    if(un) toast(`Sin empleados activos en el padrón para ${departamento?departamento:un}`);
+    if(un) toast(`Sin empleados activos en el padrón para ${departamento||un}`);
     return;
   }
   try{
-    const existentes=getA(capId).map(a=>String(a.legajo));
+    const existentes=new Set(getA(capId).map(a=>String(a.legajo)));
     const nuevos=activos
-      .filter(p=>!existentes.includes(String(p.legajo)))
+      .filter(p=>!existentes.has(String(p.legajo)))
       .map(p=>({
         capacitacion_id:capId,
         legajo:String(p.legajo),
@@ -1043,18 +1042,30 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
         en_meta:true
       }));
     if(!nuevos.length){toast('Todos los empleados ya estaban en la lista');return;}
-    const ins=await api('POST','asistentes',nuevos,'');
-    if(ins){
-      const arr=Array.isArray(ins)?ins:[ins];
-      asistentes=[...asistentes,...arr];
-      // Actualizar participantes_esperados: getA ya incluye los nuevos
-      const totalAsis=getA(capId).length;
-      await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
-      const capIdx=caps.findIndex(x=>x.id===capId);
-      if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
-      toast(`${nuevos.length} participantes cargados — Esperados: ${totalAsis}`);
+    // Insertar en lotes de 50 para evitar límites de Supabase
+    const LOTE=50;
+    let insertados=0;
+    for(let i=0;i<nuevos.length;i+=LOTE){
+      const lote=nuevos.slice(i,i+LOTE);
+      const ins=await api('POST','asistentes',lote,'');
+      if(ins){
+        const arr=Array.isArray(ins)?ins:[ins];
+        asistentes=[...asistentes,...arr];
+        insertados+=arr.length;
+      }
+      // Mostrar progreso si hay muchos
+      if(nuevos.length>LOTE) toast(`Cargando... ${Math.min(insertados,nuevos.length)}/${nuevos.length}`);
     }
-  }catch(e){console.warn('Error cargando participantes desde padrón:',e);}
+    // Actualizar participantes_esperados con el total real
+    const totalAsis=getA(capId).length;
+    await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+    const capIdx=caps.findIndex(x=>x.id===capId);
+    if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
+    toast(`✓ ${insertados} participantes cargados — Meta: ${totalAsis}`);
+  }catch(e){
+    console.warn('Error cargando participantes desde padrón:',e);
+    toast('Error al cargar participantes. Verificá la conexión.');
+  }
 }
 
 
@@ -1661,15 +1672,28 @@ function buildDetail(id){
   const _id=Number(id);const c=caps.find(x=>x.id===_id);if(!c)return;
   const t=getTipo(c.tipo_codigo);
   const a=getA(id),comp=a.filter(x=>x.completo).length;
-  // Separar entre asistentes en meta (en_meta!==false) y externos (en_meta===false)
-  const aMeta=a.filter(x=>x.en_meta!==false);     // cargados desde padrón o papel
-  const aExt=a.filter(x=>x.en_meta===false);       // llegaron por evaluación sin estar en lista
-  const posibles=aMeta.length;                      // posibles = solo los de la meta
+  const aMeta=a.filter(x=>x.en_meta!==false);
+  const aExt=a.filter(x=>x.en_meta===false);
+  const posibles=aMeta.length;
   const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
   const compMeta=aMeta.filter(x=>x.completo).length;
   const pct=esp?Math.round(compMeta/esp*100):0;
-  const faltantesReal=Math.max(0,esp-compMeta);    // faltantes = en meta que no completaron
   const nota_aprobacion=c.nota_aprobacion||6;
+
+  // Faltantes reales: si hay padrón y UN/Depto, contar activos del padrón que no completaron
+  let faltantesReal=0;
+  if(padron.length&&(c.un||c.departamento)){
+    const completaron=new Set(a.filter(x=>x.completo).map(x=>String(x.legajo)));
+    const activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(c.un&&p.un!==c.un) return false;
+      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      return true;
+    });
+    faltantesReal=activosPadron.filter(p=>!completaron.has(String(p.legajo))).length;
+  } else {
+    faltantesReal=Math.max(0,esp-compMeta);
+  }
 
   // tabla asistentes
   const hasNota=t.tiene_evaluacion;
@@ -2289,15 +2313,65 @@ function exportPlantillaAsistentes(capId){
 
 function exportFalt(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
-  // Faltantes = en meta (en_meta!==false) que no completaron
-  const falt=getA(capId).filter(a=>a.en_meta!==false&&!a.completo);
-  if(!falt.length){toast('No hay faltantes en la meta');return;}
-  const rows=falt.map(a=>({'#Redmine':c.codigo_redmine||'','Legajo':a.legajo,'Nombre':a.nombre,'CUIL':a.cuil||'','UN':a.un||'','Departamento':a.departamento||a.sector||'','Sector':a.sector||'','Estado':'Pendiente','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''}));
-  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:12},{wch:35},{wch:10},{wch:10},{wch:22}];
+  const aList=getA(capId);
+  // Legajos que ya completaron
+  const completaron=new Set(aList.filter(a=>a.completo).map(a=>String(a.legajo)));
+
+  // Estrategia: si la cap tiene UN/Depto y hay padrón, los faltantes son
+  // todos los activos del padrón de esa UN/Depto que no completaron.
+  // Si no hay padrón o no tiene UN, usamos la lista de asistentes no completados.
+  let falt=[];
+  if(padron.length&&(c.un||c.departamento)){
+    const activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(c.un&&p.un!==c.un) return false;
+      if(c.departamento){
+        const d=p.departamento||p.datos_extra?.Departamento||'';
+        if(d!==c.departamento) return false;
+      }
+      return true;
+    });
+    // Faltante = activo en el padrón que no completó la capacitación
+    falt=activosPadron
+      .filter(p=>!completaron.has(String(p.legajo)))
+      .map(p=>{
+        // Buscar si tiene un registro parcial en la lista
+        const reg=aList.find(a=>String(a.legajo)===String(p.legajo));
+        return{
+          '#Redmine':c.codigo_redmine||'',
+          'Legajo':p.legajo,
+          'Nombre':p.nombre,
+          'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+          'UN':p.un||'',
+          'Departamento':p.departamento||p.datos_extra?.Departamento||'',
+          'Sector':p.sector||'',
+          'Estado Padrón':p.estado||'Vigente',
+          'Estado Capacitación':reg?'Pendiente':'Sin registrar',
+          'Capacitación':c.titulo,
+          'Tipo':c.tipo_codigo||'',
+          'Fecha':c.fecha?fmtF(c.fecha):'',
+          'Bimestre':c.bimestre||''
+        };
+      });
+  } else {
+    // Sin padrón: faltantes son los de la lista que no completaron
+    falt=aList.filter(a=>!a.completo).map(a=>({
+      '#Redmine':c.codigo_redmine||'',
+      'Legajo':a.legajo,'Nombre':a.nombre,
+      'CUIL':a.cuil||'','UN':a.un||'',
+      'Departamento':a.departamento||a.sector||'','Sector':a.sector||'',
+      'Estado Padrón':'','Estado Capacitación':'Pendiente',
+      'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'',
+      'Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''
+    }));
+  }
+
+  if(!falt.length){toast('No hay faltantes — todos completaron');return;}
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(falt);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:14},{wch:16},{wch:35},{wch:10},{wch:10},{wch:22}];
   XLSX.utils.book_append_sheet(wb,ws,'Faltantes');
   XLSX.writeFile(wb,`faltantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
-  toast('Excel descargado');
+  toast(`Excel con ${falt.length} faltantes descargado`);
 }
 
 function exportAll(capId){

@@ -1146,15 +1146,11 @@ function updatePadronPreview(){
       <input type="checkbox" id="chk-cargar-padron" checked style="width:15px;height:15px;cursor:pointer">
       Cargar estos participantes a la lista al guardar
     </label>`:'');
-  // Mostrar el checkbox "usar cantidad del padrón como meta"
+  // Actualizar el campo f-par si el checkbox de meta está marcado
   if(lblTomar&&n>0){
     lblTomar.style.display='flex';
-    // Actualizar el campo f-par si el checkbox está marcado
     const chkTomar=document.getElementById('chk-tomar-padron');
-    if(chkTomar&&chkTomar.checked){
-      const parInput=document.getElementById('f-par');
-      if(parInput) parInput.value=n;
-    }
+    if(chkTomar&&chkTomar.checked) toggleParField();
   } else if(lblTomar){
     lblTomar.style.display='none';
   }
@@ -1165,23 +1161,41 @@ function toggleParField(){
   const inp=document.getElementById('f-par');
   if(!chk||!inp) return;
   if(chk.checked){
-    // Calcular activos del padrón según selección actual
     const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
     const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
-    const n=padron.filter(p=>{
+    // Activos del padrón según UN/Depto
+    const activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(un&&p.un!==un) return false;
       if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
       return true;
-    }).length;
-    inp.value=n;
+    });
+    const legajosPadron=new Set(activosPadron.map(p=>String(p.legajo)));
+    // Sumar los que ya completaron la capacitación pero no están en el padrón activo
+    // (ej: dados de baja después de completarla)
+    const wrapper=document.getElementById('par-wrapper');
+    const capId=wrapper?Number(wrapper.dataset.capid)||null:null;
+    const completadosExtra=capId
+      ?getA(capId).filter(a=>a.completo&&!legajosPadron.has(String(a.legajo))).length
+      :0;
+    const total=activosPadron.length+completadosExtra;
+    inp.value=total;
     inp.readOnly=true;
     inp.style.background='#f4f4f2';
-    inp.title='Tomado del padrón — destildá para ingresar manualmente';
+    const desglose=completadosExtra>0
+      ?`Padrón activo: ${activosPadron.length} + ya completaron (no en padrón): ${completadosExtra}`
+      :`${total} del padrón activo${dep?' en '+dep:un?' en '+un:''}`;
+    inp.title=desglose;
+    // Mostrar desglose debajo del campo
+    let nota=document.getElementById('par-nota');
+    if(!nota){nota=document.createElement('div');nota.id='par-nota';nota.style.cssText='font-size:10px;color:#185FA5;margin-top:3px';inp.parentNode.insertBefore(nota,inp.nextSibling);}
+    nota.textContent=desglose;
   } else {
     inp.readOnly=false;
     inp.style.background='';
     inp.title='';
+    const nota=document.getElementById('par-nota');
+    if(nota) nota.remove();
   }
 }
 
@@ -2579,7 +2593,7 @@ function showForm(c){
       <div class="form-group"><label class="form-label">Duración (hs)</label><input class="form-input" id="f-dur" type="number" min="0.5" step="0.5" value="${c?c.duracion:4}"></div>
       <div class="form-group">
       <label class="form-label">Participantes esperados</label>
-      <div id="par-wrapper">
+      <div id="par-wrapper" data-capid="${c?c.id:''}">
         <input class="form-input" id="f-par" type="number" min="1" value="${c?Math.max(getA(c.id).length,c.participantes_esperados||0):10}" style="margin-bottom:5px">
         <div style="font-size:10px;color:#888;margin-bottom:5px">${c&&getA(c.id).length?`Asistentes cargados: ${getA(c.id).length}`:''}</div>
         <label id="lbl-tomar-padron" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:600;color:#185FA5">

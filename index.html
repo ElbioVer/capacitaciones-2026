@@ -1671,56 +1671,107 @@ function openDetail(id){
 function buildDetail(id){
   const _id=Number(id);const c=caps.find(x=>x.id===_id);if(!c)return;
   const t=getTipo(c.tipo_codigo);
-  const a=getA(id),comp=a.filter(x=>x.completo).length;
+  const a=getA(id);
   const aMeta=a.filter(x=>x.en_meta!==false);
   const aExt=a.filter(x=>x.en_meta===false);
-  const posibles=aMeta.length;
-  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
-  const compMeta=aMeta.filter(x=>x.completo).length;
-  const pct=esp?Math.round(compMeta/esp*100):0;
   const nota_aprobacion=c.nota_aprobacion||6;
 
-  // Faltantes reales: si hay padrón y UN/Depto, contar activos del padrón que no completaron
-  let faltantesReal=0;
-  if(padron.length&&(c.un||c.departamento)){
-    const completaron=new Set(a.filter(x=>x.completo).map(x=>String(x.legajo)));
-    const activosPadron=padron.filter(p=>{
+  // Completaron = están en la lista con completo:true
+  const completaron=new Set(a.filter(x=>x.completo).map(x=>String(x.legajo)));
+  const comp=completaron.size;
+
+  // Posibles = activos del padrón según UN/Depto de la cap (si hay padrón y selección)
+  // Si no hay padrón o no tiene UN/Depto → usa la lista cargada
+  let activosPadron=[];
+  const tienePadronFiltro=padron.length&&(c.un||c.departamento);
+  if(tienePadronFiltro){
+    activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(c.un&&p.un!==c.un) return false;
       if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
       return true;
     });
-    faltantesReal=activosPadron.filter(p=>!completaron.has(String(p.legajo))).length;
-  } else {
-    faltantesReal=Math.max(0,esp-compMeta);
   }
+  const posibles=tienePadronFiltro?activosPadron.length:aMeta.length;
+  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
 
-  // tabla asistentes
+  // Faltantes = padrón activo que no completó (si hay padrón) o lista sin completar
+  const faltantesPadron=tienePadronFiltro
+    ?activosPadron.filter(p=>!completaron.has(String(p.legajo)))
+    :aMeta.filter(x=>!x.completo);
+  const faltantesReal=faltantesPadron.length;
+  const pct=posibles?Math.round(comp/posibles*100):0;
+
+  // ── TABLA UNIFICADA con filtro Todos / Completaron / Faltantes ──
   const hasNota=t.tiene_evaluacion;
-  function buildRow(x){
-    const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion||6)?'nota-ok':'nota-fail'}" title="${x.nota<(nota_aprobacion||6)?'Desaprobado':''}">${x.nota}${x.nota<(nota_aprobacion||6)?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
-    const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:"";
-    const notaCell=hasNota?`<td>${notaHtml}</td>`:"";
-    const compBadge=canManageParticipants()
-      ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" title="Clic para cambiar" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
-      :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
-    const cuilCell=`<td style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
-    const fechaEvalCell=`<td style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
-    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
-  }
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
   const tableHead=`<thead><tr><th style="width:52px">Legajo</th><th>Nombre</th><th style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
-  const colNota2=hasNota?'<th style="width:40px">Nota</th>':'';
-  const colDel2=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const metaRows=aMeta.map(buildRow).join('');
-  const extRows=aExt.map(buildRow).join('');
+
+  function buildRow(x, esFaltantePadron=false){
+    const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
+    const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
+    const cuilCell=`<td style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
+    const fechaEvalCell=`<td style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    if(esFaltantePadron){
+      // Fila de alguien en el padrón que no está en la lista — solo lectura
+      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td style="color:#888;font-size:11px">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${canManageParticipants()?'<td></td>':''}</tr>`;
+    }
+    const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
+    const compBadge=canManageParticipants()
+      ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
+      :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
+    const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
+    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}${extBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+  }
+
+  // Armar filas según vista — se controla con JS en el cliente via data-view
+  // Todos los de la lista (meta + ext)
+  const todasFilasLista=a.map(x=>buildRow(x,false));
+  // Faltantes del padrón que no están en la lista en absoluto
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  const faltantesSolopadron=tienePadronFiltro
+    ?activosPadron.filter(p=>!completaron.has(String(p.legajo))&&!legajosEnLista.has(String(p.legajo)))
+    :[];
+  const filasFaltantesPadron=faltantesSolopadron.map(p=>buildRow({
+    legajo:p.legajo,nombre:p.nombre,
+    cuil:p.cuil||p.datos_extra?.CUIL||'',
+    departamento:p.departamento||p.datos_extra?.Departamento||'',
+    datos_extra:p.datos_extra||{},
+    completo:false,nota:null,fecha_evaluacion:null
+  },true));
+  // Faltantes de la lista (en lista pero sin completar)
+  const filasListaSinCompletar=a.filter(x=>!x.completo).map(x=>buildRow(x,false));
+
   const emptyMsg=`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-top:6px">${canManageParticipants()?'Sin asistentes. Importá desde Excel o registrá con ✍ Papel.':'Sin asistentes registrados.'}</div>`;
-  const tbl=aMeta.length||aExt.length?`<div style="overflow-x:auto;margin-top:6px">
-    ${aMeta.length?`<table class="legajo-table">${tableHead}<tbody>${metaRows}</tbody></table>`:''}
-    ${aExt.length?`<div style="margin-top:10px;font-size:11px;font-weight:600;color:#854F0B;padding:4px 0 4px;border-top:2px dashed #EF9F27">📋 Evaluados fuera de lista (${aExt.length})</div>
-    <table class="legajo-table" style="opacity:0.9">${tableHead}<tbody>${extRows}</tbody></table>`:''}
-  </div>`:emptyMsg;
+
+  const tbl=`
+  <div style="margin-top:8px">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+      <button class="btn-asis-filter btn-asis-active" onclick="filtrarAsistentes('todos',${id})" id="fab-todos-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
+        Todos (${a.length}${faltantesSolopadron.length?`+${faltantesSolopadron.length}`:''})
+      </button>
+      <button class="btn-asis-filter" onclick="filtrarAsistentes('completaron',${id})" id="fab-comp-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#fff;color:#1D9E75;cursor:pointer;font-weight:600">
+        ✓ Completaron (${comp})
+      </button>
+      <button class="btn-asis-filter" onclick="filtrarAsistentes('faltantes',${id})" id="fab-falt-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #EF9F27;background:#fff;color:#854F0B;cursor:pointer;font-weight:600">
+        ⚠ Faltantes (${faltantesReal})
+      </button>
+    </div>
+    <div id="tbl-asistentes-${id}" style="overflow-x:auto">
+      ${a.length||faltantesSolopadron.length
+        ?`<table class="legajo-table" id="tabla-asis-${id}">${tableHead}<tbody id="tbody-asis-${id}">${todasFilasLista.join('')}${filasFaltantesPadron.join('')}</tbody></table>`
+        :emptyMsg}
+    </div>
+  </div>`;
+
+  // guardar filas en window para el filtro
+  window[`_asisData_${id}`]={
+    todos:todasFilasLista.join('')+filasFaltantesPadron.join(''),
+    completaron:a.filter(x=>x.completo).map(x=>buildRow(x,false)).join(''),
+    faltantes:filasListaSinCompletar.join('')+filasFaltantesPadron.join(''),
+    tableHead
+  };
 
   // repositorio
   let repoHtml='';
@@ -1804,7 +1855,7 @@ function buildDetail(id){
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
-      <div class="detail-row"><span class="detail-key">Posibles (lista)</span><span class="detail-val">${posibles}</span></div>
+      <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}</span></div>
       <div class="detail-row"><span class="detail-key">Esperados (meta)</span><span class="detail-val">${esp}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
@@ -1816,7 +1867,7 @@ function buildDetail(id){
     ${repoHtml}
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
-      <div class="modal-section-title" style="margin:0">Asistentes — Meta: ${aMeta.length}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
+      <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
@@ -2247,6 +2298,22 @@ async function limpiarParticipantes(capId, total){
     setSyncStatus('error');
     toast('Error al eliminar: '+e.message);
   }
+}
+
+function filtrarAsistentes(vista, capId){
+  const data=window[`_asisData_${capId}`];
+  if(!data) return;
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  if(!tbody) return;
+  // Actualizar botones activos
+  ['todos','comp','falt'].forEach(k=>{
+    const btn=document.getElementById(`fab-${k}-${capId}`);
+    if(!btn) return;
+    const activo=(k==='todos'&&vista==='todos')||(k==='comp'&&vista==='completaron')||(k==='falt'&&vista==='faltantes');
+    btn.style.background=activo?(k==='falt'?'#EF9F27':'#1D9E75'):'#fff';
+    btn.style.color=activo?'#fff':(k==='falt'?'#854F0B':'#1D9E75');
+  });
+  tbody.innerHTML=data[vista]||data.todos;
 }
 
 async function deleteA(aid,capId){

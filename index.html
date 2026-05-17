@@ -1101,7 +1101,6 @@ function updatePadronPreview(){
   const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
   const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
   if(!un&&!dep){prev.style.display='none';return;}
-  // Contar activos por UN y/o departamento
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
     if(un&&p.un!==un) return false;
@@ -1109,18 +1108,18 @@ function updatePadronPreview(){
     return true;
   });
   prev.style.display='block';
-  if(!dep){
-    // Solo UN seleccionada
-    prev.style.color='#185FA5';
-    prev.textContent=`👥 ${activos.length} empleado${activos.length!==1?'s':''} activo${activos.length!==1?'s':''} en ${un} — se cargarán al guardar${dep?'':' (todos los departamentos)'}`;
-  } else if(activos.length>0){
-    prev.style.color='#0F6E56';
-    prev.textContent=`👥 ${activos.length} empleado${activos.length!==1?'s':''} activo${activos.length!==1?'s':''} en ${dep} — se cargarán como participantes al guardar`;
-  } else {
-    prev.style.color='#888';
-    prev.textContent='Sin empleados activos en el padrón para esta selección';
-  }
+  const n=activos.length;
+  const label=dep||un;
+  const txt=n>0
+    ?`&#128101; <strong>${n}</strong> empleado${n!==1?'s':''} activo${n!==1?'s':''} en <strong>${label}</strong>`
+    :'<span style="color:#888">Sin empleados activos en el padr\u00F3n para esta selecci\u00F3n</span>';
+  prev.innerHTML=`<div style="margin-bottom:5px;color:#0F6E56">${txt}</div>`+
+    (n>0?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;color:#0F6E56;margin-top:4px">
+      <input type="checkbox" id="chk-cargar-padron" checked style="width:15px;height:15px;cursor:pointer">
+      Cargar estos participantes a la lista al guardar
+    </label>`:'');
 }
+
 
 
 function desvioInfoExt(cap, est, ffin){
@@ -2425,33 +2424,105 @@ async function saveCap(id){
       const n=Array.isArray(r)?r[0]:r;
       if(n){
         caps.push(n);
-        // Auto-cargar participantes del padrón si hay UN y sector
-        await cargarParticipantesDesdePadron(n.id, n.un, n.departamento);
+        // Respetar el checkbox del preview
+        const chk=document.getElementById('chk-cargar-padron');
+        if(chk===null||chk.checked){
+          await cargarParticipantesDesdePadron(n.id,n.un,n.departamento);
+        }
       }
       toast('Capacitación creada');
+      setSyncStatus('ok');updateSub();closeModal();renderContent();
     } else {
       await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);
-      const i=caps.findIndex(c=>c.id===Number(id));
-      if(i>=0)caps[i]={...caps[i],...obj};
-      // Si cambió la UN o sector, ofrecer recargar participantes
-      const capActual=caps[i];
-      if(capActual&&(capActual.un!==obj.un||capActual.sector!==obj.sector)&&obj.un){
-        if(confirm('¿Actualizar participantes desde el padrón para la nueva UN/Departamento?')){
-          await cargarParticipantesDesdePadron(Number(id),obj.un,obj.departamento);
-        }
-        // Respetar el valor de esperados que el usuario editó manualmente
-        const parManual=parseInt(document.getElementById('f-par')?.value)||0;
-        if(parManual>0){
-          await api('PATCH','capacitaciones',{participantes_esperados:parManual},`?id=eq.${id}`);
-          const cIdx2=caps.findIndex(x=>x.id===Number(id));
-          if(cIdx2>=0) caps[cIdx2].participantes_esperados=parManual;
-        }
+      const idx=caps.findIndex(c=>c.id===Number(id));
+      if(idx>=0)caps[idx]={...caps[idx],...obj};
+      const capAnterior=caps[idx]||{};
+      const cambioUnDepto=(capAnterior.un!==obj.un||capAnterior.departamento!==obj.departamento)&&(obj.un||obj.departamento);
+      if(cambioUnDepto){
+        // Mostrar modal de opciones en lugar de confirm nativo
+        await mostrarModalActualizarParticipantes(Number(id),obj.un,obj.departamento);
       }
       toast('Actualizada');
+      setSyncStatus('ok');updateSub();closeModal();renderContent();
     }
-    setSyncStatus('ok');updateSub();closeModal();renderContent();
-  }catch(e){setSyncStatus('error');toast('Error');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
+  }catch(e){setSyncStatus('error');toast('Error al guardar');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
 }
+
+// Modal de 3 opciones para actualizar participantes al editar
+async function mostrarModalActualizarParticipantes(capId, un, departamento){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    const card=document.createElement('div');
+    card.style.cssText='background:#fff;border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)';
+    // Contar activos nuevos y los que se podrían eliminar
+    const activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(un&&p.un!==un) return false;
+      if(departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==departamento.trim()) return false;}
+      return true;
+    });
+    const aActuales=getA(capId);
+    const enMeta=aActuales.filter(a=>a.en_meta!==false);
+    // Protegidos: completo o con nota (no se eliminan nunca)
+    const protegidos=enMeta.filter(a=>a.completo||a.nota!=null||a.fecha_evaluacion);
+    // Eliminables: en meta, sin completar, sin nota (no participaron)
+    const eliminables=enMeta.filter(a=>!a.completo&&a.nota==null&&!a.fecha_evaluacion);
+    const legajosActivos=new Set(activosPadron.map(p=>String(p.legajo)));
+    const legajosActuales=new Set(aActuales.map(a=>String(a.legajo)));
+    const nuevosLegajos=activosPadron.filter(p=>!legajosActuales.has(String(p.legajo)));
+    card.innerHTML=`
+      <div style="font-size:15px;font-weight:700;color:#1A2F6E;margin-bottom:10px">&#9881;&#65039; Actualizar participantes</div>
+      <p style="font-size:12px;color:#555;margin-bottom:12px">La UN o Departamento cambió. ¿Cómo querés actualizar la lista de participantes?</p>
+      <div style="font-size:11px;color:#888;background:#f9f9f7;border-radius:8px;padding:8px 10px;margin-bottom:14px">
+        <div>&#128100; Nuevos activos del padrón: <strong>${activosPadron.length}</strong></div>
+        <div>&#128308; A agregar (no estaban): <strong>${nuevosLegajos.length}</strong></div>
+        <div style="color:#1D9E75">&#128737;&#65039; Protegidos (completaron/evaluados): <strong>${protegidos.length}</strong> — no se eliminan</div>
+        <div style="color:#CC0000">&#128465;&#65039; Eliminables (sin actividad): <strong>${eliminables.length}</strong></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="opt-agregar" style="background:#1D9E75;color:#fff;border:none;border-radius:9px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          &#10133; Solo agregar nuevos vigentes (${nuevosLegajos.length})
+          <div style="font-size:11px;font-weight:400;opacity:0.85">Agrega los que no estaban. No elimina nadie.</div>
+        </button>
+        <button id="opt-limpiar" style="background:#E24B4A;color:#fff;border:none;border-radius:9px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          &#9888;&#65039; Eliminar sin actividad + agregar nuevos
+          <div style="font-size:11px;font-weight:400;opacity:0.85">Borra los ${eliminables.length} que no hicieron nada. Los protegidos (${protegidos.length}) se conservan.</div>
+        </button>
+        <button id="opt-nada" style="background:#f4f4f2;color:#555;border:1px solid #ddd;border-radius:9px;padding:10px 14px;font-size:13px;cursor:pointer;text-align:left">
+          Mantener la lista actual sin cambios
+        </button>
+      </div>`;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    overlay.querySelector('#opt-agregar').onclick=async()=>{
+      document.body.removeChild(overlay);
+      await cargarParticipantesDesdePadron(capId,un,departamento);
+      resolve();
+    };
+    overlay.querySelector('#opt-limpiar').onclick=async()=>{
+      document.body.removeChild(overlay);
+      // Eliminar los eliminables
+      if(eliminables.length){
+        for(const a of eliminables){
+          try{
+            await api('DELETE','asistentes','',`?id=eq.${a.id}`);
+            asistentes=asistentes.filter(x=>x.id!==a.id);
+          }catch(e){console.warn('No se pudo eliminar asistente',a.id,e);}
+        }
+        toast(`${eliminables.length} participante${eliminables.length!==1?'s':''} sin actividad eliminado${eliminables.length!==1?'s':''}`);
+      }
+      // Agregar los nuevos del padrón
+      await cargarParticipantesDesdePadron(capId,un,departamento);
+      resolve();
+    };
+    overlay.querySelector('#opt-nada').onclick=()=>{
+      document.body.removeChild(overlay);
+      resolve();
+    };
+  });
+}
+
 
 
 

@@ -1678,6 +1678,26 @@ function renderConfig(){
       <div style="font-size:10px;color:#999;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Vista previa</div>
       <pre id="wa-preview" style="margin:0;white-space:pre-wrap;font-family:inherit;font-size:12px;color:#111;line-height:1.6"></pre>
     </div>
+  </div>
+  <div class="config-section" style="border:1.5px solid #FCEBEB">
+    <div class="config-title" style="color:#A32D2D">🗑 Limpiar plan de capacitación</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Seleccioná las capacitaciones que querés eliminar del sistema. Se borrarán también sus asistentes, materiales y evaluaciones asociadas. <strong style="color:#A32D2D">Esta acción no se puede deshacer.</strong></p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <button class="btn-sm" style="background:#f4f4f2;color:#555;border:1px solid #ddd" onclick="seleccionarTodasCaps(true)">☑ Seleccionar todas</button>
+      <button class="btn-sm" style="background:#f4f4f2;color:#555;border:1px solid #ddd" onclick="seleccionarTodasCaps(false)">☐ Deseleccionar todas</button>
+      <button class="btn-sm" id="btn-borrar-seleccionadas" style="background:#E24B4A;color:#fff;border-color:#E24B4A;display:none" onclick="borrarCapsSeleccionadas()">🗑 Borrar seleccionadas (<span id="lbl-cant-sel">0</span>)</button>
+    </div>
+    <div id="lista-caps-limpiar" style="max-height:320px;overflow-y:auto;border:1px solid #e5e5e0;border-radius:8px;background:#fff">
+      ${caps.length===0?'<div style="padding:16px;text-align:center;font-size:12px;color:#aaa">No hay capacitaciones cargadas</div>':
+        caps.map(c=>`<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f0ef;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+          <input type="checkbox" class="chk-cap-limpiar" value="${c.id}" style="margin-top:2px;accent-color:#E24B4A" onchange="actualizarContadorCaps()">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.titulo)}</div>
+            <div style="font-size:10px;color:#999;margin-top:1px">${tipoBadge(c.tipo_codigo||'OTRO')} &nbsp;${c.bimestre?`Bim. ${c.bimestre} &nbsp;`:''} ${c.un?`${esc(c.un)} &nbsp;`:''} ${c.codigo_redmine?`<code style="background:#f4f4f2;padding:1px 4px;border-radius:4px;font-size:10px">${esc(c.codigo_redmine)}</code>`:''}</div>
+          </div>
+          <span class="badge ${(estadoCap(c)||'programada').toLowerCase()}" style="flex-shrink:0;margin-top:2px">${estadoCap(c)||'Programada'}</span>
+        </label>`).join('')}
+    </div>
   </div>`;}
 
 function previewWAMsg(){
@@ -3806,6 +3826,53 @@ function exportPlantillaEval(){
   toast('Plantilla de evaluación descargada');
 }
 
+
+// ===== LIMPIAR PLAN: selección y borrado masivo =====
+function actualizarContadorCaps(){
+  const chks=[...document.querySelectorAll('.chk-cap-limpiar:checked')];
+  const n=chks.length;
+  const btn=document.getElementById('btn-borrar-seleccionadas');
+  const lbl=document.getElementById('lbl-cant-sel');
+  if(btn){btn.style.display=n>0?'':'none';}
+  if(lbl){lbl.textContent=n;}
+}
+
+function seleccionarTodasCaps(marcar){
+  document.querySelectorAll('.chk-cap-limpiar').forEach(c=>{c.checked=marcar;});
+  actualizarContadorCaps();
+}
+
+async function borrarCapsSeleccionadas(){
+  const ids=[...document.querySelectorAll('.chk-cap-limpiar:checked')].map(c=>Number(c.value));
+  if(!ids.length){toast('No hay capacitaciones seleccionadas');return;}
+  const n=ids.length;
+  if(!confirm(`¿Seguro querés eliminar ${n} capacitación${n>1?'es':''}?\n\nSe borrarán también sus asistentes, materiales y evaluaciones. Esta acción no se puede deshacer.`)) return;
+  if(!confirm(`CONFIRMACIÓN FINAL: se eliminarán ${n} capacitación${n>1?'es':''} permanentemente.`)) return;
+  toast('Eliminando...');
+  let ok=0,err=0;
+  for(const id of ids){
+    try{
+      await api('DELETE','asistentes','',`?capacitacion_id=eq.${id}`);
+      await api('DELETE','materiales','',`?capacitacion_id=eq.${id}`);
+      const evs=evaluaciones.filter(e=>e.capacitacion_id===id);
+      for(const ev of evs){
+        await api('DELETE','respuestas_evaluacion','',`?evaluacion_id=eq.${ev.id}`);
+        await api('DELETE','preguntas_evaluacion','',`?evaluacion_id=eq.${ev.id}`);
+        await api('DELETE','evaluaciones','',`?id=eq.${ev.id}`);
+      }
+      await api('DELETE','capacitaciones','',`?id=eq.${id}`);
+      caps=caps.filter(c=>c.id!==id);
+      asistentes=asistentes.filter(a=>a.capacitacion_id!==id);
+      materiales=materiales.filter(m=>m.capacitacion_id!==id);
+      evaluaciones=evaluaciones.filter(e=>e.capacitacion_id!==id);
+      preguntas=preguntas.filter(p=>!evs.find(e=>e.id===p.evaluacion_id));
+      ok++;
+    }catch(e){err++;console.error('Error borrando cap',id,e);}
+  }
+  toast(`✓ ${ok} capacitación${ok!==1?'es':''} eliminada${ok!==1?'s':''}${err?` · ${err} error${err>1?'es':''}`:''}`);
+  updateSub();
+  renderContent();
+}
 
 setInterval(()=>{if(currentUser)loadAll();},30000);
 init();

@@ -81,6 +81,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tipo-CALIFICACION{background:#EEEDFE;color:#3C3489}
 .tipo-INDUCCION{background:#FAEEDA;color:#854F0B}
 .tipo-OTRO{background:#f4f4f2;color:#555}
+.chip-global{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#EAF3DE;color:#27500A;border:1px solid #b5d98b}
 /* CARDS */
 .cap-card{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
 .cap-card:hover{border-color:#aaa}
@@ -660,7 +661,7 @@ function capCard(cap){
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
-      ${cap.un?`<span style="font-size:10px;font-weight:600;color:#1a2f6e;background:#E8F0FB;border-radius:4px;padding:1px 6px">🏢 ${esc(cap.un)}</span>`:''}
+      ${cap.un?`<span style="font-size:10px;font-weight:600;color:#1a2f6e;background:#E8F0FB;border-radius:4px;padding:1px 6px">🏢 ${esc(cap.un)}</span>`:`<span class="chip-global">🌍 Todas las UN</span>`}
       ${cap.area?`<span>${esc(cap.area)}</span><span>·</span>`:''}
       <span>${fmtF(cap.fecha)}</span><span>·</span><span>${cap.duracion}h</span>
       ${cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600">${esc(cap.codigo_redmine)}</span>`:''}
@@ -1023,18 +1024,21 @@ function renderResumen(){
 
 
 async function cargarParticipantesDesdePadron(capId, un, departamento){
-  if(!un&&!departamento) return;
+  // Si no hay UN ni depto → capacitación global: cargar todo el plantel vigente
+  const esGlobal=!un&&!departamento;
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
-    if(un&&p.un!==un) return false;
-    if(departamento&&departamento.trim()){
-      const d=p.departamento||p.datos_extra?.Departamento||'';
-      if(d!==departamento.trim()) return false;
+    if(!esGlobal){
+      if(un&&p.un!==un) return false;
+      if(departamento&&departamento.trim()){
+        const d=p.departamento||p.datos_extra?.Departamento||'';
+        if(d!==departamento.trim()) return false;
+      }
     }
     return true;
   });
   if(!activos.length){
-    if(un) toast(`Sin empleados activos en el padrón para ${departamento||un}`);
+    toast(esGlobal?'Sin empleados vigentes en el padrón':`Sin empleados activos en el padrón para ${departamento||un}`);
     return;
   }
   try{
@@ -1124,22 +1128,20 @@ function updatePadronPreview(){
   const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
   const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
   const lblTomar=document.getElementById('lbl-tomar-padron');
-  if(!un&&!dep){
-    prev.style.display='none';
-    if(lblTomar) lblTomar.style.display='none';
-    return;
-  }
+  const esGlobal=!un&&!dep;
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
-    if(un&&p.un!==un) return false;
-    if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+    if(!esGlobal){
+      if(un&&p.un!==un) return false;
+      if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+    }
     return true;
   });
   prev.style.display='block';
   const n=activos.length;
-  const label=dep||un;
+  const label=esGlobal?'🌍 todo el plantel (todas las UN)':(dep||un);
   const txt=n>0
-    ?`&#128101; <strong>${n}</strong> empleado${n!==1?'s':''} activo${n!==1?'s':''} en <strong>${label}</strong>`
+    ?`&#128101; <strong>${n}</strong> empleado${n!==1?'s':''} activo${n!==1?'s':''} — ${esGlobal?'<span style="color:#27500A;font-weight:600">🌍 Todas las UN y áreas</span>':'en <strong>'+label+'</strong>'}`
     :'<span style="color:#888">Sin empleados activos en el padr\u00F3n para esta selecci\u00F3n</span>';
   prev.innerHTML=`<div style="margin-bottom:5px;color:#0F6E56">${txt}</div>`+
     (n>0?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;color:#0F6E56;margin-top:4px">
@@ -1163,11 +1165,14 @@ function toggleParField(){
   if(chk.checked){
     const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
     const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
-    // Activos del padrón según UN/Depto
+    const esGlobal=!un&&!dep;
+    // Activos del padrón según UN/Depto (o todos si es global)
     const activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
-      if(un&&p.un!==un) return false;
-      if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+      if(!esGlobal){
+        if(un&&p.un!==un) return false;
+        if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+      }
       return true;
     });
     const legajosPadron=new Set(activosPadron.map(p=>String(p.legajo)));
@@ -1184,7 +1189,7 @@ function toggleParField(){
     inp.style.background='#f4f4f2';
     const desglose=completadosExtra>0
       ?`Padrón activo: ${activosPadron.length} + ya completaron (no en padrón): ${completadosExtra}`
-      :`${total} del padrón activo${dep?' en '+dep:un?' en '+un:''}`;
+      :`${total} del padrón activo${esGlobal?' — todas las UN y áreas':dep?' en '+dep:un?' en '+un:''}`;
     inp.title=desglose;
     // Mostrar desglose debajo del campo
     let nota=document.getElementById('par-nota');
@@ -1749,10 +1754,13 @@ function buildDetail(id){
   const comp=completaron.size;
 
   // Posibles = activos del padrón según UN/Depto de la cap (si hay padrón y selección)
-  // Si no hay padrón o no tiene UN/Depto → usa la lista cargada
+  // Si la cap no tiene UN ni Depto → es global: usa todo el padrón vigente
   let activosPadron=[];
+  const esGlobal=padron.length&&!c.un&&!c.departamento;
   const tienePadronFiltro=padron.length&&(c.un||c.departamento);
-  if(tienePadronFiltro){
+  if(esGlobal){
+    activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
+  } else if(tienePadronFiltro){
     activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(c.un&&p.un!==c.un) return false;
@@ -1760,11 +1768,11 @@ function buildDetail(id){
       return true;
     });
   }
-  const posibles=tienePadronFiltro?activosPadron.length:aMeta.length;
+  const posibles=(esGlobal||tienePadronFiltro)?activosPadron.length:aMeta.length;
   const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
 
   // Faltantes = padrón activo que no completó (si hay padrón) o lista sin completar
-  const faltantesPadron=tienePadronFiltro
+  const faltantesPadron=(esGlobal||tienePadronFiltro)
     ?activosPadron.filter(p=>!completaron.has(String(p.legajo)))
     :aMeta.filter(x=>!x.completo);
   const faltantesReal=faltantesPadron.length;
@@ -1798,7 +1806,7 @@ function buildDetail(id){
   const todasFilasLista=a.map(x=>buildRow(x,false));
   // Faltantes del padrón que no están en la lista en absoluto
   const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
-  const faltantesSolopadron=tienePadronFiltro
+  const faltantesSolopadron=(esGlobal||tienePadronFiltro)
     ?activosPadron.filter(p=>!completaron.has(String(p.legajo))&&!legajosEnLista.has(String(p.legajo)))
     :[];
   const filasFaltantesPadron=faltantesSolopadron.map(p=>buildRow({
@@ -1919,7 +1927,7 @@ function buildDetail(id){
     <div class="modal-section">
       <div class="modal-section-title">Información</div>
       ${c.codigo_redmine?`<div class="detail-row"><span class="detail-key">Redmine</span><span class="detail-val" style="color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span></div>`:''}
-      ${c.un?`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val">${esc(c.un)}</span></div>`:''}
+      ${c.un?`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val">${esc(c.un)}</span></div>`:`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val"><span class="chip-global">🌍 Todas las UN y áreas</span></span></div>`}
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
@@ -2656,7 +2664,7 @@ async function saveCap(id){
       const idx=caps.findIndex(c=>c.id===Number(id));
       if(idx>=0)caps[idx]={...caps[idx],...obj};
       const capAnterior=caps[idx]||{};
-      const cambioUnDepto=(capAnterior.un!==obj.un||capAnterior.departamento!==obj.departamento)&&(obj.un||obj.departamento);
+      const cambioUnDepto=(capAnterior.un!==obj.un||capAnterior.departamento!==obj.departamento);
       if(cambioUnDepto){
         // Mostrar modal de opciones en lugar de confirm nativo
         await mostrarModalActualizarParticipantes(Number(id),obj.un,obj.departamento);
@@ -2675,10 +2683,13 @@ async function mostrarModalActualizarParticipantes(capId, un, departamento){
     const card=document.createElement('div');
     card.style.cssText='background:#fff;border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)';
     // Contar activos nuevos y los que se podrían eliminar
+    const esGlobalModal=!un&&!departamento;
     const activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
-      if(un&&p.un!==un) return false;
-      if(departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==departamento.trim()) return false;}
+      if(!esGlobalModal){
+        if(un&&p.un!==un) return false;
+        if(departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==departamento.trim()) return false;}
+      }
       return true;
     });
     const aActuales=getA(capId);

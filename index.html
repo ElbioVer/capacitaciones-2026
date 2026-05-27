@@ -63,7 +63,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .cap-card{position:relative;z-index:2;cursor:pointer}
   .hdr-logo-img{height:32px !important}
   .hdr-center{font-size:11px !important}
-  .filter-bar{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;padding:6px 8px;align-items:center}
+  .filter-bar{display:grid;grid-template-columns:auto 1fr auto 1fr auto 1fr;gap:4px 6px;padding:6px 8px;align-items:center}
   .filter-bar label{font-size:10px;white-space:nowrap}
   .filter-bar select{font-size:10px;padding:3px 4px;width:100%}
   .search-bar{padding:6px 8px}
@@ -323,6 +323,12 @@ select.form-input{cursor:pointer}
     <select id="flt-un" onchange="applyFilters()"><option value="">Todas</option></select>
     <label>Depto</label>
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
+    <label>Ordenar</label>
+    <select id="flt-sort" onchange="applyFilters()">
+      <option value="redmine">Cód. Redmine</option>
+      <option value="tipo">Tipo</option>
+      <option value="bimestre">Bimestre</option>
+    </select>
     <button id="btn-clear-filters" onclick="clearFilters()" title="Limpiar todos los filtros"
       style="display:none;background:#EE0000;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✕ Limpiar</button>
   </div>
@@ -372,7 +378,7 @@ const H={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Be
 const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre (May-Jun)','4° Bimestre (Jul-Ago)','5° Bimestre (Sep-Oct)','6° Bimestre (Nov-Dic)'];
 
 let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
-let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='';
+let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='redmine';
 let currentUser=null;
 let _searchQuery='';
 // Texto de WhatsApp configurable — se guarda en localStorage
@@ -561,9 +567,11 @@ function getFiltered(){
 }
 
 function clearFilters(){
-  fltTipo=''; fltBim=''; fltUN=''; fltSec=''; _searchQuery='';
+  fltTipo=''; fltBim=''; fltUN=''; fltSec=''; _searchQuery=''; sortOrder='redmine';
   const ids=['flt-tipo','flt-bim','flt-un','flt-sec'];
   ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const srt=document.getElementById('flt-sort');
+  if(srt) srt.value='redmine';
   const srch=document.getElementById('flt-search');
   if(srch) srch.value='';
   const clr=document.getElementById('flt-search-clear');
@@ -575,6 +583,8 @@ function clearFilters(){
 function applyFilters(){
   fltTipo=document.getElementById('flt-tipo').value;
   fltBim=document.getElementById('flt-bim').value;
+  const srt=document.getElementById('flt-sort');
+  if(srt) sortOrder=srt.value;
   const prevUN=fltUN;
   fltUN=document.getElementById('flt-un').value;
   if(prevUN!==fltUN){fltSec='';populateFilters();}
@@ -688,12 +698,33 @@ function switchTab(t){
   }
 }
 
+function sortCaps(arr){
+  const TIPO_ORD=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
+  const rn=s=>{if(!s)return 9999999;const m=String(s).match(/\d+/);return m?parseInt(m[0],10):9999999;};
+  return [...arr].sort((a,b)=>{
+    if(sortOrder==='tipo'){
+      const ia=TIPO_ORD.indexOf(a.tipo_codigo);const ib=TIPO_ORD.indexOf(b.tipo_codigo);
+      const diff=(ia<0?TIPO_ORD.length:ia)-(ib<0?TIPO_ORD.length:ib);
+      if(diff!==0)return diff;
+      return rn(a.codigo_redmine)-rn(b.codigo_redmine);
+    }
+    if(sortOrder==='bimestre'){
+      const ba=BIMESTRES.indexOf(a.bimestre);const bb=BIMESTRES.indexOf(b.bimestre);
+      const diff=(ba<0?BIMESTRES.length:ba)-(bb<0?BIMESTRES.length:bb);
+      if(diff!==0)return diff;
+      return rn(a.codigo_redmine)-rn(b.codigo_redmine);
+    }
+    // default: redmine
+    return rn(a.codigo_redmine)-rn(b.codigo_redmine);
+  });
+}
+
 function renderContent(){
   try{
     const f=getFiltered();renderStats(f);
     const el=document.getElementById('content');
     if(!el) return;
-    if(currentTab==='lista') el.innerHTML=f.length?f.map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
+    if(currentTab==='lista') el.innerHTML=sortCaps(f).length?sortCaps(f).map(cap=>capCard(cap)).join(''):'<div class="empty-state"><div class="empty-num">📋</div><div class="empty-t">Sin resultados</div></div>';
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
@@ -712,8 +743,7 @@ function renderContent(){
 function renderPorTipo(){
   let html='';
   tipos.forEach(t=>{
-    const grupo=getFiltered().filter(c=>c.tipo_codigo===t.codigo)
-      .sort((a,b)=>{const rn=s=>{if(!s)return 9999999;const m=String(s).match(/\d+/);return m?parseInt(m[0],10):9999999;};return rn(a.codigo_redmine)-rn(b.codigo_redmine);});
+    const grupo=sortCaps(getFiltered().filter(c=>c.tipo_codigo===t.codigo));
     const ok=grupo.filter(cap=>estadoCap(cap)==='Realizada').length;
     const pct=grupo.length?Math.round(ok/grupo.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
@@ -723,7 +753,8 @@ function renderPorTipo(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -739,9 +770,7 @@ function renderPorTipo(){
 
 function renderBim(){
   return BIMESTRES.map(b=>{
-    const TIPO_ORD=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
-    const g=getFiltered().filter(c=>c.bimestre===b)
-      .sort((a,b2)=>{const ia=TIPO_ORD.indexOf(a.tipo_codigo)||TIPO_ORD.length;const ib=TIPO_ORD.indexOf(b2.tipo_codigo)||TIPO_ORD.length;return(ia<0?TIPO_ORD.length:ia)-(ib<0?TIPO_ORD.length:ib);});
+    const g=sortCaps(getFiltered().filter(c=>c.bimestre===b));
     const ok=g.filter(cap=>estadoCap(cap)==='Realizada').length;
     const pct=g.length?Math.round(ok/g.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
@@ -751,7 +780,8 @@ function renderBim(){
   const posibles=a.length;
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -809,10 +839,11 @@ function renderUN(){
           });
         });
 
-        const capRows=capsDeDepto.length?capsDeDepto.map(cap=>{
+        const capRows=capsDeDepto.length?sortCaps(capsDeDepto).map(cap=>{
           const as=getA(cap.id).filter(a=>a.un===un.nombre&&(a.departamento===dep||a.sector===dep));
           const comp=as.filter(a=>a.completo).length;
-          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
+          const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
+          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
         }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones registradas</p>';
 
         const barColor=pct>=75?'#1D9E75':pct>=40?'#EF9F27':'#E05555';
@@ -838,7 +869,7 @@ function renderUN(){
       const a=getA(cap.id).filter(x=>x.un===un.nombre);
       return !a.some(x=>x.departamento||x.sector);
     });
-    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${capsSinDep.map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
+    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${sortCaps(capsSinDep).map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
 
     return`<div class="plan-block" style="padding:10px 12px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-bottom:8px">

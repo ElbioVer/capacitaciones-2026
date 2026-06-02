@@ -1693,6 +1693,22 @@ function renderConfig(){
     ${renderEvalConfigList()}
   </div>
   <div class="config-section">
+    <div class="config-title">📎 Importar materiales de lectura</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Cargá links de materiales para múltiples capacitaciones a la vez. Se identifica cada capacitación por su código Redmine. Los materiales existentes <strong>no se reemplazan</strong> — solo se agregan los nuevos.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn-sm green" onclick="exportPlantillaMateriales()">📥 Plantilla Excel</button>
+      <label class="upload-label">📂 Importar materiales<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarMateriales(event)"></label>
+    </div>
+    <div style="background:#E1F5EE;border-radius:8px;padding:10px;font-size:11px;line-height:1.9;color:#085041">
+      <strong>Columnas del Excel:</strong><br>
+      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
+      <strong>nombre *</strong> — nombre descriptivo del material (ej: Manual de EPP)<br>
+      <strong>url *</strong> — link completo (Google Drive, OneDrive, etc.)<br>
+      <strong>tipo</strong> — <em>link</em> o <em>pdf</em> (por defecto: link)<br>
+      <span style="color:#0F6E56">💡 Podés cargar materiales para múltiples capacitaciones en un mismo archivo. Una fila por material.</span>
+    </div>
+  </div>
+  <div class="config-section">
     <div class="config-title">📲 Mensaje de WhatsApp para materiales</div>
     <p style="font-size:12px;color:#777;margin-bottom:10px">Este texto se usa al compartir una capacitación por WhatsApp. Variables disponibles:<br>
     <code style="background:#f4f4f2;padding:1px 5px;border-radius:4px">{titulo}</code> nombre de la capacitación &nbsp;
@@ -3871,6 +3887,87 @@ function exportEvalExcel(evalId){
   toast('Evaluación exportada');
 }
 
+
+// ===== exportPlantillaMateriales =====
+function exportPlantillaMateriales(){
+  const rows=[
+    {codigo_redmine:'#35167',nombre:'Manual de uso de EPP',url:'https://drive.google.com/file/ejemplo1',tipo:'link'},
+    {codigo_redmine:'#35167',nombre:'Procedimiento ante emergencias',url:'https://drive.google.com/file/ejemplo2',tipo:'link'},
+    {codigo_redmine:'#35200',nombre:'Guía de residuos peligrosos',url:'https://drive.google.com/file/ejemplo3',tipo:'pdf'},
+    {codigo_redmine:'#35210',nombre:'Video inducción personal',url:'https://drive.google.com/file/ejemplo4',tipo:'link'},
+  ];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:16},{wch:40},{wch:60},{wch:8}];
+  // Add instructions below
+  XLSX.utils.sheet_add_aoa(ws,[
+    [''],
+    ['INSTRUCCIONES:'],
+    ['codigo_redmine*  — debe coincidir exactamente con el código de la capacitación (ej: #35167)'],
+    ['nombre*         — nombre descriptivo del material'],
+    ['url*            — link completo (Google Drive, OneDrive, SharePoint, etc.)'],
+    ['tipo            — "link" o "pdf" (si se omite, se usa "link")'],
+    ['Una fila por material. Podés cargar materiales de múltiples capacitaciones en un mismo archivo.'],
+  ],{origin:`A${rows.length+2}`});
+  XLSX.utils.book_append_sheet(wb,ws,'Materiales');
+  XLSX.writeFile(wb,'plantilla_materiales.xlsx');
+  toast('Plantilla de materiales descargada');
+}
+
+// ===== importarMateriales =====
+async function importarMateriales(event){
+  const file=event.target.files[0];if(!file)return;
+  event.target.value='';
+  try{
+    const data=await file.arrayBuffer();
+    const wb=XLSX.read(data,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+
+    // Group by codigo_redmine
+    const porRedmine={};
+    for(const row of rows){
+      const cod=String(row.codigo_redmine||row['codigo_redmine']||'').trim();
+      const nombre=String(row.nombre||row.Nombre||'').trim();
+      const url=String(row.url||row.URL||row.Url||'').trim();
+      const tipo=String(row.tipo||row.Tipo||'link').trim().toLowerCase()||'link';
+      if(!cod||!nombre||!url) continue;
+      if(!porRedmine[cod]) porRedmine[cod]=[];
+      porRedmine[cod].push({nombre,url,tipo});
+    }
+
+    const codigos=Object.keys(porRedmine);
+    if(!codigos.length){toast('No se encontraron filas válidas');return;}
+
+    let capsOk=0,matsOk=0,capsErr=0,matsErr=0;
+    toast('Importando materiales...');
+
+    for(const cod of codigos){
+      // Find the capacitacion by codigo_redmine
+      const cap=caps.find(c=>c.codigo_redmine&&c.codigo_redmine.trim()===cod);
+      if(!cap){capsErr++;continue;}
+
+      const items=porRedmine[cod];
+      for(const item of items){
+        // Skip if already exists (same url)
+        const existe=materiales.find(m=>m.capacitacion_id===cap.id&&m.url===item.url);
+        if(existe){continue;}
+        try{
+          const r=await api('POST','materiales',{capacitacion_id:cap.id,tipo:item.tipo,nombre:item.nombre,url:item.url},'');
+          const nv=Array.isArray(r)?r[0]:r;if(nv)materiales.push(nv);
+          matsOk++;
+        }catch(e){matsErr++;}
+      }
+      capsOk++;
+    }
+
+    const errMsg=[];
+    if(capsErr) errMsg.push(`${capsErr} código${capsErr>1?'s':''} Redmine no encontrado${capsErr>1?'s':''}`);
+    if(matsErr) errMsg.push(`${matsErr} material${matsErr>1?'es':''} con error`);
+    toast(`✓ ${matsOk} material${matsOk!==1?'es':''} importado${matsOk!==1?'s':''}${errMsg.length?' · '+errMsg.join(' · '):''}`);
+    renderContent();
+  }catch(e){toast('Error al leer el archivo');}
+}
 
 // ===== exportPlantillaEval =====
 function exportPlantillaEval(){

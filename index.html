@@ -1607,18 +1607,40 @@ function renderEvalConfigList(){
     const cap=caps.find(c=>c.id===ev.capacitacion_id);
     const pqs=preguntas.filter(p=>p.evaluacion_id===ev.id).length;
     const redmine=cap?.codigo_redmine||'—';
-    return`<div class="plan-row-item" style="cursor:default;margin-top:4px">
+    const activa=ev.activa;
+    // Toggle switch HTML
+    const toggleSwitch=`<label title="${activa?'Activa — aparece en WhatsApp':'Inactiva — no aparece en WhatsApp'}" style="display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0" onclick="toggleEvalConfig(${ev.id},${!activa})">
+      <div style="position:relative;width:34px;height:18px;flex-shrink:0">
+        <div style="width:34px;height:18px;border-radius:99px;background:${activa?'#1D9E75':'#ccc'};transition:background .2s"></div>
+        <div style="position:absolute;top:2px;left:${activa?'16px':'2px'};width:14px;height:14px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
+      </div>
+      <span style="font-size:10px;font-weight:600;color:${activa?'#1D9E75':'#aaa'};white-space:nowrap">${activa?'Activa':'Inactiva'}</span>
+    </label>`;
+    return`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0f0ec">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ev.titulo)}</div>
-        <div style="font-size:10px;color:#888">${cap?esc(cap.titulo):'Sin capacitación'} · Redmine: <strong>${esc(redmine)}</strong> · ${pqs} preguntas · ${ev.activa?'<span style="color:#1D9E75">Activa</span>':'<span style="color:#aaa">Inactiva</span>'}</div>
+        <div style="font-size:10px;color:#888;margin-top:1px">${redmine!=='—'?`<span style="background:#E6F1FB;color:#185FA5;border-radius:4px;padding:1px 5px;font-weight:600;margin-right:4px">${esc(redmine)}</span>`:''}${pqs} pregunta${pqs!==1?'s':''}</div>
       </div>
+      ${toggleSwitch}
       <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn-sm blue" onclick="openEditEval(${ev.id},${ev.capacitacion_id})">✎ Editar</button>
-        <button class="btn-sm green" onclick="exportEvalExcel(${ev.id})">📊 Exportar</button>
+        <button class="btn-sm blue" style="padding:3px 7px;font-size:10px" onclick="openEditEval(${ev.id},${ev.capacitacion_id})">✎</button>
+        <button class="btn-sm green" style="padding:3px 7px;font-size:10px" onclick="exportEvalExcel(${ev.id})">📊</button>
       </div>
     </div>`;
   }).join('');
-  return`<div style="margin-top:10px"><div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">${evaluaciones.length} evaluaciones cargadas</div>${rows}</div>`;
+  return`<div style="margin-top:10px">
+    <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px">${evaluaciones.length} evaluación${evaluaciones.length!==1?'es':''} · <span style="color:#1D9E75">${evaluaciones.filter(e=>e.activa).length} activa${evaluaciones.filter(e=>e.activa).length!==1?'s':''}</span></div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e5e0;border-radius:8px;padding:0 10px;background:#fafafa">${rows}</div>
+  </div>`;
+}
+
+async function toggleEvalConfig(evalId, nuevoEstado){
+  try{
+    await api('PATCH','evaluaciones',{activa:nuevoEstado},`?id=eq.${evalId}`);
+    const i=evaluaciones.findIndex(e=>e.id===evalId);if(i>=0)evaluaciones[i].activa=nuevoEstado;
+    toast(nuevoEstado?'✓ Evaluación activada — aparecerá en WhatsApp':'Evaluación desactivada');
+    renderContent();
+  }catch(e){toast('Error al cambiar estado');}
 }
 
 function renderConfig(){

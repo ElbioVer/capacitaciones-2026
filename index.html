@@ -1990,10 +1990,27 @@ function buildDetail(id){
       (async function(){
         try{
           const evId=ev.id;
-          const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+evId+'&select=respuestas,puntaje');
+          // Traer legajo para poder filtrar por asistentes actuales
+          const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+evId+'&select=legajo,respuestas,puntaje');
           if(!resp||!resp.length){
             const w=document.getElementById('evalChartWrap_'+id);
             if(w) w.textContent='Sin respuestas registradas aún.';
+            return;
+          }
+          // Solo los legajos que están en la lista de asistentes actual
+          const aActuales=getA(id);
+          const legajosActuales=new Set(aActuales.map(x=>String(x.legajo)));
+          // Quedarse con el último intento por legajo (por si hay 2 intentos)
+          const ultimoPorLegajo=new Map();
+          resp.forEach(r=>{
+            const leg=String(r.legajo||'');
+            if(!legajosActuales.has(leg)) return; // excluir eliminados
+            ultimoPorLegajo.set(leg,r);            // last-write = último intento
+          });
+          const respFiltradas=Array.from(ultimoPorLegajo.values());
+          if(!respFiltradas.length){
+            const w=document.getElementById('evalChartWrap_'+id);
+            if(w) w.textContent='Sin respuestas de asistentes actuales.';
             return;
           }
           // Contar correctas/incorrectas por índice de pregunta
@@ -2001,7 +2018,7 @@ function buildDetail(id){
           if(!pqsLocal.length) return;
           const correctasCnt=pqsLocal.map(()=>0);
           const incorrectasCnt=pqsLocal.map(()=>0);
-          resp.forEach(r=>{
+          respFiltradas.forEach(r=>{
             const respObj=r.respuestas||{};
             pqsLocal.forEach((p,i)=>{
               if(respObj[p.id]===p.correcta) correctasCnt[i]++;
@@ -2009,7 +2026,7 @@ function buildDetail(id){
             });
           });
           const labels=pqsLocal.map((_,i)=>'P'+(i+1));
-          const total=resp.length;
+          const total=respFiltradas.length;
           // Calcular stats
           const pctCorr=pqsLocal.map((_,i)=>Math.round(correctasCnt[i]/total*100));
           const mejorIdx=pctCorr.indexOf(Math.max(...pctCorr));

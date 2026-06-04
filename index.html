@@ -2203,6 +2203,30 @@ async function toggleEval(evalId,nuevoEstado,capId){
 }
 
 // FORMULARIO PUBLICO DE EVALUACION
+async function checkYaAprobado(evalId, legajo){
+  const ev=evaluaciones.find(e=>e.id===evalId);
+  if(!ev) return;
+  const cap=caps.find(c=>c.id===ev.capacitacion_id);
+  if(!cap) return;
+  try{
+    const res=await fetch(SUPA_URL+'/rest/v1/asistentes?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo)+'&completo=eq.true',{headers:H});
+    const data=await res.json();
+    if(data&&data.length>0){
+      // Ya aprobó: bloquear formulario
+      const card=document.querySelector('.eval-public-card');
+      if(!card) return;
+      card.innerHTML='<div class="result-card">'+
+        '<div style="font-size:48px;margin-bottom:8px">🏆</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#0F6E56;margin-bottom:8px">¡Ya aprobaste esta evaluación!</div>'+
+        '<div style="font-size:13px;color:#777;margin-bottom:12px">Legajo <strong>'+esc(legajo)+'</strong> ya tiene registro de aprobación para esta capacitación.</div>'+
+        '<div style="background:#E1F5EE;border:1px solid #5DCAA5;border-radius:10px;padding:12px 14px;font-size:13px;color:#085041">'+
+          '✅ No es necesario volver a realizarla. Si creés que hay un error, comunicate con el área de SST.'+
+        '</div>'+
+      '</div>';
+    }
+  }catch(e){ console.warn('No se pudo verificar aprobación previa',e); }
+}
+
 function renderEvalPublica(evalId){
   const ev=evaluaciones.find(e=>e.id===evalId);
   if(!ev){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Evaluación no encontrada.</p></div></div>';return;}
@@ -2235,8 +2259,8 @@ function renderEvalPublica(evalId){
         <div style="margin-top:8px">
           <label class="form-label">Legajo *</label>
           <div style="display:flex;gap:6px">
-            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu número de legajo" style="flex:1" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value)">
-            <button onclick="validarLegajoPadron(document.getElementById('pub-legajo').value)" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Validar</button>
+            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu número de legajo" style="flex:1" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})">
+            <button onclick="validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Validar</button>
           </div>
           <div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>
           <div id="padron-datos" style="display:none">
@@ -2260,7 +2284,7 @@ function renderEvalPublica(evalId){
 }
 
 
-function validarLegajoPadron(legajo){
+function validarLegajoPadron(legajo,evalId){
   const lookup=document.getElementById('padron-lookup');
   const datos=document.getElementById('padron-datos');
   const nombreInput=document.getElementById('pub-nombre');
@@ -2293,6 +2317,7 @@ function validarLegajoPadron(legajo){
       if(cuilInput) cuilInput.value=cuil;
       if(deptoInput) deptoInput.value=depto;
       if(datos) datos.style.display='block';
+      if(evalId) checkYaAprobado(evalId, leg);
     }
   } else if(padron.length>0){
     lookup.style.display='block';
@@ -2309,6 +2334,7 @@ function validarLegajoPadron(legajo){
     lookup.innerHTML='<span style="color:#888">Sin padrón cargado — completá los datos manualmente</span>';
     if(datos) datos.style.display='block';
     if(nombreInput){nombreInput.readOnly=false;nombreInput.placeholder='Nombre y apellido';}
+    if(evalId&&leg) checkYaAprobado(evalId,leg);
   }
 }
 
@@ -2407,15 +2433,40 @@ async function submitEval(evalId,totalPqs){
       }
     }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
   }
+  // Calcular incorrectas para APROBADO también
+  let incorrectasAprobadoHtml='';
+  if(aprobado){
+    const incorrectasAp=pqs.filter(p=>respuestas[p.id]!==p.correcta);
+    if(incorrectasAp.length){
+      const filas=incorrectasAp.map((p,i)=>{
+        const opciones=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
+        const respondidaTxt=opciones[respuestas[p.id]]!==undefined?opciones[respuestas[p.id]]:'—';
+        const correctaTxt=opciones[p.correcta]!==undefined?opciones[p.correcta]:'—';
+        return'<div style="background:#FFFBEB;border:1px solid #FAC775;border-radius:8px;padding:10px 12px;margin-bottom:8px">'+
+          '<div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">'+(i+1)+'. '+esc(p.enunciado||p.pregunta||'')+'</div>'+
+          '<div style="font-size:11px;color:#CC0000;margin-bottom:3px">&#10007; Tu respuesta: <strong>'+esc(respondidaTxt)+'</strong></div>'+
+          '<div style="font-size:11px;color:#1D9E75">&#10003; Respuesta correcta: <strong>'+esc(correctaTxt)+'</strong></div>'+
+        '</div>';
+      }).join('');
+      incorrectasAprobadoHtml='<div style="margin-top:16px;text-align:left;border-top:1px solid #e5e5e0;padding-top:14px">'+
+        '<div style="font-size:13px;font-weight:700;color:#854F0B;margin-bottom:10px">&#128221; Preguntas con error ('+incorrectasAp.length+')</div>'+
+        '<div style="font-size:12px;color:#777;margin-bottom:10px">Aprobaste, pero revisá estas respuestas para reforzar el aprendizaje:</div>'+
+        filas+
+      '</div>';
+    }
+  }
+
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'+
     '<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'+
     '<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'+
     '<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'&#10003; Aprobado':'&#10007; Desaprobado')+'</div>'+
     (aprobado
-      ?'<div style="font-size:13px;color:#777;margin-bottom:8px">'+correctas+' de '+pqs.length+' respuestas correctas</div><div style="margin-top:8px;font-size:12px;color:#888">&#9989; Tus respuestas fueron registradas correctamente.</div>'
+      ?'<div style="font-size:13px;color:#777;margin-bottom:8px">'+correctas+' de '+pqs.length+' respuestas correctas</div>'+
+        '<div style="margin-top:8px;font-size:12px;color:#888">&#9989; Tus respuestas fueron registradas correctamente.</div>'+
+        incorrectasAprobadoHtml
       :'<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:12px 14px;margin:8px 0 12px;text-align:left">'+
           '<div style="font-size:14px;font-weight:700;color:#CC0000;margin-bottom:4px">&#128532; Lamentamos que no hayas podido aprobar</div>'+
-          '<div style="font-size:13px;color:#AA0000">Agotaste los dos intentos disponibles. Un superior evaluará la situación y coordinará una nueva instancia de capacitación cuando corresponda.</div>'+
+          '<div style="font-size:13px;color:#AA0000">Agotaste los dos intentos disponibles. Comunicate con tu superior directo o con el área de Seguridad y Salud en el Trabajo para coordinar una nueva instancia.</div>'+
         '</div>'+
         '<div style="font-size:12px;color:#888;margin-bottom:4px">'+correctas+' de '+pqs.length+' respuestas correctas</div>'+
         (notaPrimerIntento?'<div style="font-size:11px;color:#aaa;margin-bottom:8px">1° intento: '+parseFloat(notaPrimerIntento)+'/10 &middot; 2° intento: '+puntaje+'/10</div>':'')+

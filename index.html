@@ -3610,7 +3610,7 @@ function getIndicadoresData(){
       const meta = cap.participantes_esperados||0;
       return s + meta * Number(cap.duracion||1);
     }, 0);
-    const realizado = capsDelMes.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
+    const realizado = capsDelMes.reduce((s,cap) => {
       const comp = getA(cap.id).filter(a=>a.completo).length;
       return s + comp * Number(cap.duracion||1);
     }, 0);
@@ -3637,7 +3637,7 @@ function getIndicadoresRemo(){
       const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
       return s + esp * Number(cap.duracion||1);
     }, 0);
-    const realizado = capsRemo.filter(cap => estadoCap(cap)==='Realizada').reduce((s,cap) => {
+    const realizado = capsRemo.reduce((s,cap) => {
       const comp = getA(cap.id).filter(a=>a.completo).length;
       return s + comp * Number(cap.duracion||1);
     }, 0);

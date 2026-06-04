@@ -1983,6 +1983,70 @@ function buildDetail(id){
           </div>`:'<p style="font-size:11px;color:#888">Activá la evaluación para generar el link para los participantes.</p>'}
         </div>
       </div>`;
+      // Gráfico de resultados por pregunta
+      const chartCapId='evalChart_'+id;
+      evalHtml+='<div class="modal-section" id="evalChartSection_'+id+'" style="margin-top:8px"><div style="font-size:12px;font-weight:500;color:#444;margin-bottom:10px">Resultados por pregunta</div><div id="evalChartWrap_'+id+'" style="font-size:11px;color:#aaa;text-align:center;padding:12px">Cargando datos...</div></div>';
+      // Cargar datos async y renderizar chart
+      (async function(){
+        try{
+          const evId=ev.id;
+          const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+evId+'&select=respuestas,puntaje');
+          if(!resp||!resp.length){
+            const w=document.getElementById('evalChartWrap_'+id);
+            if(w) w.textContent='Sin respuestas registradas aún.';
+            return;
+          }
+          // Contar correctas/incorrectas por índice de pregunta
+          const pqsLocal=preguntas.filter(p=>p.evaluacion_id===evId);
+          if(!pqsLocal.length) return;
+          const correctasCnt=pqsLocal.map(()=>0);
+          const incorrectasCnt=pqsLocal.map(()=>0);
+          resp.forEach(r=>{
+            const respObj=r.respuestas||{};
+            pqsLocal.forEach((p,i)=>{
+              if(respObj[p.id]===p.correcta) correctasCnt[i]++;
+              else incorrectasCnt[i]++;
+            });
+          });
+          const labels=pqsLocal.map((_,i)=>'P'+(i+1));
+          const total=resp.length;
+          // Calcular stats
+          const pctCorr=pqsLocal.map((_,i)=>Math.round(correctasCnt[i]/total*100));
+          const mejorIdx=pctCorr.indexOf(Math.max(...pctCorr));
+          const peorIdx=pctCorr.indexOf(Math.min(...pctCorr));
+          const promGen=Math.round(pctCorr.reduce((a,b)=>a+b,0)/pctCorr.length);
+          const wrap=document.getElementById('evalChartWrap_'+id);
+          if(!wrap) return;
+          wrap.innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:11px;color:#888">'+
+            '<span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:#1D9E75;display:inline-block"></span>Correctas</span>'+
+            '<span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:#E24B4A;display:inline-block"></span>Incorrectas</span>'+
+            '</div>'+
+            '<div style="position:relative;width:100%;height:200px"><canvas id="'+chartCapId+'" role="img" aria-label="Resultados por pregunta"></canvas></div>'+
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px">'+
+              '<div style="background:#f4f4f2;border-radius:6px;padding:8px 10px"><p style="font-size:10px;color:#888;margin:0 0 2px">Pregunta más difícil</p><p style="font-size:13px;font-weight:500;color:#111;margin:0">P'+(peorIdx+1)+' <span style="font-size:11px;color:#E24B4A">'+(100-pctCorr[peorIdx])+'% error</span></p></div>'+
+              '<div style="background:#f4f4f2;border-radius:6px;padding:8px 10px"><p style="font-size:10px;color:#888;margin:0 0 2px">Mejor respondida</p><p style="font-size:13px;font-weight:500;color:#111;margin:0">P'+(mejorIdx+1)+' <span style="font-size:11px;color:#1D9E75">'+pctCorr[mejorIdx]+'% acierto</span></p></div>'+
+              '<div style="background:#f4f4f2;border-radius:6px;padding:8px 10px"><p style="font-size:10px;color:#888;margin:0 0 2px">Promedio general</p><p style="font-size:13px;font-weight:500;color:#111;margin:0">'+promGen+'% <span style="font-size:11px;color:#888">correcto</span></p></div>'+
+            '</div>';
+          new Chart(document.getElementById(chartCapId),{
+            type:'bar',
+            data:{
+              labels,
+              datasets:[
+                {label:'Correctas',data:correctasCnt,backgroundColor:'#1D9E75',borderRadius:{topLeft:0,topRight:0,bottomLeft:4,bottomRight:4},borderSkipped:'bottom'},
+                {label:'Incorrectas',data:incorrectasCnt,backgroundColor:'#E24B4A',borderRadius:{topLeft:4,topRight:4,bottomLeft:0,bottomRight:0},borderSkipped:'top'}
+              ]
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const t2=correctasCnt[ctx.dataIndex]+incorrectasCnt[ctx.dataIndex];const p=Math.round(ctx.raw/t2*100);return ctx.dataset.label+': '+ctx.raw+' ('+p+'%)';}}}},
+              scales:{
+                x:{stacked:true,grid:{display:false},ticks:{font:{size:11},color:'#888',autoSkip:false}},
+                y:{stacked:true,grid:{color:'rgba(136,135,128,0.15)'},ticks:{font:{size:11},color:'#888',stepSize:1,callback:function(v){return Number.isInteger(v)?v:''}},title:{display:true,text:'Respuestas',font:{size:10},color:'#888'}}
+              }
+            }
+          });
+        }catch(e){console.warn('Chart eval error',e);}
+      })();
     }else if(canManageEval()){
       evalHtml=`<div class="modal-section">
         <div class="modal-section-title">Evaluación de comprensión</div>
@@ -2005,6 +2069,7 @@ function buildDetail(id){
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
   const exportBtn=faltantesReal>0?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${faltantesReal})</button>`:'';
   const exportAllBtn=canExportParticipants()&&a.length?`<button class="btn-export" onclick="exportAll(${id})">📊 Exportar participantes</button>`:'';
+  const exportRespBtn=canExportParticipants()&&hasNota&&getEval(id)?`<button class="btn-export" onclick="exportRespuestas(${id})">📋 Respuestas eval</button>`:'';
   const plantillaBtn=canManageParticipants()?`<button class="btn-sm" onclick="exportPlantillaAsistentes(${id})" title="Plantilla para cargar asistentes">📥 Plantilla</button>`:'';
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
@@ -2036,7 +2101,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -2670,6 +2735,48 @@ function exportAll(capId){
   XLSX.utils.book_append_sheet(wb,ws,'Participantes');
   XLSX.writeFile(wb,`participantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
   toast('Excel descargado');
+}
+
+async function exportRespuestas(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const ev=getEval(capId);if(!ev){toast('Sin evaluación');return;}
+  const pqsLocal=preguntas.filter(p=>p.evaluacion_id===ev.id);
+  if(!pqsLocal.length){toast('Sin preguntas');return;}
+  toast('Generando reporte...',6000);
+  try{
+    const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=legajo,nombre,respuestas,puntaje');
+    if(!resp||!resp.length){toast('Sin respuestas registradas');return;}
+    const rows=[];
+    resp.forEach(r=>{
+      const respObj=r.respuestas||{};
+      pqsLocal.forEach((p,i)=>{
+        const opciones=[p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d].filter(Boolean);
+        const idxRespuesta=respObj[p.id];
+        const idxCorrecta=p.correcta;
+        const respuestaDada=idxRespuesta!=null&&opciones[idxRespuesta]!=null?opciones[idxRespuesta]:'—';
+        const respuestaCorrecta=idxCorrecta!=null&&opciones[idxCorrecta]!=null?opciones[idxCorrecta]:'—';
+        const esCorrecta=idxRespuesta===idxCorrecta;
+        rows.push({
+          'Capacitación':c.titulo,
+          'Evaluación':ev.titulo,
+          'Legajo':r.legajo,
+          'Nombre':r.nombre,
+          'N° Pregunta':i+1,
+          'Pregunta':p.pregunta||'',
+          'Respuesta dada':respuestaDada,
+          'Respuesta correcta':respuestaCorrecta,
+          '¿Correcta?':esCorrecta?'Sí':'No',
+          'Puntaje':r.puntaje!=null?r.puntaje:''
+        });
+      });
+    });
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:32},{wch:28},{wch:8},{wch:28},{wch:12},{wch:60},{wch:35},{wch:35},{wch:10},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,ws,'Respuestas');
+    XLSX.writeFile(wb,'respuestas_eval_'+c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()+'.xlsx');
+    toast('Excel descargado');
+  }catch(e){toast('Error al generar reporte');console.error(e);}
 }
 
 async function importExcel(event,capId){

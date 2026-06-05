@@ -154,6 +154,13 @@ select.form-input{cursor:pointer}
 .legajo-table th{text-align:left;padding:5px 7px;background:#f4f4f2;color:#888;font-weight:600;font-size:10px;border-bottom:1px solid #eee}
 .legajo-table td{padding:5px 7px;border-bottom:1px solid #f0f0ec;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .legajo-table tr:last-child td{border-bottom:none}
+/* Mobile: tabla de asistentes */
+@media(max-width:640px){
+  .col-cuil{display:none !important}
+  .col-fevaluac{display:none !important}
+  .col-nombre{white-space:normal !important;word-break:break-word;min-width:80px}
+  .legajo-table td,.legajo-table th{padding:4px 5px;font-size:10px}
+}
 .del-btn{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:0;line-height:1}
 .del-btn:hover{color:#A32D2D}
 .nota-chip{display:inline-block;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:600}
@@ -238,7 +245,7 @@ select.form-input{cursor:pointer}
   [style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"],[style*="grid-template-columns:minmax(0,auto) minmax(0,1fr)"]{grid-template-columns:1fr !important}
 }
 </style>
-  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBsYW4gZGUgQ2FwYWNpdGFjaW9uIEVNQSIsCiAgInNob3J0X25hbWUiOiAiQ2FwYWNpdGFjaW9uIiwKICAiZGVzY3JpcHRpb24iOiAiUGxhbiBkZSBDYXBhY2l0YWNpb24gMjAyNiAtIEVNQSBTZXJ2aWNpb3MiLAogICJzdGFydF91cmwiOiAiLi8iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiNmNGY0ZjIiLAogICJ0aGVtZV9jb2xvciI6ICIjMUQ5RTc1IiwKICAib3JpZW50YXRpb24iOiAicG9ydHJhaXQtcHJpbWFyeSIKfQ==">
+  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBsYW4gZGUgQ2FwYWNpdGFjaW9uIEVNQSIsCiAgInNob3J0X25hbWUiOiAiQ2FwYWNpdGFjaW9uIiwKICAiZGVzY3JpcHRpb24iOiAiUGxhbiBkZSBDYXBhY2l0YWNpb24gMjAyNiAtIEVNQSBTZXJ2aWNpb3MiLAogICJzdGFydF91cmwiOiAiLi8iLAogICJzY29wZSI6ICIuLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImRpc3BsYXlfb3ZlcnJpZGUiOiBbInN0YW5kYWxvbmUiLCAibWluaW1hbC11aSIsICJicm93c2VyIl0sCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2Y0ZjRmMiIsCiAgInRoZW1lX2NvbG9yIjogIiMxRDlFNzUiLAogICJvcmllbnRhdGlvbiI6ICJwb3J0cmFpdC1wcmltYXJ5IiwKICAicHJlZmVyX3JlbGF0ZWRfYXBwbGljYXRpb25zIjogZmFsc2UsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDE5MiAxOTInPjxyZWN0IHdpZHRoPScxOTInIGhlaWdodD0nMTkyJyByeD0nMjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzE0MCcgeD0nOTYnIGZvbnQtc2l6ZT0nMTIwJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmaWxsPSd3aGl0ZSc+RTwvdGV4dD48L3N2Zz4iLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiLAogICAgICAicHVycG9zZSI6ICJhbnkgbWFza2FibGUiCiAgICB9LAogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDUxMiA1MTInPjxyZWN0IHdpZHRoPSc1MTInIGhlaWdodD0nNTEyJyByeD0nNjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzM4MCcgeD0nMjU2JyBmb250LXNpemU9JzMyMCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nd2hpdGUnPkU8L3RleHQ+PC9zdmc+IiwKICAgICAgInNpemVzIjogIjUxMng1MTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwKICAgICAgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIgogICAgfQogIF0sCiAgImNhdGVnb3JpZXMiOiBbImJ1c2luZXNzIiwgInByb2R1Y3Rpdml0eSJdLAogICJsYW5nIjogImVzIgp9">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1894,23 +1901,23 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const tableHead=`<thead><tr><th style="width:52px">Legajo</th><th>Nombre</th><th style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr><th style="width:52px">Legajo</th><th class="col-nombre">Nombre</th><th class="col-cuil" style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   function buildRow(x, esFaltantePadron=false){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
-    const cuilCell=`<td style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
-    const fechaEvalCell=`<td style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
+    const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     if(esFaltantePadron){
       // Fila de alguien en el padrón que no está en la lista — solo lectura
-      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td style="color:#888;font-size:11px">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${canManageParticipants()?'<td></td>':''}</tr>`;
+      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${canManageParticipants()?'<td></td>':''}</tr>`;
     }
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
       ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
-    return`<tr><td>${esc(x.legajo)}</td><td>${esc(x.nombre)}${extBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+    return`<tr><td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view

@@ -1,27 +1,11 @@
 <!DOCTYPE html>
-<!--
-================================================================================
-  © 2026 EVDigital / EMA Servicios. Todos los derechos reservados.
-  Prohibida su reproducción, distribución o modificación sin autorización escrita.
+<!-- saved from url=(0046)file:///C:/Users/e.verdun/Downloads/index.html -->
+<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
-  Sistema: Plan de Capacitación 2026
-  Autor:   EVDigital
-  Cliente: EMA Servicios
-  Fecha:   2026
-
-  Este software es propiedad intelectual de EVDigital.
-  Cualquier uso no autorizado será perseguido legalmente conforme
-  a la Ley 11.723 de Propiedad Intelectual (Argentina).
-================================================================================
--->
-
-<html lang="es">
-<head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="./index_files/xlsx.full.min.js.descarga"></script>
+<script src="./index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
@@ -251,7 +235,7 @@ select.form-input{cursor:pointer}
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Capacitación">
   <meta name="theme-color" content="#1D9E75">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231A2F6E'/><text y='70' x='50' font-size='60' text-anchor='middle' fill='white'>E</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,&lt;svg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 100 100&#39;&gt;&lt;rect width=&#39;100&#39; height=&#39;100&#39; fill=&#39;%231A2F6E&#39;/&gt;&lt;text y=&#39;70&#39; x=&#39;50&#39; font-size=&#39;60&#39; text-anchor=&#39;middle&#39; fill=&#39;white&#39;&gt;E&lt;/text&gt;&lt;/svg&gt;">
 </head>
 <body>
 
@@ -263,9 +247,9 @@ select.form-input{cursor:pointer}
     <div class="login-title">Plan de Capacitación</div>
     <div class="login-sub">2026 — Ingresá con tu cuenta</div>
     <label class="login-label" for="login-email">Email</label>
-    <input class="login-input" id="login-email" type="email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="login-input" id="login-email" type="email" placeholder="tu@email.com" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     <label class="login-label" for="login-pass">Contraseña</label>
-    <input class="login-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="login-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error" style="display:none">
       <strong>Usuario o contraseña incorrectos.</strong><br>
@@ -352,8 +336,7 @@ select.form-input{cursor:pointer}
       <option value="tipo">Tipo</option>
       <option value="bimestre">Bimestre</option>
     </select>
-    <button id="btn-clear-filters" onclick="clearFilters()" title="Limpiar todos los filtros"
-      style="display:none;background:#EE0000;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✕ Limpiar</button>
+    <button id="btn-clear-filters" onclick="clearFilters()" title="Limpiar todos los filtros" style="display:none;background:#EE0000;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✕ Limpiar</button>
   </div>
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
@@ -364,26 +347,22 @@ select.form-input{cursor:pointer}
   <div class="search-bar" id="search-bar-wrap">
     <div style="position:relative;display:flex;align-items:center">
       <span style="position:absolute;left:10px;color:#bbb;font-size:13px;pointer-events:none">🔍</span>
-      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…"
-        oninput="applyFilters()"
-        style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
-        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#e0e0dc'">
-      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
-        style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
+      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…" oninput="applyFilters()" style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s" onfocus="this.style.borderColor=&#39;#1D9E75&#39;" onblur="this.style.borderColor=&#39;#e0e0dc&#39;">
+      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda" style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
     </div>
   </div>
   </div><!-- /top-controls -->
   <div class="app-body">
   <div class="tabs">
-    <div class="tab active" id="tab-lista" onclick="switchTab('lista')">Lista</div>
-    <div class="tab" id="tab-tipo" onclick="switchTab('tipo')">Por tipo</div>
-    <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
-    <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Depto</div>
-    <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
-    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
-    <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
-    <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
-    <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
+    <div class="tab active" id="tab-lista" onclick="switchTab(&#39;lista&#39;)">Lista</div>
+    <div class="tab" id="tab-tipo" onclick="switchTab(&#39;tipo&#39;)">Por tipo</div>
+    <div class="tab" id="tab-bim" onclick="switchTab(&#39;bim&#39;)">Bimestres</div>
+    <div class="tab" id="tab-un" onclick="switchTab(&#39;un&#39;)">UN/Depto</div>
+    <div class="tab" id="tab-resumen" onclick="switchTab(&#39;resumen&#39;)">Resumen</div>
+    <div class="tab" id="tab-indicadores" onclick="switchTab(&#39;indicadores&#39;)">Indicadores</div>
+    <div class="tab" id="tab-padron" onclick="switchTab(&#39;padron&#39;)" style="display:none">Padrón</div>
+    <div class="tab" id="tab-config" onclick="switchTab(&#39;config&#39;)" style="display:none">Configurar</div>
+    <div class="tab" id="tab-usuarios" onclick="switchTab(&#39;usuarios&#39;)" style="display:none">Usuarios</div>
   </div>
   <div class="content" id="content"><div class="loading">Cargando...</div></div>
   </div>
@@ -1721,6 +1700,24 @@ function renderConfig(){
       <div><strong>nota</strong> — del 1 al 10 (solo SST y Salud)</div>
       <div><strong>fecha_evaluacion</strong> — fecha de la evaluación DD/MM/AAAA</div>
       <div><strong>Capacitación</strong> · <strong>Tipo</strong> · <strong>Bimestre</strong> — datos de la capacitación (solo lectura)</div>
+    </div>
+  </div>
+  <div class="config-section">
+    <div class="config-title">📋 Carga masiva de participantes y presencia</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Subí un solo Excel con participantes de <strong>múltiples capacitaciones a la vez</strong>. Podés indicar la fecha real de la capacitación y marcar presencia (SI/NO). La capacitación se identifica por su código Redmine.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn-sm green" onclick="exportPlantillaMasivaParticipantes()">📥 Plantilla Excel</button>
+      <label class="upload-label">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarMasivaParticipantes(event)"></label>
+    </div>
+    <div style="background:#E1F5EE;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#085041">
+      <strong>Columnas del Excel:</strong><br>
+      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
+      <strong>legajo *</strong> — número de legajo del participante<br>
+      <strong>fecha_capacitacion</strong> — DD/MM/AAAA · fecha real en que se realizó (opcional; si se indica, se actualiza la capacitación)<br>
+      <strong>completo *</strong> — SI o NO · si el participante estuvo presente<br>
+      <strong>nota</strong> — del 1 al 10 (solo capacitaciones con evaluación, opcional)<br>
+      <strong>nombre</strong> · <strong>cuil</strong> · <strong>un</strong> · <strong>departamento</strong> · <strong>sector</strong> — se completan automáticamente desde el padrón si el legajo existe<br>
+      <span style="color:#0F6E56">💡 Podés cargar varias capacitaciones en un mismo archivo. Una fila por participante. Si el participante ya existe en la capacitación, se actualiza su presencia y fecha.</span>
     </div>
   </div>
   <div class="config-section">
@@ -4465,6 +4462,216 @@ async function borrarCapsSeleccionadas(){
   renderContent();
 }
 
+// ===== CARGA MASIVA DE PARTICIPANTES =====
+function exportPlantillaMasivaParticipantes(){
+  // Construir filas de ejemplo con 2 capacitaciones distintas
+  const rows=[];
+  const caps2=caps.slice(0,2);
+  if(caps2.length){
+    for(const cap of caps2){
+      const a=getA(cap.id);
+      const ejemplos=a.length?a.slice(0,2):[{legajo:'',nombre:'',cuil:'',un:cap.un||'',departamento:cap.departamento||'',sector:''}];
+      for(const p of ejemplos){
+        rows.push({
+          'codigo_redmine':cap.codigo_redmine||'#XXXXX',
+          'legajo':p.legajo||'',
+          'nombre':p.nombre||'',
+          'cuil':p.cuil||'',
+          'un':p.un||cap.un||'',
+          'departamento':p.departamento||cap.departamento||'',
+          'sector':p.sector||'',
+          'fecha_capacitacion':cap.fecha?fmtF(cap.fecha):'DD/MM/AAAA',
+          'completo':p.completo?'SI':'',
+          'nota':p.nota!=null?p.nota:''
+        });
+      }
+    }
+  } else {
+    // Plantilla vacía de ejemplo
+    rows.push(
+      {'codigo_redmine':'#35167','legajo':'9696','nombre':'GARCIA, JUAN CARLOS','cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'15/03/2026','completo':'SI','nota':''},
+      {'codigo_redmine':'#35167','legajo':'8821','nombre':'LOPEZ, MARIA JOSE','cuil':'27-87654321-0','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'15/03/2026','completo':'NO','nota':''},
+      {'codigo_redmine':'#35200','legajo':'9696','nombre':'GARCIA, JUAN CARLOS','cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'22/04/2026','completo':'SI','nota':'8'},
+      {'codigo_redmine':'#35200','legajo':'8821','nombre':'LOPEZ, MARIA JOSE','cuil':'27-87654321-0','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'22/04/2026','completo':'SI','nota':'7'}
+    );
+  }
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:8},{wch:28},{wch:16},{wch:20},{wch:20},{wch:18},{wch:16},{wch:10},{wch:6}];
+  XLSX.utils.sheet_add_aoa(ws,[
+    [''],
+    ['NOTA: codigo_redmine identifica la capacitación. Una fila por participante. Podés incluir múltiples capacitaciones.'],
+    ['CAMPOS: codigo_redmine* | legajo* | nombre | cuil | un | departamento | sector | fecha_capacitacion (DD/MM/AAAA) | completo* (SI/NO) | nota'],
+    ['Los datos de nombre, cuil, un, departamento y sector se completan automáticamente desde el padrón si el legajo existe.'],
+  ],{origin:`A${rows.length+2}`});
+  XLSX.utils.book_append_sheet(wb,ws,'Participantes');
+  XLSX.writeFile(wb,'plantilla_carga_masiva_participantes.xlsx');
+  toast('Plantilla descargada');
+}
+
+async function importarMasivaParticipantes(event){
+  if(!canManageParticipants()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file){event.target.value='';return;}
+  const reader=new FileReader();
+  reader.onload=async function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length){alert('El archivo está vacío');event.target.value='';return;}
+
+      // Agrupar filas por código Redmine
+      const porRedmine={};
+      let filasSinCodigo=0;
+      for(const r of rows){
+        const codigo=String(r.codigo_redmine||r['#Redmine']||r['codigo redmine']||'').trim();
+        if(!codigo){filasSinCodigo++;continue;}
+        if(!porRedmine[codigo]) porRedmine[codigo]=[];
+        porRedmine[codigo].push(r);
+      }
+      const codigos=Object.keys(porRedmine);
+      if(!codigos.length){alert('No se encontró ningún código Redmine válido en el archivo. Verificá la columna "codigo_redmine".');event.target.value='';return;}
+
+      setSyncStatus('syncing');
+      toast('Procesando...', 30000);
+
+      let capsOk=0,capsErr=0,partOk=0,partErr=0,partActualiz=0;
+      const errores=[];
+
+      for(const codigo of codigos){
+        // Buscar la capacitación por código Redmine
+        const cap=caps.find(c=>c.codigo_redmine===codigo||(c.codigo_redmine&&c.codigo_redmine.trim()===codigo));
+        if(!cap){
+          capsErr++;
+          errores.push(`Código ${codigo}: capacitación no encontrada`);
+          continue;
+        }
+        const filas=porRedmine[codigo];
+
+        // Determinar fecha_capacitacion (primera fila que la tenga)
+        let fechaCapActualizar=null;
+        for(const r of filas){
+          const fv=String(r.fecha_capacitacion||r['fecha capacitacion']||r['Fecha Capacitacion']||r['Fecha Capacitación']||'').trim();
+          if(fv){
+            let fechaParsed=null;
+            if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){
+              const[d,m,y]=fv.split('/');
+              fechaParsed=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+            } else if(/^\d{4}-\d{2}-\d{2}$/.test(fv)){
+              fechaParsed=fv;
+            } else if(typeof r.fecha_capacitacion==='number'){
+              const df=new Date(Math.round((r.fecha_capacitacion-25569)*86400*1000));
+              fechaParsed=df.getUTCFullYear()+'-'+String(df.getUTCMonth()+1).padStart(2,'0')+'-'+String(df.getUTCDate()).padStart(2,'0');
+            }
+            if(fechaParsed){fechaCapActualizar=fechaParsed;break;}
+          }
+        }
+        // Si hay fecha nueva, actualizar la capacitación
+        if(fechaCapActualizar&&fechaCapActualizar!==cap.fecha){
+          try{
+            await api('PATCH','capacitaciones',{fecha:fechaCapActualizar},`?id=eq.${cap.id}`);
+            const ci=caps.findIndex(c=>c.id===cap.id);
+            if(ci>=0) caps[ci].fecha=fechaCapActualizar;
+            cap.fecha=fechaCapActualizar;
+          }catch(e){console.warn('Error actualizando fecha cap',codigo,e);}
+        }
+
+        // Procesar participantes de esta capacitación
+        for(const r of filas){
+          const legajo=String(r.legajo||r.Legajo||r.LEGAJO||'').trim();
+          if(!legajo){continue;}
+
+          // Datos del participante: priorizar padrón, luego Excel
+          const emp=getPadronEmpleado(legajo);
+          // Bloquear si está dado de baja en el padrón
+          if(emp&&emp.estado&&emp.estado!=='Vigente'){
+            errores.push(`Legajo ${legajo} (${codigo}): estado "${emp.estado}" — omitido`);
+            partErr++;
+            continue;
+          }
+          const nombre=emp?emp.nombre:(String(r.nombre||r.Nombre||r.NOMBRE||'').trim()||null);
+          const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):(String(r.cuil||r.CUIL||'').trim()||null);
+          const un=emp?(emp.un||''):(String(r.un||r.UN||'').trim()||cap.un||null);
+          const departamento=emp?(emp.departamento||emp.datos_extra?.Departamento||''):(String(r.departamento||r.Departamento||'').trim()||cap.departamento||null);
+          const sector=emp?(emp.sector||''):(String(r.sector||r.Sector||'').trim()||null);
+          const completo=['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim());
+          const nota=parseFloat(r.nota||r.Nota||r.NOTA||'')||null;
+          // Fecha evaluación: usar fecha_capacitacion como fecha de evaluación si se indicó
+          const fechaEval=fechaCapActualizar||(completo?new Date().toISOString().slice(0,10):null);
+
+          if(!nombre){
+            errores.push(`Legajo ${legajo} (${codigo}): sin nombre y no encontrado en padrón`);
+            partErr++;
+            continue;
+          }
+
+          try{
+            // Verificar si ya existe el asistente
+            const existe=asistentes.find(a=>a.capacitacion_id===cap.id&&String(a.legajo)===String(legajo));
+            const datosAsis={nombre,un:un||'',sector:sector||'',departamento:departamento||null,cuil:cuil||null,completo,en_meta:true};
+            if(nota!=null) datosAsis.nota=nota;
+            if(fechaEval) datosAsis.fecha_evaluacion=fechaEval;
+
+            if(existe){
+              await api('PATCH','asistentes',datosAsis,`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
+              const ai=asistentes.findIndex(a=>a.capacitacion_id===cap.id&&String(a.legajo)===String(legajo));
+              if(ai>=0) asistentes[ai]={...asistentes[ai],...datosAsis};
+              partActualiz++;
+            }else{
+              const nr=await api('POST','asistentes',{capacitacion_id:cap.id,legajo,...datosAsis},'');
+              const nv=Array.isArray(nr)?nr[0]:nr;
+              if(nv) asistentes.push(nv);
+              partOk++;
+            }
+            // Marcar Realizada si completo y estaba programada
+            if(completo&&(cap.estado==='Programada'||cap.estado==='Pendiente')){
+              // Solo si al menos 1 presente
+              const compTotal=asistentes.filter(a=>a.capacitacion_id===cap.id&&a.completo).length;
+              if(compTotal>0){
+                await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${cap.id}`);
+                const ci=caps.findIndex(c=>c.id===cap.id);
+                if(ci>=0){caps[ci].estado='Realizada';cap.estado='Realizada';}
+              }
+            }
+          }catch(e){
+            partErr++;
+            errores.push(`Legajo ${legajo} (${codigo}): ${e.message}`);
+          }
+        }
+
+        // Actualizar participantes_esperados si el total superó la meta
+        const totalNuevo=getA(cap.id).length;
+        const capObj=caps.find(c=>c.id===cap.id);
+        if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+          try{
+            await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${cap.id}`);
+            capObj.participantes_esperados=totalNuevo;
+          }catch(e){}
+        }
+        capsOk++;
+      }
+
+      setSyncStatus('ok');
+      renderContent();
+      const resumen=[
+        `✓ ${capsOk} capacitación${capsOk!==1?'es':''} procesada${capsOk!==1?'s':''}`,
+        `${partOk} participante${partOk!==1?'s':''} nuevo${partOk!==1?'s':''}`,
+        `${partActualiz} actualizado${partActualiz!==1?'s':''}`,
+      ];
+      if(capsErr) resumen.push(`${capsErr} código${capsErr!==1?'s':''} no encontrado${capsErr!==1?'s':''}`);
+      if(partErr) resumen.push(`${partErr} fila${partErr!==1?'s':''} con error`);
+      if(filasSinCodigo) resumen.push(`${filasSinCodigo} fila${filasSinCodigo!==1?'s':''} sin código`);
+      toast(resumen.join(' · '));
+      if(errores.length>0){
+        console.warn('Errores en importación masiva:', errores);
+        if(errores.length<=5) alert('Detalle de errores:\n'+errores.join('\n'));
+        else alert('Importación completada con errores.\nPrimeros errores:\n'+errores.slice(0,5).join('\n')+'\n...('+errores.length+' en total — ver consola)');
+      }
+    }catch(err){setSyncStatus('error');alert('Error al leer el archivo: '+err.message);}
+    event.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 setInterval(()=>{if(currentUser)loadAll();},30000);
 init();
 </script>
@@ -4494,7 +4701,7 @@ self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWi
 </script>
 <div id="install-pwa-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1D9E75;color:#fff;border:none;border-radius:12px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);align-items:center;gap:8px;z-index:9999;white-space:nowrap" onclick="installPWA()">
   <span>📲</span> Instalar app en el celular
-  <button onclick="event.stopPropagation();this.parentElement.style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;margin-left:4px;padding:0">✕</button>
+  <button onclick="event.stopPropagation();this.parentElement.style.display=&#39;none&#39;" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;margin-left:4px;padding:0">✕</button>
 </div>
 <script>
 function installPWA(){
@@ -4508,5 +4715,6 @@ function installPWA(){
 }
 
 </script>
-</body>
-</html>
+
+
+</body></html>

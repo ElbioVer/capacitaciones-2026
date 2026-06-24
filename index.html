@@ -1,10 +1,23 @@
 <!DOCTYPE html>
-<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_2.html -->
+<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_3.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
 <script src="./index_files/xlsx.full.min.js.descarga"></script>
+<script>
+// Fallback: si cdnjs no cargó XLSX, intentar con unpkg
+if(typeof XLSX==='undefined'){
+  var s=document.createElement('script');
+  s.src='https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+  s.onerror=function(){
+    var s2=document.createElement('script');
+    s2.src='https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js';
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+}
+</script>
 <script src="./index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1710,14 +1723,15 @@ function renderConfig(){
       <label class="upload-label">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarMasivaParticipantes(event)"></label>
     </div>
     <div style="background:#E1F5EE;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#085041">
-      <strong>Columnas del Excel:</strong><br>
-      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
+      <strong>Formato exacto del Excel (mismas columnas que genera "Exportar participantes"):</strong><br>
+      <strong>#Redmine *</strong> — número de Redmine sin # (ej: 37545) · identifica la capacitación<br>
       <strong>legajo *</strong> — número de legajo del participante<br>
-      <strong>fecha_capacitacion</strong> — DD/MM/AAAA · fecha real en que se realizó (opcional; si se indica, se actualiza la capacitación)<br>
+      <strong>nombre · cuil · un · departamento · sector</strong> — datos del empleado (se completan solos si está en el padrón)<br>
       <strong>completo *</strong> — SI o NO · si el participante estuvo presente<br>
       <strong>nota</strong> — del 1 al 10 (solo capacitaciones con evaluación, opcional)<br>
-      <strong>nombre</strong> · <strong>cuil</strong> · <strong>un</strong> · <strong>departamento</strong> · <strong>sector</strong> — se completan automáticamente desde el padrón si el legajo existe<br>
-      <span style="color:#0F6E56">💡 Podés cargar varias capacitaciones en un mismo archivo. Una fila por participante. Si el participante ya existe en la capacitación, se actualiza su presencia y fecha.</span>
+      <strong>fecha_evaluacion</strong> — DD/MM/AAAA · opcional; si viene, se registra como fecha de la capacitación<br>
+      <strong>Capacitación · Tipo · Bimestre</strong> — columnas de referencia, no se procesan<br>
+      <span style="color:#0F6E56">💡 Usá la Plantilla Excel o descargá un "Exportar participantes" existente, completá o modificá la columna <strong>completo</strong> y subilo acá.</span>
     </div>
   </div>
   <div class="config-section">
@@ -4463,7 +4477,16 @@ async function borrarCapsSeleccionadas(){
 }
 
 // ===== CARGA MASIVA DE PARTICIPANTES =====
+function _xlsxCheck(){
+  if(typeof XLSX==='undefined'){
+    alert('Error: la librer\u00eda de Excel (SheetJS) no est\u00e1 cargada.\n\nVerific\u00e1 tu conexi\u00f3n a internet y recarg\u00e1 la p\u00e1gina (F5).\n\nSi el problema persiste, abrila en Chrome con conexi\u00f3n activa.');
+    return false;
+  }
+  return true;
+}
+
 function exportPlantillaMasivaParticipantes(){
+  if(!_xlsxCheck()) return;
   // Formato IDÉNTICO al exportPlantillaAsistentes / exportAll:
   // #Redmine | legajo | nombre | cuil | un | departamento | sector | completo | nota | fecha_evaluacion | Capacitación | Tipo | Bimestre
   // El #Redmine va SIN el símbolo # (solo el número), igual que el archivo de asistentes
@@ -4513,6 +4536,7 @@ function exportPlantillaMasivaParticipantes(){
 }
 
 async function importarMasivaParticipantes(event){
+  if(!_xlsxCheck()){event.target.value='';return;}
   if(!canManageParticipants()){toast('Sin permisos');return;}
   const file=event.target.files[0];if(!file){event.target.value='';return;}
   const reader=new FileReader();

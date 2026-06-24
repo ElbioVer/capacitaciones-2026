@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/e.verdun/Downloads/index.html -->
+<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_1.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4464,46 +4464,49 @@ async function borrarCapsSeleccionadas(){
 
 // ===== CARGA MASIVA DE PARTICIPANTES =====
 function exportPlantillaMasivaParticipantes(){
-  // Construir filas de ejemplo con 2 capacitaciones distintas
-  const rows=[];
-  const caps2=caps.slice(0,2);
-  if(caps2.length){
-    for(const cap of caps2){
-      const a=getA(cap.id);
-      const ejemplos=a.length?a.slice(0,2):[{legajo:'',nombre:'',cuil:'',un:cap.un||'',departamento:cap.departamento||'',sector:''}];
-      for(const p of ejemplos){
-        rows.push({
-          'codigo_redmine':cap.codigo_redmine||'#XXXXX',
-          'legajo':p.legajo||'',
-          'nombre':p.nombre||'',
-          'cuil':p.cuil||'',
-          'un':p.un||cap.un||'',
-          'departamento':p.departamento||cap.departamento||'',
-          'sector':p.sector||'',
-          'fecha_capacitacion':cap.fecha?fmtF(cap.fecha):'DD/MM/AAAA',
-          'completo':p.completo?'SI':'',
-          'nota':p.nota!=null?p.nota:''
-        });
+  // Formato IDÉNTICO al exportPlantillaAsistentes / exportAll:
+  // #Redmine | legajo | nombre | cuil | un | departamento | sector | completo | nota | fecha_evaluacion | Capacitación | Tipo | Bimestre
+  // El #Redmine va SIN el símbolo # (solo el número), igual que el archivo de asistentes
+  var rows=[];
+  try{
+    var caps2=caps.filter(function(c){return c.codigo_redmine;}).slice(0,3);
+    if(caps2.length){
+      for(var ci=0;ci<caps2.length;ci++){
+        var cap=caps2[ci];
+        var a=getA(cap.id);
+        var redmine=String(cap.codigo_redmine||'').replace(/^#/,'');
+        var src=a.length?a.slice(0,2):[null];
+        for(var pi=0;pi<src.length;pi++){
+          var p=src[pi];
+          rows.push({
+            '#Redmine':redmine,
+            'legajo':p?String(p.legajo||''):'',
+            'nombre':p?String(p.nombre||''):'',
+            'cuil':p?String(p.cuil||''):'',
+            'un':p?String(p.un||cap.un||''):String(cap.un||''),
+            'departamento':p?String(p.departamento||p.sector||cap.departamento||''):String(cap.departamento||''),
+            'sector':p?String(p.sector||''):'',
+            'completo':p?(p.completo?'SI':'NO'):'SI',
+            'nota':p&&p.nota!=null?p.nota:'',
+            'fecha_evaluacion':p&&p.fecha_evaluacion?fmtF(p.fecha_evaluacion):'',
+            'Capacitación':String(cap.titulo||''),
+            'Tipo':String(cap.tipo_codigo||''),
+            'Bimestre':String(cap.bimestre||'')
+          });
+        }
       }
     }
-  } else {
-    // Plantilla vacía de ejemplo
+  }catch(e){console.warn('Error armando plantilla:',e);}
+  if(!rows.length){
     rows.push(
-      {'codigo_redmine':'#35167','legajo':'9696','nombre':'GARCIA, JUAN CARLOS','cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'15/03/2026','completo':'SI','nota':''},
-      {'codigo_redmine':'#35167','legajo':'8821','nombre':'LOPEZ, MARIA JOSE','cuil':'27-87654321-0','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'15/03/2026','completo':'NO','nota':''},
-      {'codigo_redmine':'#35200','legajo':'9696','nombre':'GARCIA, JUAN CARLOS','cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'22/04/2026','completo':'SI','nota':'8'},
-      {'codigo_redmine':'#35200','legajo':'8821','nombre':'LOPEZ, MARIA JOSE','cuil':'27-87654321-0','un':'Dist y Logistica','departamento':'DIME y Morosidad','sector':'SST - Planta','fecha_capacitacion':'22/04/2026','completo':'SI','nota':'7'}
+      {'#Redmine':'37545','legajo':'8113','nombre':'GONZALEZ. RICARDO DAVID','cuil':'23-25983332-9','un':'Operaciones Comerciales','departamento':'Medidores (Aysa)','sector':'Medidores Aysa NR','completo':'SI','nota':'','fecha_evaluacion':'','Capacitación':'Cap Operativa Bimestral','Tipo':'REMO','Bimestre':'1\xb0 Bimestre (Ene-Feb)'},
+      {'#Redmine':'37545','legajo':'8098','nombre':'VILLANUEVA. MATIAS DANIEL','cuil':'20-33442634-4','un':'Operaciones Comerciales','departamento':'Medidores (Aysa)','sector':'Medidores Aysa NR','completo':'NO','nota':'','fecha_evaluacion':'','Capacitación':'Cap Operativa Bimestral','Tipo':'REMO','Bimestre':'1\xb0 Bimestre (Ene-Feb)'},
+      {'#Redmine':'37546','legajo':'8113','nombre':'GONZALEZ. RICARDO DAVID','cuil':'23-25983332-9','un':'Operaciones Comerciales','departamento':'Medidores (Aysa)','sector':'Medidores Aysa NR','completo':'SI','nota':'8','fecha_evaluacion':'15/04/2026','Capacitación':'Cap Operativa Bimestral','Tipo':'REMO','Bimestre':'2\xb0 Bimestre (Mar-Abr)'}
     );
   }
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:14},{wch:8},{wch:28},{wch:16},{wch:20},{wch:20},{wch:18},{wch:16},{wch:10},{wch:6}];
-  XLSX.utils.sheet_add_aoa(ws,[
-    [''],
-    ['NOTA: codigo_redmine identifica la capacitación. Una fila por participante. Podés incluir múltiples capacitaciones.'],
-    ['CAMPOS: codigo_redmine* | legajo* | nombre | cuil | un | departamento | sector | fecha_capacitacion (DD/MM/AAAA) | completo* (SI/NO) | nota'],
-    ['Los datos de nombre, cuil, un, departamento y sector se completan automáticamente desde el padrón si el legajo existe.'],
-  ],{origin:`A${rows.length+2}`});
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:8},{wch:30},{wch:16},{wch:22},{wch:22},{wch:20},{wch:10},{wch:6},{wch:16},{wch:35},{wch:10},{wch:22}];
   XLSX.utils.book_append_sheet(wb,ws,'Participantes');
   XLSX.writeFile(wb,'plantilla_carga_masiva_participantes.xlsx');
   toast('Plantilla descargada');
@@ -4519,17 +4522,21 @@ async function importarMasivaParticipantes(event){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       if(!rows.length){alert('El archivo está vacío');event.target.value='';return;}
 
-      // Agrupar filas por código Redmine
+      // Agrupar por #Redmine — acepta con o sin el símbolo #
       const porRedmine={};
       let filasSinCodigo=0;
       for(const r of rows){
-        const codigo=String(r.codigo_redmine||r['#Redmine']||r['codigo redmine']||'').trim();
+        // La columna en el archivo real se llama "#Redmine" (sin el símbolo en el valor)
+        let codigo=String(r['#Redmine']||r['codigo_redmine']||r['#redmine']||r['Redmine']||'').trim();
         if(!codigo){filasSinCodigo++;continue;}
         if(!porRedmine[codigo]) porRedmine[codigo]=[];
         porRedmine[codigo].push(r);
       }
       const codigos=Object.keys(porRedmine);
-      if(!codigos.length){alert('No se encontró ningún código Redmine válido en el archivo. Verificá la columna "codigo_redmine".');event.target.value='';return;}
+      if(!codigos.length){
+        alert('No se encontró ningún código Redmine. Verificá que la columna se llame "#Redmine".');
+        event.target.value='';return;
+      }
 
       setSyncStatus('syncing');
       toast('Procesando...', 30000);
@@ -4538,8 +4545,13 @@ async function importarMasivaParticipantes(event){
       const errores=[];
 
       for(const codigo of codigos){
-        // Buscar la capacitación por código Redmine
-        const cap=caps.find(c=>c.codigo_redmine===codigo||(c.codigo_redmine&&c.codigo_redmine.trim()===codigo));
+        // Buscar cap: el codigo_redmine en la BD puede tener # o no
+        const cap=caps.find(c=>{
+          if(!c.codigo_redmine) return false;
+          const r=String(c.codigo_redmine).replace(/^#/,'').trim();
+          const x=String(codigo).replace(/^#/,'').trim();
+          return r===x;
+        });
         if(!cap){
           capsErr++;
           errores.push(`Código ${codigo}: capacitación no encontrada`);
@@ -4547,25 +4559,18 @@ async function importarMasivaParticipantes(event){
         }
         const filas=porRedmine[codigo];
 
-        // Determinar fecha_capacitacion (primera fila que la tenga)
+        // fecha_evaluacion del Excel (columna fecha_evaluacion)
+        // Si viene en alguna fila, la usamos para actualizar la fecha de la cap
         let fechaCapActualizar=null;
         for(const r of filas){
-          const fv=String(r.fecha_capacitacion||r['fecha capacitacion']||r['Fecha Capacitacion']||r['Fecha Capacitación']||'').trim();
-          if(fv){
-            let fechaParsed=null;
-            if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){
-              const[d,m,y]=fv.split('/');
-              fechaParsed=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-            } else if(/^\d{4}-\d{2}-\d{2}$/.test(fv)){
-              fechaParsed=fv;
-            } else if(typeof r.fecha_capacitacion==='number'){
-              const df=new Date(Math.round((r.fecha_capacitacion-25569)*86400*1000));
-              fechaParsed=df.getUTCFullYear()+'-'+String(df.getUTCMonth()+1).padStart(2,'0')+'-'+String(df.getUTCDate()).padStart(2,'0');
-            }
-            if(fechaParsed){fechaCapActualizar=fechaParsed;break;}
+          const fv=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||'').trim();
+          if(fv&&fv!==''){
+            let fp=null;
+            if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');fp=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+            else if(/^\d{4}-\d{2}-\d{2}$/.test(fv)){fp=fv;}
+            if(fp){fechaCapActualizar=fp;break;}
           }
         }
-        // Si hay fecha nueva, actualizar la capacitación
         if(fechaCapActualizar&&fechaCapActualizar!==cap.fecha){
           try{
             await api('PATCH','capacitaciones',{fecha:fechaCapActualizar},`?id=eq.${cap.id}`);
@@ -4575,41 +4580,44 @@ async function importarMasivaParticipantes(event){
           }catch(e){console.warn('Error actualizando fecha cap',codigo,e);}
         }
 
-        // Procesar participantes de esta capacitación
+        // Procesar participantes
         for(const r of filas){
           const legajo=String(r.legajo||r.Legajo||r.LEGAJO||'').trim();
-          if(!legajo){continue;}
+          if(!legajo) continue;
 
-          // Datos del participante: priorizar padrón, luego Excel
+          // Priorizar padrón para datos del empleado; si no, usar el Excel
           const emp=getPadronEmpleado(legajo);
-          // Bloquear si está dado de baja en el padrón
           if(emp&&emp.estado&&emp.estado!=='Vigente'){
             errores.push(`Legajo ${legajo} (${codigo}): estado "${emp.estado}" — omitido`);
-            partErr++;
-            continue;
+            partErr++;continue;
           }
-          const nombre=emp?emp.nombre:(String(r.nombre||r.Nombre||r.NOMBRE||'').trim()||null);
+          const nombre=emp?emp.nombre:(String(r.nombre||r.Nombre||'').trim()||null);
           const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):(String(r.cuil||r.CUIL||'').trim()||null);
           const un=emp?(emp.un||''):(String(r.un||r.UN||'').trim()||cap.un||null);
           const departamento=emp?(emp.departamento||emp.datos_extra?.Departamento||''):(String(r.departamento||r.Departamento||'').trim()||cap.departamento||null);
           const sector=emp?(emp.sector||''):(String(r.sector||r.Sector||'').trim()||null);
-          const completo=['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim());
-          const nota=parseFloat(r.nota||r.Nota||r.NOTA||'')||null;
-          // Fecha evaluación: usar fecha_capacitacion como fecha de evaluación si se indicó
-          const fechaEval=fechaCapActualizar||(completo?new Date().toISOString().slice(0,10):null);
+          const completo=['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||'').toLowerCase().trim());
+          const nota=parseFloat(r.nota||r.Nota||'')||null;
+
+          // fecha_evaluacion a nivel participante
+          const fvPart=String(r['fecha_evaluacion']||r['Fecha Evaluación']||'').trim();
+          let fechaEvalPart=null;
+          if(fvPart){
+            if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fvPart)){const[d,m,y]=fvPart.split('/');fechaEvalPart=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+            else if(/^\d{4}-\d{2}-\d{2}$/.test(fvPart)) fechaEvalPart=fvPart;
+          }
+          if(!fechaEvalPart&&fechaCapActualizar) fechaEvalPart=fechaCapActualizar;
 
           if(!nombre){
-            errores.push(`Legajo ${legajo} (${codigo}): sin nombre y no encontrado en padrón`);
-            partErr++;
-            continue;
+            errores.push(`Legajo ${legajo} (${codigo}): sin nombre en padrón ni en Excel`);
+            partErr++;continue;
           }
 
           try{
-            // Verificar si ya existe el asistente
             const existe=asistentes.find(a=>a.capacitacion_id===cap.id&&String(a.legajo)===String(legajo));
             const datosAsis={nombre,un:un||'',sector:sector||'',departamento:departamento||null,cuil:cuil||null,completo,en_meta:true};
             if(nota!=null) datosAsis.nota=nota;
-            if(fechaEval) datosAsis.fecha_evaluacion=fechaEval;
+            if(fechaEvalPart) datosAsis.fecha_evaluacion=fechaEvalPart;
 
             if(existe){
               await api('PATCH','asistentes',datosAsis,`?capacitacion_id=eq.${cap.id}&legajo=eq.${encodeURIComponent(legajo)}`);
@@ -4622,9 +4630,8 @@ async function importarMasivaParticipantes(event){
               if(nv) asistentes.push(nv);
               partOk++;
             }
-            // Marcar Realizada si completo y estaba programada
+            // Marcar Realizada si al menos un presente
             if(completo&&(cap.estado==='Programada'||cap.estado==='Pendiente')){
-              // Solo si al menos 1 presente
               const compTotal=asistentes.filter(a=>a.capacitacion_id===cap.id&&a.completo).length;
               if(compTotal>0){
                 await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${cap.id}`);
@@ -4638,7 +4645,7 @@ async function importarMasivaParticipantes(event){
           }
         }
 
-        // Actualizar participantes_esperados si el total superó la meta
+        // Actualizar participantes_esperados si superó la meta
         const totalNuevo=getA(cap.id).length;
         const capObj=caps.find(c=>c.id===cap.id);
         if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
@@ -4653,24 +4660,25 @@ async function importarMasivaParticipantes(event){
       setSyncStatus('ok');
       renderContent();
       const resumen=[
-        `✓ ${capsOk} capacitación${capsOk!==1?'es':''} procesada${capsOk!==1?'s':''}`,
+        `\u2713 ${capsOk} capacitaci\xf3n${capsOk!==1?'es':''} procesada${capsOk!==1?'s':''}`,
         `${partOk} participante${partOk!==1?'s':''} nuevo${partOk!==1?'s':''}`,
-        `${partActualiz} actualizado${partActualiz!==1?'s':''}`,
+        `${partActualiz} actualizado${partActualiz!==1?'s':''}`
       ];
-      if(capsErr) resumen.push(`${capsErr} código${capsErr!==1?'s':''} no encontrado${capsErr!==1?'s':''}`);
+      if(capsErr) resumen.push(`${capsErr} c\xf3digo${capsErr!==1?'s':''} no encontrado${capsErr!==1?'s':''}`);
       if(partErr) resumen.push(`${partErr} fila${partErr!==1?'s':''} con error`);
-      if(filasSinCodigo) resumen.push(`${filasSinCodigo} fila${filasSinCodigo!==1?'s':''} sin código`);
-      toast(resumen.join(' · '));
-      if(errores.length>0){
-        console.warn('Errores en importación masiva:', errores);
-        if(errores.length<=5) alert('Detalle de errores:\n'+errores.join('\n'));
-        else alert('Importación completada con errores.\nPrimeros errores:\n'+errores.slice(0,5).join('\n')+'\n...('+errores.length+' en total — ver consola)');
+      if(filasSinCodigo) resumen.push(`${filasSinCodigo} fila${filasSinCodigo!==1?'s':''} sin c\xf3digo`);
+      toast(resumen.join(' \xb7 '));
+      if(errores.length){
+        console.warn('Errores importaci\xf3n masiva:', errores);
+        if(errores.length<=5) alert('Detalle errores:\n'+errores.join('\n'));
+        else alert('Importaci\xf3n con errores.\nPrimeros '+Math.min(errores.length,5)+':\n'+errores.slice(0,5).join('\n')+'\n...('+errores.length+' en total \u2014 ver consola)');
       }
     }catch(err){setSyncStatus('error');alert('Error al leer el archivo: '+err.message);}
     event.target.value='';
   };
   reader.readAsArrayBuffer(file);
 }
+
 
 setInterval(()=>{if(currentUser)loadAll();},30000);
 init();

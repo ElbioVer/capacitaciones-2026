@@ -1,27 +1,11 @@
 <!DOCTYPE html>
-<!--
-================================================================================
-  © 2026 EVDigital / EMA Servicios. Todos los derechos reservados.
-  Prohibida su reproducción, distribución o modificación sin autorización escrita.
+<!-- saved from url=(0046)file:///C:/Users/e.verdun/Downloads/index.html -->
+<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
-  Sistema: Plan de Capacitación 2026
-  Autor:   EVDigital
-  Cliente: EMA Servicios
-  Fecha:   2026
-
-  Este software es propiedad intelectual de EVDigital.
-  Cualquier uso no autorizado será perseguido legalmente conforme
-  a la Ley 11.723 de Propiedad Intelectual (Argentina).
-================================================================================
--->
-
-<html lang="es">
-<head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="./Plan de Capacitación 2026_files/xlsx.full.min.js.descarga"></script>
+<script src="./Plan de Capacitación 2026_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
@@ -251,7 +235,7 @@ select.form-input{cursor:pointer}
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Capacitación">
   <meta name="theme-color" content="#1D9E75">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231A2F6E'/><text y='70' x='50' font-size='60' text-anchor='middle' fill='white'>E</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,&lt;svg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 100 100&#39;&gt;&lt;rect width=&#39;100&#39; height=&#39;100&#39; fill=&#39;%231A2F6E&#39;/&gt;&lt;text y=&#39;70&#39; x=&#39;50&#39; font-size=&#39;60&#39; text-anchor=&#39;middle&#39; fill=&#39;white&#39;&gt;E&lt;/text&gt;&lt;/svg&gt;">
 </head>
 <body>
 
@@ -263,9 +247,9 @@ select.form-input{cursor:pointer}
     <div class="login-title">Plan de Capacitación</div>
     <div class="login-sub">2026 — Ingresá con tu cuenta</div>
     <label class="login-label" for="login-email">Email</label>
-    <input class="login-input" id="login-email" type="email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="login-input" id="login-email" type="email" placeholder="tu@email.com" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     <label class="login-label" for="login-pass">Contraseña</label>
-    <input class="login-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="login-input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error" style="display:none">
       <strong>Usuario o contraseña incorrectos.</strong><br>
@@ -352,8 +336,7 @@ select.form-input{cursor:pointer}
       <option value="tipo">Tipo</option>
       <option value="bimestre">Bimestre</option>
     </select>
-    <button id="btn-clear-filters" onclick="clearFilters()" title="Limpiar todos los filtros"
-      style="display:none;background:#EE0000;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✕ Limpiar</button>
+    <button id="btn-clear-filters" onclick="clearFilters()" title="Limpiar todos los filtros" style="display:none;background:#EE0000;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✕ Limpiar</button>
   </div>
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
@@ -364,26 +347,22 @@ select.form-input{cursor:pointer}
   <div class="search-bar" id="search-bar-wrap">
     <div style="position:relative;display:flex;align-items:center">
       <span style="position:absolute;left:10px;color:#bbb;font-size:13px;pointer-events:none">🔍</span>
-      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…"
-        oninput="applyFilters()"
-        style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s"
-        onfocus="this.style.borderColor='#1D9E75'" onblur="this.style.borderColor='#e0e0dc'">
-      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda"
-        style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
+      <input id="flt-search" type="text" placeholder="Buscar por título, UN, Redmine, tipo, instructor…" oninput="applyFilters()" style="width:100%;padding:7px 32px 7px 30px;font-size:12px;border:1px solid #e0e0dc;border-radius:8px;background:#fff;color:#111;outline:none;transition:border-color .15s" onfocus="this.style.borderColor=&#39;#1D9E75&#39;" onblur="this.style.borderColor=&#39;#e0e0dc&#39;">
+      <button id="flt-search-clear" onclick="clearSearch()" title="Limpiar búsqueda" style="display:none;position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:16px;color:#bbb;padding:0;line-height:1">×</button>
     </div>
   </div>
   </div><!-- /top-controls -->
   <div class="app-body">
   <div class="tabs">
-    <div class="tab active" id="tab-lista" onclick="switchTab('lista')">Lista</div>
-    <div class="tab" id="tab-tipo" onclick="switchTab('tipo')">Por tipo</div>
-    <div class="tab" id="tab-bim" onclick="switchTab('bim')">Bimestres</div>
-    <div class="tab" id="tab-un" onclick="switchTab('un')">UN/Depto</div>
-    <div class="tab" id="tab-resumen" onclick="switchTab('resumen')">Resumen</div>
-    <div class="tab" id="tab-indicadores" onclick="switchTab('indicadores')">Indicadores</div>
-    <div class="tab" id="tab-padron" onclick="switchTab('padron')" style="display:none">Padrón</div>
-    <div class="tab" id="tab-config" onclick="switchTab('config')" style="display:none">Configurar</div>
-    <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
+    <div class="tab active" id="tab-lista" onclick="switchTab(&#39;lista&#39;)">Lista</div>
+    <div class="tab" id="tab-tipo" onclick="switchTab(&#39;tipo&#39;)">Por tipo</div>
+    <div class="tab" id="tab-bim" onclick="switchTab(&#39;bim&#39;)">Bimestres</div>
+    <div class="tab" id="tab-un" onclick="switchTab(&#39;un&#39;)">UN/Depto</div>
+    <div class="tab" id="tab-resumen" onclick="switchTab(&#39;resumen&#39;)">Resumen</div>
+    <div class="tab" id="tab-indicadores" onclick="switchTab(&#39;indicadores&#39;)">Indicadores</div>
+    <div class="tab" id="tab-padron" onclick="switchTab(&#39;padron&#39;)" style="display:none">Padrón</div>
+    <div class="tab" id="tab-config" onclick="switchTab(&#39;config&#39;)" style="display:none">Configurar</div>
+    <div class="tab" id="tab-usuarios" onclick="switchTab(&#39;usuarios&#39;)" style="display:none">Usuarios</div>
   </div>
   <div class="content" id="content"><div class="loading">Cargando...</div></div>
   </div>
@@ -1909,8 +1888,11 @@ function buildDetail(id){
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     if(esFaltantePadron){
-      // Fila de alguien en el padrón que no está en la lista — solo lectura
-      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${canManageParticipants()?'<td></td>':''}</tr>`;
+      // Fila de alguien en el padrón que no está en la lista
+      const delPadronCell=canManageParticipants()
+        ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
+        :'';
+      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
@@ -2117,6 +2099,7 @@ function buildDetail(id){
   const plantillaBtn=canManageParticipants()?`<button class="btn-sm" onclick="exportPlantillaAsistentes(${id})" title="Plantilla para cargar asistentes">📥 Plantilla</button>`:'';
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
+  const agregarBtn=canManageParticipants()?`<button class="btn-sm" style="background:#1D9E75;color:#fff;border-color:#1D9E75" onclick="openAgregarParticipante(${id})" title="Agregar participante designado">+ Agregar</button>`:'';
   const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
@@ -2145,7 +2128,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -3312,6 +3295,243 @@ function renderCharts(){
   });
 }
 
+// ── AGREGAR PARTICIPANTE DESIGNADO ──────────────────────────────────────────
+
+async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
+  if(!canManageParticipants()) return;
+  if(!confirm(`¿Quitar a ${nombre} del padrón para esta capacitación?\n\nEl empleado quedará registrado en la lista como "No completó" y podrá eliminarse luego con el botón ×.`)) return;
+  try{
+    setSyncStatus('syncing');
+    // Verificar si ya existe en asistentes
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+    if(existing&&existing.length){
+      toast('Este participante ya está en la lista');
+      setSyncStatus('ok');
+      return;
+    }
+    const r=await api('POST','asistentes',{
+      capacitacion_id:capId,legajo,nombre,un,sector,
+      departamento:depto,cuil,completo:false,en_meta:true
+    },'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    // Actualizar participantes_esperados si hace falta
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nombre} incorporado a la lista`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+function openAgregarParticipante(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  const completaron=new Set(a.filter(x=>x.completo).map(x=>String(x.legajo)));
+
+  // Padrón disponible para esta capacitación (no están en lista aún)
+  let activosPadron=[];
+  const esGlobal=padron.length&&!c.un&&!c.departamento;
+  const tienePadronFiltro=padron.length&&(c.un||c.departamento);
+  if(esGlobal){
+    activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
+  } else if(tienePadronFiltro){
+    activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(c.un&&p.un!==c.un) return false;
+      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      return true;
+    });
+  }
+  // Sólo los que NO están aún en la lista
+  const pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+
+  const listaPadronHtml=pendientes.length
+    ?`<div style="max-height:240px;overflow-y:auto;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f4f4f2;position:sticky;top:0">
+            <th style="padding:6px 8px;text-align:left;width:28px"><input type="checkbox" id="chk-todos-padron" onchange="toggleTodosChk(this)" title="Seleccionar todos"></th>
+            <th style="padding:6px 8px;text-align:left">Nombre</th>
+            <th style="padding:6px 4px;text-align:left;color:#888">Depto</th>
+          </tr></thead>
+          <tbody>${pendientes.map(p=>{
+            const depto=p.departamento||p.datos_extra?.Departamento||'';
+            return`<tr style="border-top:1px solid #f0f0f0">
+              <td style="padding:5px 8px"><input type="checkbox" class="chk-padron-item" value="${esc(p.legajo)}" data-nombre="${esc(p.nombre)}" data-cuil="${esc(p.cuil||p.datos_extra?.CUIL||'')}" data-depto="${esc(depto)}" data-un="${esc(p.un||'')}" data-sector="${esc(p.sector||'')}"></td>
+              <td style="padding:5px 8px;white-space:normal;word-break:break-word">${esc(p.nombre)}</td>
+              <td style="padding:5px 4px;color:#888;font-size:10px">${esc(depto)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+      <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="confirmarAgregarSeleccionados(${capId})">✔ Agregar seleccionados del padrón</button>`
+    :(padron.length?`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-bottom:14px">Todos los empleados del padrón ya están en la lista.</div>`:'');
+
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px">+ Agregar participante</div>
+    <p style="font-size:12px;color:#777;margin-bottom:12px">Seleccioná del padrón o ingresá un legajo manualmente.</p>
+    ${listaPadronHtml}
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:8px">Agregar por legajo</div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Legajo *</label>
+        <input class="form-input" id="ap-legajo" placeholder="Ej: 10025" oninput="validarLegajoAgregar(this.value)">
+        <div id="ap-lookup" style="font-size:11px;margin-top:4px;min-height:16px"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Nombre completo *</label>
+        <input class="form-input" id="ap-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group"><label class="form-label">CUIL</label><input class="form-input" id="ap-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="ap-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="ap-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      </div>
+      <button class="btn-prim" style="width:100%" onclick="agregarParticipanteIndividual(${capId})">Agregar participante</button>
+    </div>
+    <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
+}
+
+function toggleTodosChk(masterChk){
+  document.querySelectorAll('.chk-padron-item').forEach(c=>c.checked=masterChk.checked);
+}
+
+function validarLegajoAgregar(legajo){
+  const lookup=document.getElementById('ap-lookup');
+  const nombreInput=document.getElementById('ap-nombre');
+  const unInput=document.getElementById('ap-un');
+  const deptoInput=document.getElementById('ap-depto');
+  const cuilInput=document.getElementById('ap-cuil');
+  if(!lookup) return;
+  if(!legajo||legajo.length<2){
+    lookup.innerHTML='';
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
+      if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+      if(cuilInput) cuilInput.value='';
+    } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)}</span>`;
+      if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
+      if(unInput) unInput.value=emp.un||'';
+      if(deptoInput) deptoInput.value=depto;
+      if(cuilInput) cuilInput.value=cuil;
+    }
+  } else if(padron.length>0){
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+  } else {
+    lookup.innerHTML='';
+    if(nombreInput) nombreInput.readOnly=false;
+  }
+}
+
+async function agregarParticipanteIndividual(capId){
+  const legajo=document.getElementById('ap-legajo').value.trim();
+  const nombre=document.getElementById('ap-nombre').value.trim();
+  const un=document.getElementById('ap-un')?document.getElementById('ap-un').value.trim():'';
+  const depto=document.getElementById('ap-depto')?document.getElementById('ap-depto').value.trim():'';
+  const cuil=document.getElementById('ap-cuil')?document.getElementById('ap-cuil').value.trim():'';
+  if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){
+      alert(`El empleado figura con estado "${emp.estado}". No se puede registrar.`);return;
+    }
+  }
+  // Verificar si ya está en la lista
+  const a=getA(capId);
+  if(a.find(x=>String(x.legajo)===String(legajo))){
+    alert('Este participante ya está en la lista de esta capacitación.');return;
+  }
+  try{
+    setSyncStatus('syncing');
+    const esMeta=padron.length>0?!!getPadronEmpleado(legajo):true;
+    const r=await api('POST','asistentes',{
+      capacitacion_id:capId,legajo,nombre,un,sector:'',
+      departamento:depto,cuil,completo:false,en_meta:esMeta
+    },'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nombre} agregado`);
+    document.getElementById('ap-legajo').value='';
+    document.getElementById('ap-nombre').value='';
+    if(document.getElementById('ap-un')) document.getElementById('ap-un').value='';
+    if(document.getElementById('ap-depto')) document.getElementById('ap-depto').value='';
+    if(document.getElementById('ap-cuil')) document.getElementById('ap-cuil').value='';
+    document.getElementById('ap-lookup').innerHTML='';
+    // Refrescar lista de padrón en el modal
+    openAgregarParticipante(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+async function confirmarAgregarSeleccionados(capId){
+  const checks=[...document.querySelectorAll('.chk-padron-item:checked')];
+  if(!checks.length){alert('Seleccioná al menos un participante');return;}
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  const nuevos=checks
+    .filter(c=>!legajosEnLista.has(String(c.value)))
+    .map(c=>({
+      legajo:c.value,
+      nombre:c.dataset.nombre,
+      cuil:c.dataset.cuil,
+      departamento:c.dataset.depto,
+      un:c.dataset.un,
+      sector:c.dataset.sector
+    }));
+  if(!nuevos.length){toast('Todos los seleccionados ya están en la lista');return;}
+  if(!confirm(`¿Agregar ${nuevos.length} participante${nuevos.length!==1?'s':''} a esta capacitación?`)) return;
+  try{
+    setSyncStatus('syncing');
+    for(const p of nuevos){
+      const r=await api('POST','asistentes',{
+        capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,
+        un:p.un,sector:p.sector,departamento:p.departamento,
+        cuil:p.cuil,completo:false,en_meta:true
+      },'');
+      const nv=Array.isArray(r)?r[0]:r;
+      if(nv) asistentes.push(nv);
+    }
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);
+    openAgregarParticipante(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
 function openForzarCumplimiento(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const a=getA(capId);
@@ -4290,7 +4510,7 @@ self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWi
 </script>
 <div id="install-pwa-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1D9E75;color:#fff;border:none;border-radius:12px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);align-items:center;gap:8px;z-index:9999;white-space:nowrap" onclick="installPWA()">
   <span>📲</span> Instalar app en el celular
-  <button onclick="event.stopPropagation();this.parentElement.style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;margin-left:4px;padding:0">✕</button>
+  <button onclick="event.stopPropagation();this.parentElement.style.display=&#39;none&#39;" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;margin-left:4px;padding:0">✕</button>
 </div>
 <script>
 function installPWA(){
@@ -4304,5 +4524,6 @@ function installPWA(){
 }
 
 </script>
-</body>
-</html>
+
+
+</body></html>

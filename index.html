@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_1.html -->
+<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_2.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1888,8 +1888,10 @@ function buildDetail(id){
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     if(esFaltantePadron){
-      // Fila de alguien en el padrón que no está en la lista — solo lectura
-      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${canManageParticipants()?'<td></td>':''}</tr>`;
+      const delPadronCell=canManageParticipants()
+        ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
+        :'';
+      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
@@ -2050,11 +2052,10 @@ function buildDetail(id){
               '<div style="background:#f4f4f2;border-radius:6px;padding:8px 10px"><p style="font-size:10px;color:#888;margin:0 0 2px">Mejor respondida</p><p style="font-size:13px;font-weight:500;color:#111;margin:0">P'+(mejorIdx+1)+' <span style="font-size:11px;color:#1D9E75">'+pctCorr[mejorIdx]+'% acierto</span></p></div>'+
               '<div style="background:#f4f4f2;border-radius:6px;padding:8px 10px"><p style="font-size:10px;color:#888;margin:0 0 2px">Promedio general</p><p style="font-size:13px;font-weight:500;color:#111;margin:0">'+promGen+'% <span style="font-size:11px;color:#888">correcto</span></p></div>'+
             '</div>';
-          // Defer chart creation so the browser has time to lay out the canvas
+          // Defer chart so browser has time to compute canvas dimensions after innerHTML
           setTimeout(function(){
             const canvasEl=document.getElementById(chartCapId);
             if(!canvasEl) return;
-            // Destruir instancia previa si existe
             const prev=Chart.getChart(chartCapId);
             if(prev) prev.destroy();
             new Chart(canvasEl,{
@@ -2075,7 +2076,7 @@ function buildDetail(id){
                 }
               }
             });
-          }, 80);
+          }, 120);
         }catch(e){console.warn('Chart eval error',e);}
       })();
     }else if(canManageEval()){
@@ -2104,6 +2105,7 @@ function buildDetail(id){
   const plantillaBtn=canManageParticipants()?`<button class="btn-sm" onclick="exportPlantillaAsistentes(${id})" title="Plantilla para cargar asistentes">📥 Plantilla</button>`:'';
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
+  const agregarBtn=canManageParticipants()?`<button class="btn-sm" style="background:#1D9E75;color:#fff;border-color:#1D9E75" onclick="openAgregarParticipante(${id})" title="Agregar participante designado">+ Agregar</button>`:'';
   const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
@@ -2132,7 +2134,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -3297,6 +3299,200 @@ function renderCharts(){
       y1:{beginAtZero:true,max:100,position:'right',title:{display:true,text:'% Aprobados',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
     }}});
   });
+}
+
+// ── AGREGAR PARTICIPANTE DESIGNADO ──────────────────────────────────────────
+
+async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
+  if(!canManageParticipants()) return;
+  if(!confirm(`¿Quitar a ${nombre} del padrón para esta capacitación?\n\nEl empleado quedará registrado en la lista como "No completó" y podrá eliminarse luego con el botón ×.`)) return;
+  try{
+    setSyncStatus('syncing');
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+    if(existing&&existing.length){ toast('Este participante ya está en la lista'); setSyncStatus('ok'); return; }
+    const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nombre} incorporado a la lista`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+function openAgregarParticipante(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  let activosPadron=[];
+  const esGlobal=padron.length&&!c.un&&!c.departamento;
+  const tienePadronFiltro=padron.length&&(c.un||c.departamento);
+  if(esGlobal){
+    activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
+  } else if(tienePadronFiltro){
+    activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(c.un&&p.un!==c.un) return false;
+      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      return true;
+    });
+  }
+  const pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  const listaPadronHtml=pendientes.length
+    ?`<div style="max-height:240px;overflow-y:auto;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f4f4f2;position:sticky;top:0">
+            <th style="padding:6px 8px;text-align:left;width:28px"><input type="checkbox" id="chk-todos-padron" onchange="toggleTodosChk(this)" title="Seleccionar todos"></th>
+            <th style="padding:6px 8px;text-align:left">Nombre</th>
+            <th style="padding:6px 4px;text-align:left;color:#888">Depto</th>
+          </tr></thead>
+          <tbody>${pendientes.map(p=>{
+            const depto=p.departamento||p.datos_extra?.Departamento||'';
+            return`<tr style="border-top:1px solid #f0f0f0">
+              <td style="padding:5px 8px"><input type="checkbox" class="chk-padron-item" value="${esc(p.legajo)}" data-nombre="${esc(p.nombre)}" data-cuil="${esc(p.cuil||p.datos_extra?.CUIL||'')}" data-depto="${esc(depto)}" data-un="${esc(p.un||'')}" data-sector="${esc(p.sector||'')}"></td>
+              <td style="padding:5px 8px;white-space:normal;word-break:break-word">${esc(p.nombre)}</td>
+              <td style="padding:5px 4px;color:#888;font-size:10px">${esc(depto)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+      <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="confirmarAgregarSeleccionados(${capId})">✔ Agregar seleccionados del padrón</button>`
+    :(padron.length?`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-bottom:14px">Todos los empleados del padrón ya están en la lista.</div>`:'');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px">+ Agregar participante</div>
+    <p style="font-size:12px;color:#777;margin-bottom:12px">Seleccioná del padrón o ingresá un legajo manualmente.</p>
+    ${listaPadronHtml}
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:8px">Agregar por legajo</div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Legajo *</label>
+        <input class="form-input" id="ap-legajo" placeholder="Ej: 10025" oninput="validarLegajoAgregar(this.value)">
+        <div id="ap-lookup" style="font-size:11px;margin-top:4px;min-height:16px"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Nombre completo *</label>
+        <input class="form-input" id="ap-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group"><label class="form-label">CUIL</label><input class="form-input" id="ap-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="ap-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="ap-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      </div>
+      <button class="btn-prim" style="width:100%" onclick="agregarParticipanteIndividual(${capId})">Agregar participante</button>
+    </div>
+    <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
+}
+
+function toggleTodosChk(masterChk){
+  document.querySelectorAll('.chk-padron-item').forEach(c=>c.checked=masterChk.checked);
+}
+
+function validarLegajoAgregar(legajo){
+  const lookup=document.getElementById('ap-lookup');
+  const nombreInput=document.getElementById('ap-nombre');
+  const unInput=document.getElementById('ap-un');
+  const deptoInput=document.getElementById('ap-depto');
+  const cuilInput=document.getElementById('ap-cuil');
+  if(!lookup) return;
+  if(!legajo||legajo.length<2){
+    lookup.innerHTML='';
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
+      if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+      if(cuilInput) cuilInput.value='';
+    } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)}</span>`;
+      if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
+      if(unInput) unInput.value=emp.un||'';
+      if(deptoInput) deptoInput.value=depto;
+      if(cuilInput) cuilInput.value=cuil;
+    }
+  } else if(padron.length>0){
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+  } else {
+    lookup.innerHTML='';
+    if(nombreInput) nombreInput.readOnly=false;
+  }
+}
+
+async function agregarParticipanteIndividual(capId){
+  const legajo=document.getElementById('ap-legajo').value.trim();
+  const nombre=document.getElementById('ap-nombre').value.trim();
+  const un=document.getElementById('ap-un')?document.getElementById('ap-un').value.trim():'';
+  const depto=document.getElementById('ap-depto')?document.getElementById('ap-depto').value.trim():'';
+  const cuil=document.getElementById('ap-cuil')?document.getElementById('ap-cuil').value.trim():'';
+  if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){alert(`El empleado figura con estado "${emp.estado}". No se puede registrar.`);return;}
+  }
+  const a=getA(capId);
+  if(a.find(x=>String(x.legajo)===String(legajo))){alert('Este participante ya está en la lista de esta capacitación.');return;}
+  try{
+    setSyncStatus('syncing');
+    const esMeta=padron.length>0?!!getPadronEmpleado(legajo):true;
+    const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector:'',departamento:depto,cuil,completo:false,en_meta:esMeta},'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nombre} agregado`);
+    openAgregarParticipante(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+async function confirmarAgregarSeleccionados(capId){
+  const checks=[...document.querySelectorAll('.chk-padron-item:checked')];
+  if(!checks.length){alert('Seleccioná al menos un participante');return;}
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  const nuevos=checks.filter(c=>!legajosEnLista.has(String(c.value))).map(c=>({legajo:c.value,nombre:c.dataset.nombre,cuil:c.dataset.cuil,departamento:c.dataset.depto,un:c.dataset.un,sector:c.dataset.sector}));
+  if(!nuevos.length){toast('Todos los seleccionados ya están en la lista');return;}
+  if(!confirm(`¿Agregar ${nuevos.length} participante${nuevos.length!==1?'s':''} a esta capacitación?`)) return;
+  try{
+    setSyncStatus('syncing');
+    for(const p of nuevos){
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,completo:false,en_meta:true},'');
+      const nv=Array.isArray(r)?r[0]:r;
+      if(nv) asistentes.push(nv);
+    }
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);
+    openAgregarParticipante(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
 }
 
 function openForzarCumplimiento(capId){

@@ -1344,6 +1344,7 @@ function renderPadron(filtro){
     <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
     <td style="${tdS(i)}">${esc(p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'')}</td>
     <td style="${tdS(i)}">${p.fecha_ingreso?fmtF(p.fecha_ingreso.slice(0,10)):''}</td>
+    <td style="${tdS(i)}">${p.fecha_calculo_antiguedad?fmtF(p.fecha_calculo_antiguedad.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${p.fecha_egreso?fmtF(p.fecha_egreso.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${esc(p.sector||'')}</td>
     <td style="${tdS(i)}">${esc(p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'')}</td>
@@ -1392,6 +1393,7 @@ function renderPadron(filtro){
         <th style="${thS}">Nombre</th>
         <th style="${thS}">CUIL</th>
         <th style="${thS}">Fecha de Ingreso</th>
+        <th style="${thS}">Fecha cálculo antigüedad</th>
         <th style="${thS}">Fecha de egreso</th>
         <th style="${thS}">Sector</th>
         <th style="${thS}">Departamento</th>
@@ -1449,6 +1451,7 @@ async function exportarPadron(){
     nombre:p.nombre,
     'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
     'Fecha de Ingreso':p.fecha_ingreso||'',
+    'Fecha calculo antiguedad':p.fecha_calculo_antiguedad||'',
     'Fecha de egreso':p.fecha_egreso||'',
     'Sector':p.sector||'',
     'Departamento':p.departamento||p.datos_extra?.Departamento||'',
@@ -1574,7 +1577,7 @@ async function importarPadron(event){
       };
       // getF: devuelve valor RAW del row (sin String()) para que parseFecha reciba Date/number
       const getF=(r,...keys)=>{for(const k of keys){const v=r[k];if(v!==undefined&&v!==null&&v!=='')return v;}return null;};
-      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil'];
+      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil'];
       const nuevos=rows.map(r=>{
         const legajo=get(r,'legajo','Legajo','LEGAJO');
         const nombre=get(r,'nombre','Nombre','NOMBRE');
@@ -1595,6 +1598,7 @@ async function importarPadron(event){
           sector:get(r,'Sector','sector','SECTOR')||null,
           departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,
           fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
+          fecha_calculo_antiguedad:parseFecha(getF(r,'Fecha calculo antiguedad','fecha_calculo_antiguedad','Fecha Calculo Antiguedad','Fecha de Calculo de Antiguedad','FECHA_CALCULO_ANTIGUEDAD','Fecha cálculo antigüedad')),
           fecha_egreso:parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja')),
           estado:get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente',
           establecimiento:get(r,'Establecimiento','establecimiento')||null,
@@ -1675,7 +1679,7 @@ function renderConfig(){
   const unTags=uns.map(u=>`<div class="tag">${esc(u.nombre)}<span class="tag-del" onclick="delUN(${u.id},'${esc(u.nombre)}')">×</span></div>`).join('');
   const secTags=sectores.map(s=>`<div class="tag" style="border-radius:8px;flex-direction:column;align-items:flex-start;padding:4px 9px"><div style="display:flex;align-items:center;gap:4px;width:100%"><span style="font-size:11px;flex:1">${esc(s.nombre)}</span><span class="tag-del" onclick="delSector(${s.id},'${esc(s.nombre)}')">×</span></div><span style="font-size:10px;color:#999">${esc(s.un)}</span></div>`).join('');
   const deptTags=departamentos.map(d=>`<div class="tag" style="background:#E8F5FF;border-color:#90CAF9">${esc(d)}<span class="tag-del" onclick="delDepto('${esc(d)}')">×</span></div>`).join('')||'<span style="font-size:11px;color:#aaa">Sin departamentos (se cargan desde el padrón)</span>';
-  const tipoRows=tipos.map(t=>`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><div style="display:flex;gap:4px;align-items:center">${t.tiene_evaluacion?'<span class="badge realizada" style="font-size:10px">Eval</span>':''}${t.tiene_repositorio?'<span class="badge programada" style="font-size:10px">Repo</span>':''}<button class="btn-sm" style="font-size:10px;padding:3px 8px;margin-left:4px" onclick="editTipo('${t.codigo}')">✏️ Editar</button></div></div>`).join('');
+  const tipoRows=tipos.map(t=>`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><div style="display:flex;gap:4px;align-items:center">${t.tiene_evaluacion?'<span class="badge realizada" style="font-size:10px">Eval</span>':''}${t.tiene_repositorio?'<span class="badge programada" style="font-size:10px">Repo</span>':''}${t.tiene_qr_presencia!==false?'<span class="badge" style="font-size:10px;background:#E8EAF6;color:#1A2F6E;border:1px solid #9FA8DA">QR</span>':''}<button class="btn-sm" style="font-size:10px;padding:3px 8px;margin-left:4px" onclick="editTipo('${t.codigo}')">✏️ Editar</button></div></div>`).join('');
   return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
   <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list scrollable">${deptTags}</div></div>
   <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list scrollable">${secTags}</div></div>
@@ -1694,7 +1698,7 @@ function renderConfig(){
       <strong>titulo *</strong> — nombre de la capacitación<br>
       <strong>tipo_codigo *</strong> — REMO, SST, SALUD, AMBIENTE, CALIFICACION, INDUCCION<br>
       <strong>un</strong> — Unidad de Negocio · <strong>departamento</strong> — filtra el padrón al cargar participantes<br>
-      <strong>area</strong> — tema · <strong>fecha</strong> — DD/MM/AAAA · <strong>fecha_fin</strong> — DD/MM/AAAA<br>
+      <strong>area</strong> — tema · <strong>fecha</strong> — fecha de inicio DD/MM/AAAA · <strong>fecha_fin</strong> — DD/MM/AAAA<br>
       <strong>bimestre</strong> — número 1 al 6 · <strong>participantes_esperados</strong> · <strong>duracion</strong> (hs)<br>
       <strong>instructor</strong> · <strong>estado</strong> · <strong>nota_aprobacion</strong> · <strong>obs</strong><br>
       <span style="color:#6B4F00">💡 Si se indica <strong>un</strong> (y opcionalmente <strong>departamento</strong>), se cargan automáticamente los participantes del padrón al importar.</span>
@@ -1906,11 +1910,24 @@ function buildDetail(id){
       return true;
     });
   }
-  const posibles=(esGlobal||tienePadronFiltro)?activosPadron.length:aMeta.length;
+  // INDUCCION: filtrar por mes/año de fecha de la capacitación sobre fecha_calculo_antiguedad
+  const esInduccion=c.tipo_codigo==='INDUCCION';
+  if(esInduccion&&c.fecha&&padron.length){
+    const [yy,mm]=c.fecha.split('-');
+    const mesRef=parseInt(mm);const anioRef=parseInt(yy);
+    activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!p.fecha_calculo_antiguedad) return false;
+      const parts=p.fecha_calculo_antiguedad.split('-');
+      return parseInt(parts[0])===anioRef&&parseInt(parts[1])===mesRef;
+    });
+  }
+
+  const posibles=(esGlobal||tienePadronFiltro||esInduccion)?activosPadron.length:aMeta.length;
   const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
 
   // Faltantes = padrón activo que no completó (si hay padrón) o lista sin completar
-  const faltantesPadron=(esGlobal||tienePadronFiltro)
+  const faltantesPadron=(esGlobal||tienePadronFiltro||esInduccion)
     ?activosPadron.filter(p=>!completaron.has(String(p.legajo)))
     :aMeta.filter(x=>!x.completo);
   const faltantesReal=faltantesPadron.length;
@@ -1946,7 +1963,7 @@ function buildDetail(id){
   const todasFilasLista=a.map(x=>buildRow(x,false));
   // Faltantes del padrón que no están en la lista en absoluto
   const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
-  const faltantesSolopadron=(esGlobal||tienePadronFiltro)
+  const faltantesSolopadron=(esGlobal||tienePadronFiltro||esInduccion)
     ?activosPadron.filter(p=>!completaron.has(String(p.legajo))&&!legajosEnLista.has(String(p.legajo)))
     :[];
   const filasFaltantesPadron=faltantesSolopadron.map(p=>buildRow({
@@ -2003,9 +2020,8 @@ function buildDetail(id){
     </div>`).join(''):'<p style="font-size:11px;color:#bbb;margin-top:4px">Sin materiales cargados.</p>';
     const addMatBtn=canEdit()?`<button class="btn-sm green" onclick="openAddMaterial(${id})">+ Material</button>`:'';
     const waMatBtn=`<button class="btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-weight:600" onclick="compartirWACap(${id})" title="Compartir materiales y evaluación por WhatsApp">📲 Compartir</button>`;
-    const qrPresBtn=`<button class="btn-sm" style="background:#1A2F6E;color:#fff;border-color:#1A2F6E;font-weight:600" onclick="mostrarQrPresencia(${id},'${esc(c.titulo).replace(/'/g,String.fromCharCode(39))}')">📷 QR Presencia</button>`;
     repoHtml=`<div class="modal-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Repositorio de materiales</span><div style="display:flex;gap:5px">${waMatBtn}${qrPresBtn}${addMatBtn}</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Repositorio de materiales</span><div style="display:flex;gap:5px">${waMatBtn}${addMatBtn}</div></div>
       ${matItems}
     </div>`;
   }
@@ -2191,6 +2207,8 @@ function buildDetail(id){
   }
 
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
+  // QR Presencia: visible en todas las caps si el tipo tiene have_qr_presencia habilitado (true por defecto)
+  const qrPresBtn=t.tiene_qr_presencia!==false?`<button class="btn-sm" style="background:#1A2F6E;color:#fff;border-color:#1A2F6E;font-weight:600" onclick="mostrarQrPresencia(${id},'${esc(c.titulo).replace(/'/g,String.fromCharCode(39))}')">📷 QR Presencia</button>`:'';
   const exportBtn=faltantesReal>0?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${faltantesReal})</button>`:'';
   const exportAllBtn=canExportParticipants()&&a.length?`<button class="btn-export" onclick="exportAll(${id})">📊 Exportar participantes</button>`:'';
   const exportRespBtn=canExportParticipants()&&hasNota&&getEval(id)?`<button class="btn-export" onclick="exportRespuestas(${id})">📋 Respuestas eval</button>`:'';
@@ -2226,7 +2244,7 @@ function buildDetail(id){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${qrPresBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -2828,16 +2846,34 @@ function exportFalt(capId){
   // todos los activos del padrón de esa UN/Depto que no completaron.
   // Si no hay padrón o no tiene UN, usamos la lista de asistentes no completados.
   let falt=[];
-  if(padron.length&&(c.un||c.departamento)){
-    const activosPadron=padron.filter(p=>{
-      if(p.estado&&p.estado!=='Vigente') return false;
-      if(c.un&&p.un!==c.un) return false;
-      if(c.departamento){
-        const d=p.departamento||p.datos_extra?.Departamento||'';
-        if(d!==c.departamento) return false;
-      }
-      return true;
-    });
+  // Mismo criterio que buildDetail: esGlobal, filtro por UN/Depto, o INDUCCION por mes/año
+  const _esGlobalExp=padron.length&&!c.un&&!c.departamento&&c.tipo_codigo!=='INDUCCION';
+  const _tieneFiltroExp=padron.length&&(c.un||c.departamento)&&c.tipo_codigo!=='INDUCCION';
+  const _esInduccionExp=c.tipo_codigo==='INDUCCION'&&c.fecha&&padron.length;
+  if(_esGlobalExp||_tieneFiltroExp||_esInduccionExp){
+    let activosPadron=[];
+    if(_esInduccionExp){
+      const [yy,mm]=c.fecha.split('-');
+      const mesRef=parseInt(mm);const anioRef=parseInt(yy);
+      activosPadron=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!p.fecha_calculo_antiguedad) return false;
+        const parts=p.fecha_calculo_antiguedad.split('-');
+        return parseInt(parts[0])===anioRef&&parseInt(parts[1])===mesRef;
+      });
+    } else {
+      activosPadron=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!_esGlobalExp){
+          if(c.un&&p.un!==c.un) return false;
+          if(c.departamento){
+            const d=p.departamento||p.datos_extra?.Departamento||'';
+            if(d!==c.departamento) return false;
+          }
+        }
+        return true;
+      });
+    }
     // Faltante = activo en el padrón que no completó la capacitación
     falt=activosPadron
       .filter(p=>!completaron.has(String(p.legajo)))
@@ -3262,7 +3298,7 @@ async function addTipo(){
   const nombre=prompt('Nombre completo:');if(!nombre||!nombre.trim())return;
   const tieneEval=confirm('¿Este tipo tiene evaluación con nota?');
   const tieneRepo=confirm('¿Este tipo tiene repositorio de materiales?');
-  try{const r=await api('POST','tipos_capacitacion',{codigo:codigoU,nombre:nombre.trim(),tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo},'');const nv=Array.isArray(r)?r[0]:r;if(nv)tipos.push(nv);populateFilters();renderContent();toast('Tipo agregado');}catch(e){toast('Error');}
+  try{const r=await api('POST','tipos_capacitacion',{codigo:codigoU,nombre:nombre.trim(),tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)tipos.push(nv);populateFilters();renderContent();toast('Tipo agregado');}catch(e){toast('Error');}
 }
 
 function editTipo(codigo){
@@ -3281,6 +3317,10 @@ function editTipo(codigo){
         <input type="checkbox" id="et-repo" ${t.tiene_repositorio?'checked':''} style="width:16px;height:16px;accent-color:#1D9E75">
         <div><div style="font-weight:500;color:#111">Tiene repositorio de materiales</div><div style="font-size:11px;color:#888">Habilita la sección de materiales y links</div></div>
       </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px;border:1px solid #e5e5e0;border-radius:8px">
+        <input type="checkbox" id="et-qr" ${t.tiene_qr_presencia!==false?'checked':''} style="width:16px;height:16px;accent-color:#1A2F6E">
+        <div><div style="font-weight:500;color:#111">QR de presencialidad activo</div><div style="font-size:11px;color:#888">Muestra el botón QR Presencia en el detalle de la capacitación</div></div>
+      </label>
     </div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveTipo('${esc(t.codigo)}')">Guardar cambios</button></div>`);
 }
@@ -3291,10 +3331,11 @@ async function saveTipo(codigo){
   if(!nombre){toast('El nombre no puede estar vacío');return;}
   const tieneEval=document.getElementById('et-eval').checked;
   const tieneRepo=document.getElementById('et-repo').checked;
+  const tieneQr=document.getElementById('et-qr').checked;
   try{
-    await api('PATCH','tipos_capacitacion',{nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo},`?codigo=eq.${encodeURIComponent(codigo)}`);
+    await api('PATCH','tipos_capacitacion',{nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:tieneQr},`?codigo=eq.${encodeURIComponent(codigo)}`);
     const idx=tipos.findIndex(x=>x.codigo===codigo);
-    if(idx>=0) tipos[idx]={...tipos[idx],nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo};
+    if(idx>=0) tipos[idx]={...tipos[idx],nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:tieneQr};
     closeModal();populateFilters();renderContent();toast('✓ Tipo actualizado');
   }catch(e){toast('Error al guardar');}
 }
@@ -5185,6 +5226,30 @@ async function importarMasivaParticipantes(event){
         event.target.value='';return;
       }
 
+      // Pre-validación: detectar empleados no-vigentes en el padrón
+      const noVigentesDetectados=[];
+      for(const codigo of codigos){
+        const filas=porRedmine[codigo];
+        for(const r of filas){
+          const legajo=String(r.legajo||r.Legajo||r.LEGAJO||'').trim();
+          if(!legajo) continue;
+          const emp=getPadronEmpleado(legajo);
+          if(emp&&emp.estado&&emp.estado!=='Vigente'){
+            noVigentesDetectados.push({legajo,codigo,nombre:emp.nombre||'',estado:emp.estado});
+          }
+        }
+      }
+
+      // Si hay no-vigentes, pedir confirmación al usuario
+      let incluirNoVigentes=new Set();
+      if(noVigentesDetectados.length){
+        const lista=noVigentesDetectados.map(x=>`• Legajo ${x.legajo} — ${x.nombre} (${x.estado}) [${x.codigo}]`).join('\n');
+        const confirmar=confirm(`Se detectaron ${noVigentesDetectados.length} participante(s) con estado distinto a Vigente:\n\n${lista}\n\n¿Incluirlos igualmente? (Esta puede ser una capacitación pasada donde estaban activos.)`);
+        if(confirmar){
+          for(const x of noVigentesDetectados) incluirNoVigentes.add(x.legajo+'|'+x.codigo);
+        }
+      }
+
       setSyncStatus('syncing');
       toast('Procesando...', 30000);
 
@@ -5235,8 +5300,11 @@ async function importarMasivaParticipantes(event){
           // Priorizar padrón para datos del empleado; si no, usar el Excel
           const emp=getPadronEmpleado(legajo);
           if(emp&&emp.estado&&emp.estado!=='Vigente'){
-            errores.push(`Legajo ${legajo} (${codigo}): estado "${emp.estado}" — omitido`);
-            partErr++;continue;
+            // Ya fue decidido en la pre-validación: si no está en incluirNoVigentes, omitir
+            if(!incluirNoVigentes.has(legajo+'|'+codigo)){
+              errores.push(`Legajo ${legajo} (${codigo}): estado "${emp.estado}" — omitido (no confirmado)`);
+              partErr++;continue;
+            }
           }
           const nombre=emp?emp.nombre:(String(r.nombre||r.Nombre||'').trim()||null);
           const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):(String(r.cuil||r.CUIL||'').trim()||null);

@@ -4,8 +4,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script>
+<script src="file:///C:/Users/e.verdun/Downloads/index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
@@ -4017,12 +4017,15 @@ async function init(){
   const presCapId=params.get('presencia');
   if(presCapId){
     try{
-      const [cap,pad,tiposData]=await Promise.all([
+      const [cap,pad,tiposData,evData,pqData]=await Promise.all([
         api('GET','capacitaciones','',`?id=eq.${presCapId}`),
         api('GET','padron','','?estado=eq.Vigente&order=legajo.asc'),
-        api('GET','tipos_capacitacion','','?activo=eq.true')
+        api('GET','tipos_capacitacion','','?activo=eq.true'),
+        api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`),
+        api('GET','preguntas_evaluacion','',`?evaluacion_id=not.is.null&order=orden.asc`)
       ]);
       caps=cap||[];padron=pad||[];tipos=tiposData||[];
+      evaluaciones=evData||[];preguntas=pqData||[];
       document.getElementById('login-wrap').style.display='none';
       document.getElementById('app-wrap').style.display='none';
       renderPresenciaPublica(parseInt(presCapId));
@@ -4043,28 +4046,36 @@ function renderPresenciaPublica(capId){
     document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Capacitación no encontrada.</p></div></div>';
     return;
   }
+  // Detectar si hay evaluación activa con preguntas
+  const evActiva=evaluaciones.find(e=>e.capacitacion_id===capId&&e.activa);
+  const tieneEval=!!(evActiva&&preguntas.filter(p=>p.evaluacion_id===evActiva.id).length>0);
+  const badgeTipo=cap.tipo_codigo?tipoBadge(cap.tipo_codigo):'';
+  const subtituloEval=tieneEval
+    ?'<div style="background:#FFF8E8;border:1px solid #EF9F27;border-radius:8px;padding:8px 12px;font-size:12px;color:#854F0B;margin-top:8px">⚠️ Esta capacitación requiere evaluación. Tu asistencia quedará pendiente hasta completarla.</div>'
+    :'';
   document.body.innerHTML=`<div class="eval-public-wrap">
     <div class="eval-public-card">
       <div style="text-align:center;margin-bottom:18px">
-        <div style="font-size:32px;margin-bottom:6px">✅</div>
-        <div style="font-size:16px;font-weight:700;color:#1A2F6E">Registro de Asistencia</div>
+        ${badgeTipo}
+        <div style="font-size:16px;font-weight:700;color:#1A2F6E;margin-top:6px">${tieneEval?'📋 Registro de Asistencia y Evaluación':'✅ Registro de Asistencia'}</div>
         <div style="font-size:13px;font-weight:600;color:#111;margin-top:8px">${esc(cap.titulo)}</div>
         ${cap.fecha?`<div style="font-size:11px;color:#888;margin-top:2px">Fecha: ${fmtF(cap.fecha)}</div>`:''}
         ${cap.un?`<div style="font-size:11px;color:#888">${esc(cap.un)}</div>`:''}
+        ${subtituloEval}
       </div>
       <div style="background:#EAF4FF;border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:600;color:#1A2F6E;margin-bottom:10px">📋 Identificate para registrar tu asistencia</div>
+        <div style="font-size:13px;font-weight:600;color:#1A2F6E;margin-bottom:10px">📋 Identificate para continuar</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Legajo *</label>
-            <input class="form-input" id="pres-legajo" placeholder="Nº de legajo" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId})">
+            <input class="form-input" id="pres-legajo" placeholder="Nº de legajo" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId},${tieneEval?evActiva.id:'null'})">
           </div>
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Últimos 4 dígitos DNI *</label>
-            <input class="form-input" id="pres-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId})">
+            <input class="form-input" id="pres-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId},${tieneEval?evActiva.id:'null'})">
           </div>
         </div>
-        <button onclick="validarPresencia(${capId})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%">✔ Confirmar asistencia</button>
+        <button onclick="validarPresencia(${capId},${tieneEval?evActiva.id:'null'})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%">${tieneEval?'✔ Confirmar y rendir evaluación':'✔ Confirmar asistencia'}</button>
         <div id="pres-lookup" style="margin-top:10px;font-size:12px;display:none;text-align:center"></div>
       </div>
       <p style="font-size:10px;color:#aaa;text-align:center">Tus datos se usan exclusivamente para registrar tu asistencia a la capacitación.</p>
@@ -4072,7 +4083,7 @@ function renderPresenciaPublica(capId){
   </div>`;
 }
 
-async function validarPresencia(capId){
+async function validarPresencia(capId, evalId){
   const lookup=document.getElementById('pres-lookup');
   const leg=String((document.getElementById('pres-legajo')||{}).value||'').trim();
   const dni4=String((document.getElementById('pres-dni4')||{}).value||'').trim().replace(/[^0-9]/g,'');
@@ -4106,6 +4117,30 @@ async function validarPresencia(capId){
   const depto=emp?(emp.departamento||emp.datos_extra?.Departamento||''):'';
   const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):'';
   lookup.style.display='block';
+  // === CASO CON EVALUACIÓN ===
+  if(evalId&&evalId!=='null'&&evalId!==null){
+    lookup.innerHTML='<span style="color:#888">Verificando datos...</span>';
+    try{
+      // Registrar presencia (completo=false) si no existe aún
+      const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+      if(!existing||!existing.length){
+        await api('POST','asistentes',{capacitacion_id:capId,legajo:leg,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+      } else if(existing[0].completo){
+        // Ya completó la cap (aprobó evaluación en otro momento)
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>🏆 Ya completaste esta capacitación</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+        return;
+      }
+      // Redirigir a la evaluación, pasando datos del empleado por sessionStorage
+      const datosParaEval={legajo:leg,nombre,un,sector,depto,cuil,capId};
+      sessionStorage.setItem('presencia_datos_'+evalId, JSON.stringify(datosParaEval));
+      lookup.innerHTML='<span style="color:#1D9E75;font-weight:600">✔ Presencia registrada. Cargando evaluación...</span>';
+      setTimeout(()=>{ renderEvalPublicaConPresencia(parseInt(evalId),datosParaEval); },800);
+    }catch(e){
+      lookup.innerHTML=`<span style="color:#CC0000">Error: ${esc(e.message||'Intenta de nuevo')}</span>`;
+    }
+    return;
+  }
+  // === CASO SIN EVALUACIÓN: marcar completo=true directamente ===
   lookup.innerHTML='<span style="color:#888">Registrando asistencia...</span>';
   try{
     const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
@@ -4125,6 +4160,147 @@ async function validarPresencia(capId){
   }catch(e){
     lookup.innerHTML=`<span style="color:#CC0000">Error: ${esc(e.message||'Intenta de nuevo')}</span>`;
   }
+}
+
+// ===== renderEvalPublicaConPresencia =====
+// Versión de renderEvalPublica que ya sabe quién es el empleado y
+// al finalizar actualiza completo=true si aprueba
+function renderEvalPublicaConPresencia(evalId, datosEmp){
+  const ev=evaluaciones.find(e=>e.id===evalId);
+  if(!ev){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Evaluación no encontrada.</p></div></div>';return;}
+  const cap=caps.find(c=>c.id===ev.capacitacion_id);
+  const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
+  if(!pqs.length){
+    // Sin preguntas: marcar completo y mostrar éxito
+    _marcarCompletoPresencia(datosEmp,true);
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card"><div style="font-size:48px">✅</div><div style="font-size:16px;font-weight:700;color:#0F6E56;margin:8px 0">Asistencia confirmada</div><div style="font-size:13px;color:#777">Tu presencia fue registrada correctamente.</div></div></div></div>';
+    return;
+  }
+  const pqsHtml=pqs.map((p,i)=>{
+    const opts=p.opciones||[];
+    const letras=['A','B','C','D'];
+    return`<div class="pregunta-item">
+      <div class="pregunta-num">Pregunta ${i+1} de ${pqs.length}</div>
+      <div class="pregunta-texto">${esc(p.pregunta)}</div>
+      ${opts.map((o,j)=>`<label class="opcion-label" id="opt-${p.id}-${j}">
+        <input class="opcion-radio" type="radio" name="pq-${p.id}" value="${j}" onchange="selectOpcion(${p.id},${j},${opts.length})">
+        <span><strong>${letras[j]}.</strong> ${esc(o)}</span>
+      </label>`).join('')}
+    </div>`;
+  }).join('');
+  document.body.innerHTML=`<div class="eval-public-wrap">
+    <div class="eval-public-card">
+      <div style="margin-bottom:16px">
+        ${cap?tipoBadge(cap.tipo_codigo):''}
+        <div style="font-size:16px;font-weight:600;color:#111;margin:6px 0">${esc(ev.titulo)}</div>
+        ${cap?`<div style="font-size:12px;color:#777">${esc(cap.titulo)}</div>`:''}
+        <div style="background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#085041">✔ Asistencia registrada para <strong>${esc(datosEmp.nombre||datosEmp.legajo)}</strong>. Completá la evaluación para finalizar.</div>
+      </div>
+      ${pqsHtml}
+      <button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEvalConPresencia(${evalId},${pqs.length})">Enviar respuestas</button>
+    </div>
+  </div>`;
+}
+
+async function submitEvalConPresencia(evalId, totalPqs){
+  let datosEmp;
+  try{datosEmp=JSON.parse(sessionStorage.getItem('presencia_datos_'+evalId)||'{}');}catch(e){datosEmp={};}
+  const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
+  let correctas=0;
+  const respuestas={};
+  for(const p of pqs){
+    const sel=document.querySelector(`input[name="pq-${p.id}"]:checked`);
+    if(!sel){alert('Respondé todas las preguntas antes de enviar');return;}
+    const val=parseInt(sel.value);
+    respuestas[p.id]=val;
+    if(val===p.correcta)correctas++;
+  }
+  const puntaje=Math.round(correctas/pqs.length*10*10)/10;
+  const ev=evaluaciones.find(e=>e.id===evalId);
+  const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
+  const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
+  const aprobado=puntaje>=nota_aprobacion;
+  // Registrar respuesta
+  try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo:datosEmp.legajo,nombre:datosEmp.nombre,respuestas,puntaje},'');}catch(e){console.warn('Error registrando respuesta',e);}
+  // Control de intentos por sesión
+  const intentoKey='eval_intento_'+evalId+'_'+datosEmp.legajo;
+  const esSegundoIntento=sessionStorage.getItem(intentoKey)==='1';
+  if(!aprobado&&!esSegundoIntento){
+    sessionStorage.setItem(intentoKey,'1');
+    sessionStorage.setItem(intentoKey+'_nota',String(puntaje));
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'+
+      '<div style="font-size:14px;color:#777">Resultado de '+esc(datosEmp.nombre||datosEmp.legajo)+'</div>'+
+      '<div class="result-score fail">'+puntaje+'/10</div>'+
+      '<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">✗ Desaprobado</div>'+
+      '<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'+
+        '<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'+
+        '<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.<br>Revisá el material de lectura antes de volver a intentarlo.</div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:#888;margin-bottom:20px">'+correctas+' de '+pqs.length+' respuestas correctas en este intento</div>'+
+      '<button onclick="_reintentarEvalPresencia('+evalId+')" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'+
+    '</div></div></div>';
+    return;
+  }
+  // Actualizar completo en asistentes
+  await _marcarCompletoPresencia(datosEmp, aprobado, puntaje, cap);
+  // Calcular incorrectas para mostrar
+  const notaPrimerIntento=sessionStorage.getItem(intentoKey+'_nota');
+  sessionStorage.removeItem(intentoKey);sessionStorage.removeItem(intentoKey+'_nota');
+  let incorrectasHtml='';
+  const incorrectas=pqs.filter(p=>respuestas[p.id]!==p.correcta);
+  if(incorrectas.length){
+    const filas=incorrectas.map((p,i)=>{
+      const opciones=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
+      return'<div style="background:'+(aprobado?'#FFFBEB':'#FFF5F5')+';border:1px solid '+(aprobado?'#FAC775':'#FFD0D0')+';border-radius:8px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">'+(i+1)+'. '+esc(p.enunciado||p.pregunta||'')+'</div>'+
+        '<div style="font-size:11px;color:#CC0000;margin-bottom:3px">✗ Tu respuesta: <strong>'+esc(opciones[respuestas[p.id]]||'—')+'</strong></div>'+
+        '<div style="font-size:11px;color:#1D9E75">✓ Correcta: <strong>'+esc(opciones[p.correcta]||'—')+'</strong></div>'+
+      '</div>';
+    }).join('');
+    incorrectasHtml='<div style="margin-top:16px;text-align:left;border-top:1px solid #e5e5e0;padding-top:14px">'+
+      '<div style="font-size:13px;font-weight:700;color:'+(aprobado?'#854F0B':'#CC0000')+';margin-bottom:10px">'+(aprobado?'📝 Preguntas con error ('+incorrectas.length+')':'❌ Respuestas incorrectas ('+incorrectas.length+')')+'</div>'+
+      (aprobado?'<div style="font-size:12px;color:#777;margin-bottom:10px">Aprobaste, pero revisá estas respuestas para reforzar el aprendizaje:</div>':'')+
+      filas+'</div>';
+  }
+  document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'+
+    '<div style="font-size:14px;color:#777">Resultado de '+esc(datosEmp.nombre||datosEmp.legajo)+'</div>'+
+    '<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'+
+    '<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'✓ Aprobado':'✗ Desaprobado')+'</div>'+
+    (aprobado
+      ?'<div style="background:#E1F5EE;border:1px solid #5DCAA5;border-radius:10px;padding:12px 14px;font-size:13px;color:#085041;margin-bottom:8px">✅ Tu asistencia y evaluación quedaron registradas correctamente.</div>'+
+        '<div style="font-size:12px;color:#777">'+correctas+' de '+pqs.length+' respuestas correctas</div>'+incorrectasHtml
+      :'<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:12px 14px;margin:8px 0 12px;text-align:left">'+
+          '<div style="font-size:14px;font-weight:700;color:#CC0000;margin-bottom:4px">😔 No pudiste aprobar</div>'+
+          '<div style="font-size:13px;color:#AA0000">Tu presencia fue registrada pero la capacitación no está completa. Comunicate con tu superior o con el área de SST para coordinar una nueva instancia.</div>'+
+        '</div>'+
+        '<div style="font-size:12px;color:#888;margin-bottom:4px">'+correctas+' de '+pqs.length+' respuestas correctas</div>'+
+        (notaPrimerIntento?'<div style="font-size:11px;color:#aaa;margin-bottom:8px">1° intento: '+parseFloat(notaPrimerIntento)+'/10 · 2° intento: '+puntaje+'/10</div>':'')+
+        incorrectasHtml
+    )+
+  '</div></div></div>';
+}
+
+function _reintentarEvalPresencia(evalId){
+  let datosEmp={};
+  try{datosEmp=JSON.parse(sessionStorage.getItem('presencia_datos_'+evalId)||'{}');}catch(e){}
+  renderEvalPublicaConPresencia(evalId,datosEmp);
+}
+
+async function _marcarCompletoPresencia(datosEmp, aprobado, puntaje, cap){
+  if(!datosEmp||!datosEmp.capId) return;
+  const capId=datosEmp.capId;
+  const leg=datosEmp.legajo;
+  const fechaEval=new Date().toISOString().slice(0,10);
+  const campos={completo:aprobado,fecha_evaluacion:fechaEval};
+  if(puntaje!==undefined) campos.nota=puntaje;
+  try{
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+    if(existing&&existing.length>0){
+      await api('PATCH','asistentes',campos,`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+    } else {
+      await api('POST','asistentes',{capacitacion_id:capId,legajo:leg,nombre:datosEmp.nombre||'',un:datosEmp.un||'',sector:datosEmp.sector||'',departamento:datosEmp.depto||null,cuil:datosEmp.cuil||null,en_meta:true,...campos},'');
+    }
+  }catch(e){console.warn('Error actualizando completo en asistentes',e);}
 }
 
 // ===== mostrarQrPresencia =====

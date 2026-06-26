@@ -1614,16 +1614,34 @@ async function importarPadron(event){
       const CHUNK=500;
       let importados=0;
       let errores=0;
+      let sinColumnaFecha=false; // detecta si Supabase no tiene fecha_calculo_antiguedad aún
       for(let i=0;i<nuevos.length;i+=CHUNK){
         const lote=nuevos.slice(i,i+CHUNK);
         toast(`Importando... ${Math.min(i+CHUNK,nuevos.length)} de ${nuevos.length}`,15000);
         try{
           await api('POST','padron',lote,'?on_conflict=legajo');
           importados+=lote.length;
-        }catch(e){errores+=lote.length;console.warn('Error en lote',i,e);}
+        }catch(e){
+          const msg=String(e.message||'');
+          // Si el error es por columna desconocida (fecha_calculo_antiguedad no existe en Supabase aún)
+          // reintentamos sin ese campo para no bloquear el import
+          if(msg.includes('fecha_calculo_antiguedad')||msg.includes('42703')){
+            sinColumnaFecha=true;
+            const loteSinFecha=lote.map(r=>{const {fecha_calculo_antiguedad,...rest}=r;return rest;});
+            try{
+              await api('POST','padron',loteSinFecha,'?on_conflict=legajo');
+              importados+=lote.length;
+            }catch(e2){errores+=lote.length;console.warn('Error en lote (retry)',i,e2);}
+          } else {
+            errores+=lote.length;console.warn('Error en lote',i,e);
+          }
+        }
       }
       await syncUNsSectoresDesde(nuevos);
       await loadAll();
+      if(sinColumnaFecha){
+        alert('⚠️ La columna "fecha_calculo_antiguedad" no existe aún en Supabase. El padrón se importó sin esa columna.\n\nPara habilitarla ejecutá en Supabase SQL Editor:\n\nALTER TABLE padron ADD COLUMN IF NOT EXISTS fecha_calculo_antiguedad DATE;');
+      }
       if(errores>0){
         toast(`${importados} registros importados. ${errores} con error.`);
       } else {

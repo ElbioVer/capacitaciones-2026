@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_15.html -->
+<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_16.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1045,14 +1045,18 @@ function renderResumen(){
     <div class="plan-block-title" style="margin-bottom:8px">Efectividad de evaluaciones</div>
     <p style="font-size:11px;color:#bbb;text-align:center;padding:12px 0">Sin evaluaciones con notas registradas aún</p>
   </div>`}
-  <div class="plan-block"><div class="plan-block-title">Por tipo</div>${tipoRows}</div>
+  <div class="plan-block"><div class="plan-block-title">Por tipo</div>${tipoRows}
+    <div style="position:relative;height:220px;width:100%;margin-top:12px"><canvas id="chart-resumen-tipo" style="position:absolute;inset:0"></canvas></div>
+  </div>
   <div class="plan-block"><div class="plan-block-title">Por bimestre</div>${BIMESTRES.map(b=>{
     const g=f.filter(c=>c.bimestre===b);
     const r=g.filter(c=>estadoCap(c)==='Realizada').length;
     const v=g.filter(c=>estadoCap(c)==='Vencida').length;
     const p=g.length?Math.round(r/g.length*100):0;
     return`<div class="plan-row-item" style="cursor:default"><span class="plan-item-name">${b.split('(')[0].trim()}</span><span style="font-size:10px;color:#999;margin-right:4px">${r}/${g.length}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span style="font-size:11px;font-weight:600;min-width:28px;text-align:right">${p}%</span></div>`;
-  }).join('')}</div>
+  }).join('')}
+    <div style="position:relative;height:200px;width:100%;margin-top:12px"><canvas id="chart-resumen-bim" style="position:absolute;inset:0"></canvas></div>
+  </div>
   ${(()=>{
     const conDesvio=f.filter(c=>desvioInfoExt(c,estadoCap(c),fechaFinCap(c))!==null);
     if(!conDesvio.length) return'';
@@ -1071,14 +1075,10 @@ function renderResumen(){
       ${rows}
     </div>`;
   })()}
-  <div class="plan-block" style="padding:10px 14px;margin-top:8px">
-    <div class="plan-block-title" style="margin-bottom:6px">📊 Resumen consolidado — Capacitaciones por tipo y bimestre</div>
-    <div style="position:relative;height:260px;width:100%"><canvas id="chart-resumen-consolidado" style="position:absolute;inset:0"></canvas></div>
-  </div>
   <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
   <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>
   <span id="chart-data-resumen-tipo" style="display:none">${JSON.stringify(tipos.map(t=>{const g=f.filter(c=>c.tipo_codigo===t.codigo);const r=g.filter(c=>estadoCap(c)==='Realizada').length;const v=g.filter(c=>estadoCap(c)==='Vencida').length;const p=g.filter(c=>{const e=estadoCap(c);return e==='Pendiente'||e==='Programada';}).length;return{tipo:t.codigo,nombre:t.nombre,realizadas:r,vencidas:v,pendientes:p,total:g.length};}))}</span>
-  <span id="chart-data-resumen-bim" style="display:none">${JSON.stringify(BIMESTRES.map(b=>{const g=f.filter(c=>c.bimestre===b);const r=g.filter(c=>estadoCap(c)==='Realizada').length;const v=g.filter(c=>estadoCap(c)==='Vencida').length;return{bim:b.split('(')[0].trim(),realizadas:r,vencidas:v,total:g.length};}))}</span>`;
+  <span id="chart-data-resumen-bim" style="display:none">${JSON.stringify(BIMESTRES.map(b=>{const g=f.filter(c=>c.bimestre===b);const r=g.filter(c=>estadoCap(c)==='Realizada').length;const v=g.filter(c=>estadoCap(c)==='Vencida').length;const pen=g.filter(c=>{const e=estadoCap(c);return e==='Pendiente'||e==='Programada';}).length;return{bim:b.split('(')[0].trim(),realizadas:r,vencidas:v,pendientes:pen,total:g.length};}))}</span>`;
 }
 
 
@@ -3455,46 +3455,65 @@ function renderCharts(){
     }
   }
 
-  // ── Gráfico consolidado del Resumen (por tipo) ───────────────────────
-  const canvasResumen=destroyCanvas('chart-resumen-consolidado');
-  if(canvasResumen){
-    let tipoData=null, bimData=null;
+  // ── Gráfico Resumen: Por tipo ──────────────────────────────────────────
+  const canvasTipo=destroyCanvas('chart-resumen-tipo');
+  if(canvasTipo){
+    let tipoData=null;
     try{
-      const spT=document.getElementById('chart-data-resumen-tipo');
-      const spB=document.getElementById('chart-data-resumen-bim');
-      if(spT&&spT.textContent.trim()&&spT.textContent.trim()!=='[]') tipoData=JSON.parse(spT.textContent);
-      if(spB&&spB.textContent.trim()&&spB.textContent.trim()!=='[]') bimData=JSON.parse(spB.textContent);
+      const sp=document.getElementById('chart-data-resumen-tipo');
+      if(sp&&sp.textContent.trim()) tipoData=JSON.parse(sp.textContent);
     }catch(e){}
-    const srcData=(tipoData&&tipoData.some(d=>d.total>0))?tipoData.filter(d=>d.total>0):(bimData||[]);
-    const usingTipo=tipoData&&tipoData.some(d=>d.total>0);
-    const labels=usingTipo?srcData.map(d=>d.nombre||d.tipo):srcData.map(d=>d.bim||'');
-    if(!srcData||!srcData.length||!srcData.some(d=>d.total>0)){
-      canvasResumen.style.display='none';
-      const p=document.createElement('p');
-      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:16px;padding:8px';
-      p.textContent='Sin datos para mostrar';
-      canvasResumen.parentElement.appendChild(p);
-    } else {
-      canvasResumen.style.display='';
-      canvasResumen._chartInst=new Chart(canvasResumen,{
+    if(tipoData&&tipoData.length){
+      canvasTipo.style.display='';
+      canvasTipo._chartInst=new Chart(canvasTipo,{
         type:'bar',
-        data:{labels,datasets:[
-          {label:'Realizadas',data:srcData.map(d=>d.realizadas||0),
-            backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:5},
-          {label:'Pendientes / Programadas',data:srcData.map(d=>d.pendientes||0),
-            backgroundColor:'rgba(133,183,235,0.7)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:5},
-          {label:'Vencidas',data:srcData.map(d=>d.vencidas||0),
-            backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:5},
-        ]},
+        data:{
+          labels:tipoData.map(d=>d.nombre||d.tipo),
+          datasets:[
+            {label:'Realizadas',data:tipoData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
+            {label:'Pendientes',data:tipoData.map(d=>d.pendientes),backgroundColor:'rgba(133,183,235,0.75)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:4},
+            {label:'Vencidas',data:tipoData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
+          ]
+        },
         options:{responsive:true,maintainAspectRatio:false,
-          plugins:{
-            legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:13}},
-            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}
-          },
+          plugins:{legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:12}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},
           scales:{
             x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
-            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},
-               grid:{color:gridColor},
+            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor},
+               title:{display:true,text:'Capacitaciones',font:{size:10},color:textColor}}
+          }
+        }
+      });
+    }
+  }
+
+  // ── Gráfico Resumen: Por bimestre ─────────────────────────────────────
+  const canvasBim=destroyCanvas('chart-resumen-bim');
+  if(canvasBim){
+    let bimData=null;
+    try{
+      const sp=document.getElementById('chart-data-resumen-bim');
+      if(sp&&sp.textContent.trim()) bimData=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(bimData&&bimData.length){
+      canvasBim.style.display='';
+      canvasBim._chartInst=new Chart(canvasBim,{
+        type:'bar',
+        data:{
+          labels:bimData.map(d=>d.bim),
+          datasets:[
+            {label:'Realizadas',data:bimData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
+            {label:'Pendientes',data:bimData.map(d=>d.pendientes),backgroundColor:'rgba(133,183,235,0.75)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:4},
+            {label:'Vencidas',data:bimData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
+          ]
+        },
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:12}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},
+          scales:{
+            x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
+            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor},
                title:{display:true,text:'Capacitaciones',font:{size:10},color:textColor}}
           }
         }
@@ -4512,16 +4531,7 @@ function makeLineChart(canvasId, labels, datasets){
   if(!ctx) return;
   try{ const prev=Chart.getChart(ctx); if(prev) prev.destroy(); }catch(e){}
   if(ctx._chartInst){ try{ctx._chartInst.destroy();}catch(e){} ctx._chartInst=null; }
-  // Verificar si hay datos reales para mostrar
-  const tieneObjetivos=datasets.some(ds=>ds.data&&ds.data.some(v=>v>0));
-  if(!tieneObjetivos){
-    const p=document.createElement('p');
-    p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:20px;padding:16px';
-    p.textContent='Sin datos para mostrar con los filtros actuales';
-    ctx.parentElement.appendChild(p);
-    ctx.style.display='none';
-    return;
-  }
+  ctx.style.display='';
   ctx._chartInst = new Chart(ctx, {
     type:'line',
     data:{ labels, datasets },

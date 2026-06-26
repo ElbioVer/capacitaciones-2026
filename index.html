@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_6.html -->
+<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_7.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,7 +17,7 @@ if(typeof XLSX==='undefined'){
   };
   document.head.appendChild(s);
 }
-</script><script src="./index_files/xlsx.full.min.js.descarga"></script>
+</script><script src="./index_files/xlsx.full.min.js.descarga"></script><script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script>
 <script src="file:///C:/Users/e.verdun/Downloads/index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -373,6 +373,7 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-un" onclick="switchTab(&#39;un&#39;)">UN/Depto</div>
     <div class="tab" id="tab-resumen" onclick="switchTab(&#39;resumen&#39;)">Resumen</div>
     <div class="tab" id="tab-indicadores" onclick="switchTab(&#39;indicadores&#39;)">Indicadores</div>
+    <div class="tab" id="tab-gantt" onclick="switchTab(&#39;gantt&#39;)">Gantt 2026</div>
     <div class="tab" id="tab-padron" onclick="switchTab(&#39;padron&#39;)" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab(&#39;config&#39;)" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab(&#39;usuarios&#39;)" style="display:none">Usuarios</div>
@@ -490,6 +491,7 @@ function showApp(){
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
   document.getElementById('tab-indicadores').style.display='';
+  document.getElementById('tab-gantt').style.display='';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
@@ -707,7 +709,7 @@ function switchTab(t){
   try{
     if(t!=='padron') window._padronFiltro='todos';
     currentTab=t;
-    ['lista','tipo','bim','un','resumen','indicadores','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
+    ['lista','tipo','bim','un','resumen','indicadores','gantt','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
     // Mostrar buscador solo en tabs de listas de capacitaciones
     const sbWrap=document.getElementById('search-bar-wrap');
     if(sbWrap) sbWrap.style.display=['lista','tipo','bim','un'].includes(t)?'block':'none';
@@ -747,8 +749,9 @@ function renderContent(){
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
-    else if(currentTab==='resumen'){el.innerHTML=renderResumen();requestAnimationFrame(()=>setTimeout(renderCharts,50));}
-    else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,100);}
+    else if(currentTab==='resumen'){el.innerHTML=renderResumen();setTimeout(renderCharts,150);}
+    else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();setTimeout(renderIndicadoresCharts,200);}
+    else if(currentTab==='gantt'){el.innerHTML=renderGantt();}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
@@ -1983,7 +1986,10 @@ function buildDetail(id){
 
   // repositorio
   let repoHtml='';
-  if(t.tiene_repositorio){
+      // Botón QR presencia (para caps sin evaluación o con registro de presencia)
+    const presenciaUrl=location.origin+location.pathname+'?presencia='+id;
+    const qrPresenciaBtn=`<button class="btn-sm" style="background:#1A2F6E;color:#fff;border-color:#1A2F6E;font-weight:600" onclick="mostrarQrPresencia(${id},'${esc(c.titulo).replace(/'/g,"\'")}')" title="QR para registro de presencia">📷 QR Presencia</button>`;
+if(t.tiene_repositorio){
     const mats=getMat(id);
     const matItems=mats.length?mats.map(m=>`<div class="material-item">
       <span class="material-icon">${m.tipo==='link'?'🔗':'📄'}</span>
@@ -1996,8 +2002,14 @@ function buildDetail(id){
     const addMatBtn=canEdit()?`<button class="btn-sm green" onclick="openAddMaterial(${id})">+ Material</button>`:'';
     const waMatBtn=`<button class="btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-weight:600" onclick="compartirWACap(${id})" title="Compartir materiales y evaluación por WhatsApp">📲 Compartir</button>`;
     repoHtml=`<div class="modal-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Repositorio de materiales</span><div style="display:flex;gap:5px">${waMatBtn}${addMatBtn}</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Repositorio de materiales</span><div style="display:flex;gap:5px">${waMatBtn}${qrPresenciaBtn}${addMatBtn}</div></div>
       ${matItems}
+    </div>`;
+  } else {
+    // Cap sin repositorio — igual mostrar el botón QR de presencia
+    repoHtml=`<div class="modal-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px" class="modal-section-title"><span>Registro de asistencia</span><div style="display:flex;gap:5px">${qrPresenciaBtn}</div></div>
+      <p style="font-size:11px;color:#888;margin:8px 0 0">Usá el QR para que los participantes registren su asistencia durante la capacitación.</p>
     </div>`;
   }
 
@@ -2438,11 +2450,17 @@ function renderEvalPublica(evalId){
       <div style="background:#FAEEDA;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#854F0B">
         <strong>Datos del participante</strong>
         <div style="margin-top:8px">
-          <label class="form-label">Legajo *</label>
-          <div style="display:flex;gap:6px">
-            <input class="form-input" id="pub-legajo" placeholder="Ingresá tu número de legajo" style="flex:1" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})">
-            <button onclick="validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Validar</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <label class="form-label">Legajo *</label>
+              <input class="form-input" id="pub-legajo" placeholder="Nº de legajo" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})">
+            </div>
+            <div>
+              <label class="form-label">Últimos 4 dígitos DNI *</label>
+              <input class="form-input" id="pub-dni4" placeholder="Ej: 7893" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" onkeydown="if(event.key==='Enter')validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})">
+            </div>
           </div>
+          <button onclick="validarLegajoPadron(document.getElementById('pub-legajo').value,${evalId})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;width:100%">🔍 Validar identidad</button>
           <div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>
           <div id="padron-datos" style="display:none">
             <div style="margin-top:8px">
@@ -2473,6 +2491,7 @@ function validarLegajoPadron(legajo,evalId){
   const secInput=document.getElementById('pub-sector');
   const cuilInput=document.getElementById('pub-cuil');
   const deptoInput=document.getElementById('pub-depto');
+  const dni4Input=document.getElementById('pub-dni4');
   if(!lookup) return;
   const leg=String(legajo||'').trim();
   if(!leg){
@@ -2487,19 +2506,40 @@ function validarLegajoPadron(legajo,evalId){
       lookup.style.display='block';
       lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">⚠ Empleado con estado "${esc(emp.estado)}" — contactá a RRHH para regularizar</span>`;
       if(datos) datos.style.display='none';
-    } else {
-      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
-      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
-      lookup.style.display='block';
-      lookup.innerHTML=`<span style="color:#0F6E56;font-weight:600">✔ Legajo validado: ${esc(emp.nombre)}</span>`;
-      if(nombreInput) nombreInput.value=emp.nombre;
-      if(unInput) unInput.value=emp.un||'';
-      if(secInput) secInput.value=emp.sector||'';
-      if(cuilInput) cuilInput.value=cuil;
-      if(deptoInput) deptoInput.value=depto;
-      if(datos) datos.style.display='block';
-      if(evalId) checkYaAprobado(evalId, leg);
+      return;
     }
+    // Verificar 4 últimos dígitos del DNI si el padrón tiene documento
+    if(dni4Input){
+      const dni4=String(dni4Input.value||'').trim().replace(/\D/g,'');
+      if(!dni4||dni4.length<4){
+        lookup.style.display='block';
+        lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá los últimos 4 dígitos de tu DNI</span>';
+        if(datos) datos.style.display='none';
+        return;
+      }
+      // Verificar contra documento del padrón si está disponible
+      const docPadron=String(emp.documento||emp.datos_extra?.Documento||emp.datos_extra?.documento||'').replace(/\D/g,'');
+      if(docPadron&&docPadron.length>=4){
+        const ultimos4=docPadron.slice(-4);
+        if(dni4!==ultimos4){
+          lookup.style.display='block';
+          lookup.innerHTML='<span style="color:#CC0000;font-weight:600">✘ Los últimos 4 dígitos del DNI no coinciden con el legajo ingresado. Verificá tus datos.</span>';
+          if(datos) datos.style.display='none';
+          return;
+        }
+      }
+    }
+    const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+    const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
+    lookup.style.display='block';
+    lookup.innerHTML=`<span style="color:#0F6E56;font-weight:600">✔ Identidad verificada: ${esc(emp.nombre)}</span>`;
+    if(nombreInput) nombreInput.value=emp.nombre;
+    if(unInput) unInput.value=emp.un||'';
+    if(secInput) secInput.value=emp.sector||'';
+    if(cuilInput) cuilInput.value=cuil;
+    if(deptoInput) deptoInput.value=depto;
+    if(datos) datos.style.display='block';
+    if(evalId) checkYaAprobado(evalId, leg);
   } else if(padron.length>0){
     lookup.style.display='block';
     lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado en el padrón — verificá el número o contactá a RRHH</span>`;
@@ -3328,6 +3368,143 @@ async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
 }
 
+
+// ===== renderGantt =====
+function renderGantt(){
+  const year=new Date().getFullYear();
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const BIMS=[
+    {label:'1° Bim',start:0,end:1},
+    {label:'2° Bim',start:2,end:3},
+    {label:'3° Bim',start:4,end:5},
+    {label:'4° Bim',start:6,end:7},
+    {label:'5° Bim',start:8,end:9},
+    {label:'6° Bim',start:10,end:11},
+  ];
+
+  // Agrupar capacitaciones por UN y Departamento
+  const grupos={};
+  caps.forEach(cap=>{
+    const un=cap.un||'(Sin UN)';
+    const dep=cap.departamento||cap.area||'(General)';
+    if(!grupos[un]) grupos[un]={};
+    if(!grupos[un][dep]) grupos[un][dep]=[];
+    grupos[un][dep].push(cap);
+  });
+
+  // Header: meses
+  const colW=60; // px por mes
+  const totalW=colW*12;
+  const labelW=220;
+
+  // Construir celdas de mes en el header
+  const mesHeaders=meses.map((m,i)=>{
+    const hoy=new Date();
+    const esMesActual=(hoy.getFullYear()===year&&hoy.getMonth()===i);
+    return `<th style="min-width:${colW}px;width:${colW}px;text-align:center;padding:4px 2px;font-size:10px;background:${esMesActual?'#1A2F6E':'#2D4A8E'};color:#fff;border-right:1px solid rgba(255,255,255,0.15)">${m}</th>`;
+  }).join('');
+
+  // Filas por UN/Departamento
+  let rows='';
+  const statusColors={
+    'Realizada':'#1D9E75',
+    'En curso':'#EF9F27',
+    'Programada':'#85B7EB',
+    'Vencida':'#E24B4A',
+    'Sin estado':'#bbb'
+  };
+
+  const sortedUNs=Object.keys(grupos).sort();
+  sortedUNs.forEach(un=>{
+    // Fila de UN (cabecera)
+    rows+=`<tr style="background:#EEF2FA">
+      <td style="padding:5px 10px;font-size:11px;font-weight:700;color:#1A2F6E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #d0d8ea" colspan="1">📁 ${esc(un)}</td>
+      ${meses.map(()=>`<td style="background:#EEF2FA;border-right:1px solid #e0e8f4"></td>`).join('')}
+    </tr>`;
+
+    const sortedDeps=Object.keys(grupos[un]).sort();
+    sortedDeps.forEach(dep=>{
+      const capsDepto=grupos[un][dep];
+      // Fila de departamento/sector
+      rows+=`<tr style="background:#F7F9FF">
+        <td style="padding:4px 10px 4px 20px;font-size:10px;font-weight:600;color:#3A5A9E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #d0d8ea">${esc(dep)}</td>
+        ${meses.map(()=>`<td style="background:#F7F9FF;border-right:1px solid #e8edf8"></td>`).join('')}
+      </tr>`;
+
+      // Cada capacitación
+      capsDepto.forEach(cap=>{
+        const estado=estadoCap(cap);
+        const color=statusColors[estado]||'#bbb';
+        const ff=fechaFinCap(cap)||cap.fecha;
+        let mesIdx=-1;
+        if(ff){
+          const parts=ff.split('-');
+          const yr=parseInt(parts[0]);
+          const mo=parseInt(parts[1])-1;
+          if(yr===year) mesIdx=mo;
+        }
+        if(cap.fecha&&!ff){
+          const parts=cap.fecha.split('-');
+          if(parseInt(parts[0])===year) mesIdx=parseInt(parts[1])-1;
+        }
+
+        // Calcular rango de meses para caps con fecha inicio y fin distintos
+        let mesStart=mesIdx,mesEnd=mesIdx;
+        if(cap.fecha&&cap.fecha_fin&&cap.fecha!==cap.fecha_fin){
+          const ps=cap.fecha.split('-');
+          const pe=cap.fecha_fin.split('-');
+          if(parseInt(ps[0])===year) mesStart=parseInt(ps[1])-1;
+          if(parseInt(pe[0])===year) mesEnd=parseInt(pe[1])-1;
+        }
+
+        const celdas=meses.map((_,i)=>{
+          const bg=(i%2===0)?'#FAFBFF':'#fff';
+          const bdr='border-right:1px solid #edf0f8';
+          if(mesStart>=0&&i>=mesStart&&i<=mesEnd){
+            const isFirst=i===mesStart;
+            const isLast=i===mesEnd;
+            const bRadius=`border-radius:${isFirst?'5px 0 0 5px':'0'} ${isLast?'0 5px 5px 0':'0'}`;
+            const tooltipTitle=esc(cap.titulo)+' — '+esc(estado)+(cap.duracion?' ('+cap.duracion+'hs)':'');
+            return `<td style="${bdr}padding:2px 1px;background:${bg}"><div title="${tooltipTitle}" onclick="openDetail(${cap.id})" style="background:${color};${bRadius};padding:2px 4px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:${colW-4}px;font-weight:600">${isFirst?esc(cap.titulo.length>7?cap.titulo.slice(0,7)+'…':cap.titulo):''}</div></td>`;
+          }
+          return `<td style="${bdr};background:${bg}"></td>`;
+        }).join('');
+
+        rows+=`<tr style="border-bottom:1px solid #f0f3fb">
+          <td style="padding:2px 10px 2px 30px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #d0d8ea;cursor:pointer" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)}">
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle"></span>${esc(cap.titulo)}
+          </td>
+          ${celdas}
+        </tr>`;
+      });
+    });
+  });
+
+  if(!rows) rows=`<tr><td colspan="13" style="text-align:center;padding:30px;color:#aaa;font-size:12px">Sin capacitaciones planificadas</td></tr>`;
+
+  // Leyenda
+  const leyenda=Object.entries(statusColors).map(([k,v])=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#555"><span style="width:10px;height:10px;border-radius:3px;background:${v};display:inline-block"></span>${k}</span>`).join('');
+
+  return `<div class="plan-block" style="padding:10px 14px;overflow-x:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div class="plan-block-title" style="margin:0">📅 Gantt de Capacitaciones ${year}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${leyenda}</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse;min-width:${labelW+totalW}px;font-size:11px">
+        <thead>
+          <tr style="background:#1A2F6E">
+            <th style="min-width:${labelW}px;width:${labelW}px;text-align:left;padding:6px 10px;font-size:11px;color:#fff;border-right:2px solid rgba(255,255,255,0.3)">UN / Departamento</th>
+            ${mesHeaders}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p style="font-size:10px;color:#aaa;margin-top:10px">Hacé clic en cualquier barra o nombre para ver el detalle de la capacitación.</p>
+  </div>`;
+}
+
 function renderCharts(){
   const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
@@ -3338,9 +3515,11 @@ function renderCharts(){
     const span=document.getElementById(dataSpanId);
     if(!canvas||!span) return;
     try{
-      // Destruir instancia previa de Chart.js si existe
-      const prev=Chart.getChart(canvasId);
+      // Destruir instancia previa de Chart.js si existe (por ID o por elemento)
+      const prev=Chart.getChart(canvas);
       if(prev) prev.destroy();
+      // También limpiar cualquier instancia colgada
+      if(canvas._chartInst){canvas._chartInst.destroy();canvas._chartInst=null;}
       const raw=span.textContent.trim();
       if(!raw||raw==='null'||raw==='[]') return;
       const data=JSON.parse(raw);
@@ -3875,11 +4054,179 @@ async function init(){
     }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la evaluación.</p></div></div>';}
     return;
   }
+  // verificar si es registro de presencia (para caps sin evaluación)
+  const presCapId=params.get('presencia');
+  if(presCapId){
+    try{
+      const [cap,pad,tiposData]=await Promise.all([
+        api('GET','capacitaciones','',`?id=eq.${presCapId}`),
+        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc'),
+        api('GET','tipos_capacitacion','','?activo=eq.true')
+      ]);
+      caps=cap||[];padron=pad||[];tipos=tiposData||[];
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app-wrap').style.display='none';
+      renderPresenciaPublica(parseInt(presCapId));
+    }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la capacitación.</p></div></div>';}
+    return;
+  }
   // app normal
   const savedUser=sessionStorage.getItem('capUser');
   if(savedUser){try{currentUser=JSON.parse(savedUser);showApp();}catch(e){}}
 }
 
+
+// ===== renderPresenciaPublica =====
+function renderPresenciaPublica(capId){
+  const cap=caps.find(c=>c.id===capId);
+  if(!cap){
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Capacitación no encontrada.</p></div></div>';
+    return;
+  }
+  const tipo=cap.tipo_codigo||'';
+  document.body.innerHTML=`<div class="eval-public-wrap">
+    <div class="eval-public-card">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:28px;margin-bottom:4px">✅</div>
+        <div style="font-size:16px;font-weight:700;color:#1A2F6E">Registro de Asistencia</div>
+        <div style="font-size:13px;font-weight:600;color:#111;margin-top:6px">${esc(cap.titulo)}</div>
+        ${cap.fecha?`<div style="font-size:11px;color:#888;margin-top:2px">Fecha: ${fmtF(cap.fecha)}</div>`:''}
+        ${cap.un?`<div style="font-size:11px;color:#888">${esc(cap.un)}</div>`:''}
+      </div>
+      <div style="background:#EAF4FF;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:#1A2F6E;margin-bottom:10px">📋 Identificate para registrar tu asistencia</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Legajo *</label>
+            <input class="form-input" id="pres-legajo" placeholder="Nº de legajo" inputmode="numeric" style="width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')validarPresencia(${capId})">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Últimos 4 dígitos DNI *</label>
+            <input class="form-input" id="pres-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" style="width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')validarPresencia(${capId})">
+          </div>
+        </div>
+        <button onclick="validarPresencia(${capId})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%">
+          ✔ Confirmar asistencia
+        </button>
+        <div id="pres-lookup" style="margin-top:10px;font-size:12px;display:none;text-align:center"></div>
+      </div>
+      <p style="font-size:10px;color:#aaa;text-align:center">Tus datos son utilizados exclusivamente para registrar tu asistencia a la capacitación.</p>
+    </div>
+  </div>`;
+}
+
+async function validarPresencia(capId){
+  const lookup=document.getElementById('pres-lookup');
+  const leg=String((document.getElementById('pres-legajo')||{}).value||'').trim();
+  const dni4=String((document.getElementById('pres-dni4')||{}).value||'').trim().replace(/[^0-9]/g,'');
+  if(!lookup) return;
+  if(!leg){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá tu legajo</span>';return;}
+  if(!dni4||dni4.length<4){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá los 4 últimos dígitos de tu DNI</span>';return;}
+  const emp=getPadronEmpleado(leg);
+  if(!emp&&padron.length>0){
+    lookup.style.display='block';
+    lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado en el padrón. Verificá o contactá a RRHH.</span>`;
+    return;
+  }
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.style.display='block';
+      lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">⚠ Tu legajo figura con estado "${esc(emp.estado)}" — contactá a RRHH.</span>`;
+      return;
+    }
+    const docPadron=String(emp.documento||emp.datos_extra?.Documento||emp.datos_extra?.documento||'').replace(/[^0-9]/g,'');
+    if(docPadron&&docPadron.length>=4){
+      const ultimos4=docPadron.slice(-4);
+      if(dni4!==ultimos4){
+        lookup.style.display='block';
+        lookup.innerHTML='<span style="color:#CC0000;font-weight:600">✘ Los datos no coinciden. Verificá tu legajo y los últimos 4 dígitos del DNI.</span>';
+        return;
+      }
+    }
+  }
+  // Datos del empleado
+  const nombre=emp?emp.nombre:'';
+  const un=emp?emp.un||'':'';
+  const sector=emp?emp.sector||'':'';
+  const depto=emp?(emp.departamento||emp.datos_extra?.Departamento||''):'';
+  const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):'';
+  lookup.style.display='block';
+  lookup.innerHTML='<span style="color:#888">Registrando asistencia...</span>';
+  try{
+    // Verificar si ya está registrado
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+    if(existing&&existing.length>0){
+      const reg=existing[0];
+      if(reg.completo){
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✔ Tu asistencia ya estaba registrada</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+      } else {
+        // Actualizar a completo
+        await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:new Date().toISOString().slice(0,10)},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✅ Asistencia confirmada</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+      }
+    } else {
+      // Registrar nuevo
+      await api('POST','asistentes',{capacitacion_id:capId,legajo:leg,nombre,un,sector,departamento:depto,cuil,completo:true,en_meta:true,fecha_evaluacion:new Date().toISOString().slice(0,10)},'');
+      lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✅ Asistencia registrada exitosamente</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+    }
+    // Deshabilitar botón de confirmación
+    const btn=document.querySelector('button[onclick*="validarPresencia"]');
+    if(btn){btn.disabled=true;btn.style.opacity='0.5';btn.textContent='✔ Registrado';}
+  }catch(e){
+    lookup.innerHTML=`<span style="color:#CC0000">Error al registrar: ${esc(e.message||'Intenta de nuevo')}</span>`;
+  }
+}
+
+// ===== mostrarQrPresencia =====
+function mostrarQrPresencia(capId, titulo){
+  const url=location.origin+location.pathname+'?presencia='+capId;
+  const qrDiv=document.createElement('div');
+  qrDiv.id='qr-container-'+capId;
+  const modalContent=`<div class="modal-handle"></div>
+    <div style="padding:4px 2px">
+      <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:4px;text-align:center">📷 QR Registro de Asistencia</div>
+      <div style="font-size:12px;color:#555;text-align:center;margin-bottom:12px">${esc(titulo)}</div>
+      <div id="qr-render-${capId}" style="display:flex;justify-content:center;margin-bottom:12px;background:#fff;padding:16px;border-radius:8px;border:1px solid #e5e5e5"></div>
+      <div style="background:#f4f4f2;border-radius:8px;padding:8px 10px;margin-bottom:12px">
+        <div style="font-size:10px;color:#888;margin-bottom:4px">URL del registro:</div>
+        <div style="font-size:11px;color:#1A2F6E;word-break:break-all;font-family:monospace">${esc(url)}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" style="flex:1" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>toast('URL copiada'))">📋 Copiar URL</button>
+        <button class="btn-sm" onclick="imprimirQr(${capId})" style="flex:1">🖨 Imprimir</button>
+      </div>
+    </div>`;
+  showModal(modalContent);
+  // Generar QR con qrcode.js (CDN)
+  setTimeout(()=>{
+    const el=document.getElementById('qr-render-'+capId);
+    if(!el) return;
+    if(typeof QRCode==='undefined'){
+      // Cargar QRCode.js dinámicamente si no está disponible
+      const script=document.createElement('script');
+      script.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+      script.onload=()=>{
+        try{new QRCode(el,{text:url,width:220,height:220,colorDark:'#1A2F6E',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});}catch(e){el.innerHTML='<a href="'+esc(url)+'" style="font-size:10px;word-break:break-all">'+esc(url)+'</a>';}
+      };
+      document.head.appendChild(script);
+    } else {
+      try{new QRCode(el,{text:url,width:220,height:220,colorDark:'#1A2F6E',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});}catch(e){el.innerHTML='<a href="'+esc(url)+'" style="font-size:10px;word-break:break-all">'+esc(url)+'</a>';}
+    }
+  },200);
+}
+
+function imprimirQr(capId){
+  const el=document.getElementById('qr-render-'+capId);
+  if(!el) return;
+  const canvas=el.querySelector('canvas');
+  const img=el.querySelector('img');
+  const dataUrl=canvas?canvas.toDataURL():img?img.src:'';
+  if(!dataUrl){toast('No se pudo generar el QR para imprimir');return;}
+  const w=window.open('','_blank','width=400,height=500');
+  const cap=caps.find(c=>c.id===capId);
+  w.document.write(`<!DOCTYPE html><html><head><title>QR Asistencia</title><style>body{font-family:sans-serif;text-align:center;padding:20px}img{max-width:250px}h2{font-size:16px;color:#1A2F6E}p{font-size:12px;color:#555}</style></head><body><h2>Registro de Asistencia</h2><p>${esc(cap?cap.titulo:'')}</p><img src="${dataUrl}" alt="QR"><p style="font-size:10px;margin-top:8px;color:#888">Escaneá el código QR para confirmar tu asistencia</p><script>window.print()<\/script></body></html>`);
+  w.document.close();
+}
 
 // ===== getIndicadoresData =====
 function getIndicadoresData(){
@@ -4105,7 +4452,9 @@ function renderIndicadoresCharts(){
   // Gráfico cuatrimestral (barras agrupadas)
   const ctxC = document.getElementById('chart-ind-cuatri');
   if(ctxC){
-    if(ctxC._chartInst) ctxC._chartInst.destroy();
+    const prevCuatri = Chart.getChart(ctxC);
+    if(prevCuatri) prevCuatri.destroy();
+    if(ctxC._chartInst){ctxC._chartInst.destroy();}
     ctxC._chartInst = new Chart(ctxC, {
       type:'bar',
       data:{
@@ -4138,7 +4487,9 @@ function renderIndicadoresCharts(){
 function makeLineChart(canvasId, labels, datasets){
     const ctx = document.getElementById(canvasId);
     if(!ctx) return;
-    if(ctx._chartInst) ctx._chartInst.destroy();
+    const prevChart = Chart.getChart(ctx);
+    if(prevChart) prevChart.destroy();
+    if(ctx._chartInst){ctx._chartInst.destroy();}
     ctx._chartInst = new Chart(ctx, {
       type:'line',
       data:{ labels, datasets },

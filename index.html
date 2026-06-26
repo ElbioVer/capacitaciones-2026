@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_12.html -->
+<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_13.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
-<script src="./index_files/xlsx.full.min.js.descarga"></script>
-<script src="./index_files/chart.umd.min.js.descarga"></script>
+<script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script>
+<script src="file:///C:/Users/e.verdun/Downloads/index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
@@ -1071,8 +1071,14 @@ function renderResumen(){
       ${rows}
     </div>`;
   })()}
+  <div class="plan-block" style="padding:10px 14px;margin-top:8px">
+    <div class="plan-block-title" style="margin-bottom:6px">📊 Resumen consolidado — Capacitaciones por tipo y bimestre</div>
+    <div style="position:relative;height:260px;width:100%"><canvas id="chart-resumen-consolidado" style="position:absolute;inset:0"></canvas></div>
+  </div>
   <span id="chart-data-linea" style="display:none">${JSON.stringify(dataMeses)}</span>
-  <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>`;
+  <span id="chart-data-eval" style="display:none">${JSON.stringify(evalData)}</span>
+  <span id="chart-data-resumen-tipo" style="display:none">${JSON.stringify(tipos.map(t=>{const g=f.filter(c=>c.tipo_codigo===t.codigo);const r=g.filter(c=>estadoCap(c)==='Realizada').length;const v=g.filter(c=>estadoCap(c)==='Vencida').length;const p=g.filter(c=>{const e=estadoCap(c);return e==='Pendiente'||e==='Programada';}).length;return{tipo:t.codigo,nombre:t.nombre,realizadas:r,vencidas:v,pendientes:p,total:g.length};}))}</span>
+  <span id="chart-data-resumen-bim" style="display:none">${JSON.stringify(BIMESTRES.map(b=>{const g=f.filter(c=>c.bimestre===b);const r=g.filter(c=>estadoCap(c)==='Realizada').length;const v=g.filter(c=>estadoCap(c)==='Vencida').length;return{bim:b.split('(')[0].trim(),realizadas:r,vencidas:v,total:g.length};}))}</span>`;
 }
 
 
@@ -3448,6 +3454,53 @@ function renderCharts(){
       });
     }
   }
+
+  // ── Gráfico consolidado del Resumen (por tipo) ───────────────────────
+  const canvasResumen=destroyCanvas('chart-resumen-consolidado');
+  if(canvasResumen){
+    let tipoData=null, bimData=null;
+    try{
+      const spT=document.getElementById('chart-data-resumen-tipo');
+      const spB=document.getElementById('chart-data-resumen-bim');
+      if(spT&&spT.textContent.trim()&&spT.textContent.trim()!=='[]') tipoData=JSON.parse(spT.textContent);
+      if(spB&&spB.textContent.trim()&&spB.textContent.trim()!=='[]') bimData=JSON.parse(spB.textContent);
+    }catch(e){}
+    const srcData=(tipoData&&tipoData.some(d=>d.total>0))?tipoData.filter(d=>d.total>0):(bimData||[]);
+    const usingTipo=tipoData&&tipoData.some(d=>d.total>0);
+    const labels=usingTipo?srcData.map(d=>d.nombre||d.tipo):srcData.map(d=>d.bim||'');
+    if(!srcData||!srcData.length||!srcData.some(d=>d.total>0)){
+      canvasResumen.style.display='none';
+      const p=document.createElement('p');
+      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:16px;padding:8px';
+      p.textContent='Sin datos para mostrar';
+      canvasResumen.parentElement.appendChild(p);
+    } else {
+      canvasResumen.style.display='';
+      canvasResumen._chartInst=new Chart(canvasResumen,{
+        type:'bar',
+        data:{labels,datasets:[
+          {label:'Realizadas',data:srcData.map(d=>d.realizadas||0),
+            backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:5},
+          {label:'Pendientes / Programadas',data:srcData.map(d=>d.pendientes||0),
+            backgroundColor:'rgba(133,183,235,0.7)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:5},
+          {label:'Vencidas',data:srcData.map(d=>d.vencidas||0),
+            backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:5},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{
+            legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:13}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}
+          },
+          scales:{
+            x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
+            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},
+               grid:{color:gridColor},
+               title:{display:true,text:'Capacitaciones',font:{size:10},color:textColor}}
+          }
+        }
+      });
+    }
+  }
 }
 
 // ── AGREGAR PARTICIPANTE DESIGNADO ──────────────────────────────────────────
@@ -4298,7 +4351,7 @@ function renderIndicadores(){
 
     <!-- GRÁFICO 1: GENERAL -->
     <div class="plan-block">
-      <div class="plan-block-title">📊 Gráfico 1 — Plan de Capacitación General (Horas Hombre)
+      <div class="plan-block-title">📊 Cap General - Horas hombre
         <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
       </div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
@@ -4314,7 +4367,7 @@ function renderIndicadores(){
 
     <!-- GRÁFICO 2: REMO -->
     <div class="plan-block">
-      <div class="plan-block-title">🔵 Gráfico 2 — Plan REMO (Horas Hombre)
+      <div class="plan-block-title">🔵 Cap REMO - Horas hombre
         <span style="font-size:11px;font-weight:400;color:#888">${new Date().getFullYear()}</span>
       </div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">

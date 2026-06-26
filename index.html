@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_8.html -->
+<!-- saved from url=(0048)file:///C:/Users/e.verdun/Downloads/index_9.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,8 +17,8 @@ if(typeof XLSX==='undefined'){
   };
   document.head.appendChild(s);
 }
-</script><script src="./index_files/xlsx.full.min.js.descarga"></script><script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script>
-<script src="./index_files/chart.umd.min.js.descarga"></script>
+</script><script src="./index_files/xlsx.full.min.js.descarga"></script><script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script><script src="file:///C:/Users/e.verdun/Downloads/index_files/xlsx.full.min.js.descarga"></script>
+<script src="file:///C:/Users/e.verdun/Downloads/index_files/chart.umd.min.js.descarga"></script>
 <script>
 // Fallback Chart.js si CDN falló
 if(typeof Chart==='undefined'){
@@ -31,7 +31,7 @@ if(typeof Chart==='undefined'){
   };
   document.head.appendChild(sc);
 }
-</script>
+</script><script src="./index_files/chart.umd.min.js.descarga"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f2;color:#1a1a1a}
@@ -262,7 +262,7 @@ select.form-input{cursor:pointer}
   <meta name="apple-mobile-web-app-title" content="Capacitación">
   <meta name="theme-color" content="#1D9E75">
   <link rel="apple-touch-icon" href="data:image/svg+xml,&lt;svg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 100 100&#39;&gt;&lt;rect width=&#39;100&#39; height=&#39;100&#39; fill=&#39;%231A2F6E&#39;/&gt;&lt;text y=&#39;70&#39; x=&#39;50&#39; font-size=&#39;60&#39; text-anchor=&#39;middle&#39; fill=&#39;white&#39;&gt;E&lt;/text&gt;&lt;/svg&gt;">
-</head>
+<script src="./index_files/chart.umd.min(1).js.descarga"></script></head>
 <body>
 
 <!-- LOGIN -->
@@ -4097,9 +4097,9 @@ function renderGantt(){
   const colW=62;
   const labelW=210;
 
-  // Agrupar por UN → Departamento
+  // Agrupar por UN → Departamento (respeta filtros activos)
   const grupos={};
-  caps.forEach(cap=>{
+  getFiltered().forEach(cap=>{
     const un=cap.un||'(Sin UN)';
     const dep=cap.departamento||cap.area||'(General)';
     if(!grupos[un]) grupos[un]={};
@@ -4174,8 +4174,8 @@ function getIndicadoresData(){
   // realizadasHs = sum(participantes * duracion) de caps Realizadas ese mes
   const data = meses.map((m, i) => {
     const mes = i+1;
-    // Caps planificadas para este mes (por fecha_fin calculada)
-    const capsDelMes = caps.filter(cap => {
+    // Caps planificadas para este mes (por fecha_fin calculada, respeta filtros)
+    const capsDelMes = getFiltered().filter(cap => {
       const ff = fechaFinCap(cap)||cap.fecha;
       if(!ff) return false;
       const parts = ff.split('-');
@@ -4202,7 +4202,7 @@ function getIndicadoresRemo(){
   const year = new Date().getFullYear();
   return meses.map((m, i) => {
     const mes = i+1;
-    const capsRemo = caps.filter(cap => {
+    const capsRemo = getFiltered().filter(cap => {
       if(cap.tipo_codigo !== 'REMO') return false;
       const ff = fechaFinCap(cap)||cap.fecha;
       if(!ff) return false;

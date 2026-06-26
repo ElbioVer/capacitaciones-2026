@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_11.html -->
+<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_12.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -727,11 +727,15 @@ function sortCaps(arr){
   });
 }
 
-// Espera a que Chart.js esté cargado (máx 5 seg) antes de llamar el callback
+// Llama cb asegurando que Chart.js esté listo y el DOM pintado
 function waitForChart(cb, attempts){
   attempts=attempts||0;
-  if(typeof Chart!=='undefined'){ setTimeout(cb,50); return; }
-  if(attempts>50){ console.warn('Chart.js no disponible tras 5s'); return; }
+  if(typeof Chart!=='undefined'){
+    // Doble rAF para asegurar que el DOM esté pintado y los canvas tengan dimensiones
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{cb();}catch(e){console.warn('chart error:',e);} }));
+    return;
+  }
+  if(attempts>60){ console.warn('Chart.js no disponible'); return; }
   setTimeout(()=>waitForChart(cb,attempts+1),100);
 }
 
@@ -1030,13 +1034,13 @@ function renderResumen(){
   </div>
   <div class="plan-block" style="padding:10px 14px">
     <div class="plan-block-title" style="margin-bottom:6px">Evolución de cumplimiento mensual</div>
-    <canvas id="chart-linea" height="120"></canvas>
+    <div style="position:relative;height:200px;width:100%"><canvas id="chart-linea" style="position:absolute;inset:0"></canvas></div>
   </div>
   ${evalData.length?`<div class="plan-block">
     <div class="plan-block-title" style="margin-bottom:8px">Efectividad de evaluaciones
       <span style="font-size:10px;font-weight:400;color:#888">${totalEval} evaluados</span>
     </div>
-    <canvas id="chart-eval" height="140"></canvas>
+    <div style="position:relative;height:220px;width:100%"><canvas id="chart-eval" style="position:absolute;inset:0"></canvas></div>
   </div>`:`<div class="plan-block">
     <div class="plan-block-title" style="margin-bottom:8px">Efectividad de evaluaciones</div>
     <p style="font-size:11px;color:#bbb;text-align:center;padding:12px 0">Sin evaluaciones con notas registradas aún</p>
@@ -3363,55 +3367,87 @@ function renderCharts(){
   const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
   const textColor=isDark?'#aaa':'#888';
 
-  function makeChart(canvasId, dataSpanId, builder){
-    const canvas=document.getElementById(canvasId);
-    const span=document.getElementById(dataSpanId);
-    if(!canvas||!span) return;
-    try{
-      // Destruir instancia previa correctamente (por referencia al elemento)
-      try{ const prev=Chart.getChart(canvas); if(prev) prev.destroy(); }catch(e){}
-      if(canvas._chartInst){ try{canvas._chartInst.destroy();}catch(e){} canvas._chartInst=null; }
-      const raw=span.textContent.trim();
-      if(!raw||raw==='null'||raw==='[]') return;
-      const data=JSON.parse(raw);
-      builder(canvas, data);
-    }catch(e){ console.warn(canvasId+' error:', e); }
+  function destroyCanvas(id){
+    const c=document.getElementById(id);
+    if(!c) return null;
+    try{ const prev=Chart.getChart(c); if(prev) prev.destroy(); }catch(e){}
+    if(c._chartInst){ try{c._chartInst.destroy();}catch(e){} c._chartInst=null; }
+    return c;
   }
 
-  makeChart('chart-linea','chart-data-linea',(canvas,dm)=>{
-    const hayDatos=dm.some(d=>d.planificadas>0);
-    if(!hayDatos){
-      const p=document.createElement('p');
-      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:8px';
-      p.textContent='Sin capacitaciones planificadas para este año con los filtros activos';
-      canvas.replaceWith(p); return;
+  // ── Gráfico de línea: Evolución mensual ──────────────────────────────
+  const canvasLinea=destroyCanvas('chart-linea');
+  if(canvasLinea){
+    // Obtener datos del span o recalcular
+    let dm=null;
+    try{
+      const sp=document.getElementById('chart-data-linea');
+      if(sp&&sp.textContent.trim()&&sp.textContent.trim()!=='[]') dm=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(!dm||!dm.length){
+      canvasLinea.parentElement.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;padding:8px">Sin datos para mostrar</p>';
+      canvasLinea.style.display='none';
+    } else {
+      const hayDatos=dm.some(d=>d.planificadas>0);
+      if(!hayDatos){
+        canvasLinea.parentElement.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;padding:8px">Sin capacitaciones planificadas para este año</p>';
+        canvasLinea.style.display='none';
+      } else {
+        canvasLinea.style.display='';
+        canvasLinea._chartInst=new Chart(canvasLinea,{
+          type:'line',
+          data:{labels:dm.map(d=>d.m),datasets:[
+            {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
+            {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.15)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{labels:{font:{size:11},color:textColor}}},
+            scales:{
+              y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},
+              x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}
+            }
+          }
+        });
+      }
     }
-    new Chart(canvas,{type:'line',data:{labels:dm.map(d=>d.m),datasets:[
-      {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
-      {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.12)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
-    ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},color:textColor}}},
-      scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},
-              x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}}}});
-  });
+  }
 
-  makeChart('chart-eval','chart-data-eval',(canvas,ed)=>{
-    if(!ed.length){
-      const p=document.createElement('p');
-      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:8px';
-      p.textContent='Sin evaluaciones con notas registradas';
-      canvas.replaceWith(p); return;
+  // ── Gráfico de barras: Efectividad de evaluaciones ───────────────────
+  const canvasEval=destroyCanvas('chart-eval');
+  if(canvasEval){
+    let ed=null;
+    try{
+      const sp=document.getElementById('chart-data-eval');
+      if(sp&&sp.textContent.trim()&&sp.textContent.trim()!=='[]') ed=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(!ed||!ed.length){
+      canvasEval.style.display='none';
+    } else {
+      canvasEval.style.display='';
+      canvasEval._chartInst=new Chart(canvasEval,{
+        type:'bar',
+        data:{labels:ed.map(d=>d.titulo),datasets:[
+          {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),
+            backgroundColor:['rgba(29,158,117,0.8)','rgba(127,119,221,0.75)','rgba(133,183,235,0.8)','rgba(239,159,39,0.75)','rgba(226,75,74,0.7)'].slice(0,ed.length),
+            borderColor:['#1D9E75','#7F77DD','#85B7EB','#EF9F27','#E24B4A'].slice(0,ed.length),
+            borderWidth:1.5,borderRadius:5,yAxisID:'y'},
+          {label:'% Aprobados',data:ed.map(d=>d.apr||0),type:'line',
+            borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',
+            borderWidth:2,pointRadius:5,pointBackgroundColor:'#185FA5',tension:0.3,fill:true,yAxisID:'y1'}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{
+            legend:{labels:{font:{size:10},color:textColor}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.y+'/10':ctx.parsed.y+'%')}}
+          },
+          scales:{
+            y:{beginAtZero:true,max:10,title:{display:true,text:'Nota /10',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}},
+            y1:{beginAtZero:true,max:100,position:'right',title:{display:true,text:'% Aprobados',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
+          }
+        }
+      });
     }
-    new Chart(canvas,{type:'bar',data:{labels:ed.map(d=>d.titulo),datasets:[
-      {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),backgroundColor:['rgba(29,158,117,0.8)','rgba(127,119,221,0.75)','rgba(133,183,235,0.8)','rgba(239,159,39,0.75)','rgba(226,75,74,0.7)'].slice(0,ed.length),borderColor:['#1D9E75','#7F77DD','#85B7EB','#EF9F27','#E24B4A'].slice(0,ed.length),borderWidth:1.5,borderRadius:5,yAxisID:'y'},
-      {label:'% Aprobados',data:ed.map(d=>d.apr||0),type:'line',borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',borderWidth:2,pointRadius:5,pointBackgroundColor:'#185FA5',tension:0.3,fill:true,yAxisID:'y1'}
-    ]},options:{responsive:true,plugins:{
-      legend:{labels:{font:{size:10},color:textColor}},
-      tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.y+'/10':ctx.parsed.y+'%')}}
-    },scales:{
-      y:{beginAtZero:true,max:10,title:{display:true,text:'Nota /10',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}},
-      y1:{beginAtZero:true,max:100,position:'right',title:{display:true,text:'% Aprobados',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
-    }}});
-  });
+  }
 }
 
 // ── AGREGAR PARTICIPANTE DESIGNADO ──────────────────────────────────────────
@@ -4272,7 +4308,7 @@ function renderIndicadores(){
             <tbody>${tableRows(data)}</tbody>
           </table>
         </div>
-        <div style="min-width:0;min-height:200px"><canvas id="chart-ind-general" style="max-height:300px;width:100%"></canvas></div>
+        <div style="min-width:0;position:relative;height:260px"><canvas id="chart-ind-general" style="position:absolute;inset:0"></canvas></div>
       </div>
     </div>
 
@@ -4288,7 +4324,7 @@ function renderIndicadores(){
             <tbody>${tableRows(remo)}</tbody>
           </table>
         </div>
-        <div style="min-width:0;min-height:200px"><canvas id="chart-ind-remo" style="max-height:300px;width:100%"></canvas></div>
+        <div style="min-width:0;position:relative;height:260px"><canvas id="chart-ind-remo" style="position:absolute;inset:0"></canvas></div>
       </div>
     </div>
 
@@ -4307,7 +4343,7 @@ function renderIndicadores(){
             <tbody>${cuatriRows}</tbody>
           </table>
         </div>
-        <div style="min-width:0;min-height:180px"><canvas id="chart-ind-cuatri" style="max-height:260px;width:100%"></canvas></div>
+        <div style="min-width:0;position:relative;height:240px"><canvas id="chart-ind-cuatri" style="position:absolute;inset:0"></canvas></div>
       </div>
     </div>
 
@@ -4354,14 +4390,16 @@ function renderIndicadoresCharts(){
   const generalEl = document.getElementById('ind-data-general');
   const remoEl    = document.getElementById('ind-data-remo');
   const cuatriEl  = document.getElementById('ind-data-cuatri');
-  if(!generalEl) return;
+  if(!generalEl||!remoEl||!cuatriEl) return;
 
-  const data   = JSON.parse(generalEl.textContent);
-  const remo   = JSON.parse(remoEl.textContent);
-  const cuatri = JSON.parse(cuatriEl.textContent);
+  let data, remo, cuatri;
+  try{
+    data   = JSON.parse(generalEl.textContent);
+    remo   = JSON.parse(remoEl.textContent);
+    cuatri = JSON.parse(cuatriEl.textContent);
+  }catch(e){ console.warn('Indicadores parse error:',e); return; }
+
   const labels = data.map(d=>d.m);
-
-  
 
   // Gráfico general
   makeLineChart('chart-ind-general', labels, [
@@ -4369,8 +4407,8 @@ function renderIndicadoresCharts(){
       borderColor:'#1A2F6E', backgroundColor:'rgba(26,47,110,0.08)',
       borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
     { label:'Realizado', data:data.map(d=>d.realizado),
-      borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+      borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.12)',
+      borderWidth:2.5, tension:0.3, fill:true, pointRadius:4 },
   ]);
 
   // Gráfico REMO
@@ -4379,8 +4417,8 @@ function renderIndicadoresCharts(){
       borderColor:'#185FA5', backgroundColor:'rgba(24,95,165,0.08)',
       borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
     { label:'Realizado REMO', data:remo.map(d=>d.realizado),
-      borderColor:'#EF9F27', backgroundColor:'rgba(239,159,39,0.08)',
-      borderWidth:2, tension:0.3, fill:false, pointRadius:4 },
+      borderColor:'#EF9F27', backgroundColor:'rgba(239,159,39,0.12)',
+      borderWidth:2.5, tension:0.3, fill:true, pointRadius:4 },
   ]);
 
   // Gráfico cuatrimestral (barras agrupadas)
@@ -4402,9 +4440,8 @@ function renderIndicadoresCharts(){
         ]
       },
       options:{
-        responsive:true, maintainAspectRatio:true,
-        plugins:{ legend:{ position:'top', labels:{font:{size:11},boxWidth:12} },
-          datalabels:false },
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'top', labels:{font:{size:11},boxWidth:12} } },
         scales:{
           y:{ beginAtZero:true, ticks:{font:{size:10}},
               title:{display:true,text:'Horas Hombre',font:{size:10}} },
@@ -4418,36 +4455,37 @@ function renderIndicadoresCharts(){
 
 // ===== makeLineChart =====
 function makeLineChart(canvasId, labels, datasets){
-    const ctx = document.getElementById(canvasId);
-    if(!ctx) return;
-    try{ const prev=Chart.getChart(ctx); if(prev) prev.destroy(); }catch(e){}
-    if(ctx._chartInst){ try{ctx._chartInst.destroy();}catch(e){} ctx._chartInst=null; }
-    // Verificar si hay datos reales para mostrar
-    const tieneObjetivos=datasets.some(ds=>ds.data&&ds.data.some(v=>v>0));
-    if(!tieneObjetivos){
-      const p=document.createElement('p');
-      p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:20px;padding:16px';
-      p.textContent='Sin datos para mostrar con los filtros actuales';
-      ctx.replaceWith(p);
-      return;
-    }
-    ctx._chartInst = new Chart(ctx, {
-      type:'line',
-      data:{ labels, datasets },
-      options:{
-        responsive:true, maintainAspectRatio:true,
-        plugins:{
-          legend:{ position:'top', labels:{ font:{size:11}, boxWidth:12 } },
-          tooltip:{ callbacks:{ label:ctx=>ctx.dataset.label+': '+ctx.parsed.y.toLocaleString()+' Hs.' } }
-        },
-        scales:{
-          y:{ beginAtZero:true, ticks:{font:{size:10},callback:v=>v.toLocaleString()},
-              title:{display:true,text:'Horas Hombre',font:{size:10}} },
-          x:{ ticks:{font:{size:10}} }
-        }
-      }
-    });
+  const ctx = document.getElementById(canvasId);
+  if(!ctx) return;
+  try{ const prev=Chart.getChart(ctx); if(prev) prev.destroy(); }catch(e){}
+  if(ctx._chartInst){ try{ctx._chartInst.destroy();}catch(e){} ctx._chartInst=null; }
+  // Verificar si hay datos reales para mostrar
+  const tieneObjetivos=datasets.some(ds=>ds.data&&ds.data.some(v=>v>0));
+  if(!tieneObjetivos){
+    const p=document.createElement('p');
+    p.style.cssText='font-size:11px;color:#bbb;text-align:center;margin-top:20px;padding:16px';
+    p.textContent='Sin datos para mostrar con los filtros actuales';
+    ctx.parentElement.appendChild(p);
+    ctx.style.display='none';
+    return;
   }
+  ctx._chartInst = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'top', labels:{ font:{size:11}, boxWidth:12 } },
+        tooltip:{ callbacks:{ label:c=>c.dataset.label+': '+c.parsed.y.toLocaleString()+' Hs.' } }
+      },
+      scales:{
+        y:{ beginAtZero:true, ticks:{font:{size:10},callback:v=>v.toLocaleString()},
+            title:{display:true,text:'Horas Hombre',font:{size:10}} },
+        x:{ ticks:{font:{size:10}} }
+      }
+    }
+  });
+}
 
 
 // ===== previewMatUrl =====

@@ -731,8 +731,11 @@ function sortCaps(arr){
 function waitForChart(cb, attempts){
   attempts=attempts||0;
   if(typeof Chart!=='undefined'){
-    // Doble rAF para asegurar que el DOM esté pintado y los canvas tengan dimensiones
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{cb();}catch(e){console.warn('chart error:',e);} }));
+    // Doble rAF + setTimeout para asegurar que los contenedores position:relative
+    // tengan alto computado antes de que Chart.js lea las dimensiones del canvas
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      setTimeout(()=>{ try{cb();}catch(e){console.warn('chart error:',e);} }, 60);
+    }));
     return;
   }
   if(attempts>60){ console.warn('Chart.js no disponible'); return; }
@@ -749,7 +752,7 @@ function renderContent(){
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
     else if(currentTab==='resumen'){el.innerHTML=renderResumen();waitForChart(renderCharts);}
-    else if(currentTab==='indicadores'){el.innerHTML=renderIndicadores();waitForChart(renderIndicadoresCharts);}
+    else if(currentTab==='indicadores'){const _indData=getIndicadoresData(),_remoData=getIndicadoresRemo(),_cuatriData=getCuatriData();el.innerHTML=renderIndicadores(_indData,_remoData,_cuatriData);waitForChart(()=>renderIndicadoresCharts(_indData,_remoData,_cuatriData));}
     else if(currentTab==='gantt'){el.innerHTML=renderGantt();}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
@@ -4568,10 +4571,10 @@ function getCuatriData(){
 
 
 // ===== renderIndicadores =====
-function renderIndicadores(){
-  const data = getIndicadoresData();
-  const remo = getIndicadoresRemo();
-  const cuatri = getCuatriData();
+function renderIndicadores(data, remo, cuatri){
+  data = data || getIndicadoresData();
+  remo = remo || getIndicadoresRemo();
+  cuatri = cuatri || getCuatriData();
   const meses = data.map(d=>d.m);
 
   
@@ -4684,18 +4687,19 @@ function tableHead(){
 
 
 // ===== renderIndicadoresCharts =====
-function renderIndicadoresCharts(){
-  const generalEl = document.getElementById('ind-data-general');
-  const remoEl    = document.getElementById('ind-data-remo');
-  const cuatriEl  = document.getElementById('ind-data-cuatri');
-  if(!generalEl||!remoEl||!cuatriEl) return;
-
-  let data, remo, cuatri;
-  try{
-    data   = JSON.parse(generalEl.textContent);
-    remo   = JSON.parse(remoEl.textContent);
-    cuatri = JSON.parse(cuatriEl.textContent);
-  }catch(e){ console.warn('Indicadores parse error:',e); return; }
+function renderIndicadoresCharts(data, remo, cuatri){
+  // Fallback: intentar leer del DOM si no vienen por parámetro
+  if(!data||!remo||!cuatri){
+    try{
+      const gEl=document.getElementById('ind-data-general');
+      const rEl=document.getElementById('ind-data-remo');
+      const cEl=document.getElementById('ind-data-cuatri');
+      if(!gEl||!rEl||!cEl){ console.warn('Indicadores: no hay datos ni DOM'); return; }
+      data=JSON.parse(gEl.textContent);
+      remo=JSON.parse(rEl.textContent);
+      cuatri=JSON.parse(cEl.textContent);
+    }catch(e){ console.warn('Indicadores parse error:',e); return; }
+  }
 
   const labels = data.map(d=>d.m);
 

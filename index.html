@@ -1344,12 +1344,12 @@ function renderPadron(filtro){
     <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
     <td style="${tdS(i)}">${esc(p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'')}</td>
     <td style="${tdS(i)}">${p.fecha_ingreso?fmtF(p.fecha_ingreso.slice(0,10)):''}</td>
-    <td style="${tdS(i)}">${p.fecha_calculo_antiguedad?fmtF(p.fecha_calculo_antiguedad.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${p.fecha_egreso?fmtF(p.fecha_egreso.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${esc(p.sector||'')}</td>
     <td style="${tdS(i)}">${esc(p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'')}</td>
     <td style="${tdS(i)}">${estadoBadge(p)}</td>
     <td style="${tdS(i)}">${esc(p.un||'')}</td>
+    <td style="${tdS(i)}">${p.fecha_calculo_antiguedad?fmtF(p.fecha_calculo_antiguedad.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${esc(p.establecimiento||p.datos_extra?.Establecimiento||p.datos_extra?.establecimiento||'')}</td>
     <td style="${tdS(i)}">${esc(p.documento||p.datos_extra?.Documento||p.datos_extra?.documento||'')}</td>
   </tr>`).join('');
@@ -1391,14 +1391,14 @@ function renderPadron(filtro){
       <thead><tr>
         <th style="${thS}">Legajo</th>
         <th style="${thS}">Nombre</th>
-        <th style="${thS}">CUIL</th>
+        <th style="${thS}">C.U.I.L</th>
         <th style="${thS}">Fecha de Ingreso</th>
-        <th style="${thS}">Fecha cálculo antigüedad</th>
         <th style="${thS}">Fecha de egreso</th>
         <th style="${thS}">Sector</th>
         <th style="${thS}">Departamento</th>
         <th style="${thS}">Estado Empleado</th>
         <th style="${thS}">Unidad de Negocio</th>
+        <th style="${thS}">Fecha cálculo antigüedad</th>
         <th style="${thS}">Establecimiento</th>
         <th style="${thS}">Documento</th>
       </tr></thead>
@@ -1451,12 +1451,12 @@ async function exportarPadron(){
     nombre:p.nombre,
     'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
     'Fecha de Ingreso':p.fecha_ingreso||'',
-    'Fecha calculo antiguedad':p.fecha_calculo_antiguedad||'',
     'Fecha de egreso':p.fecha_egreso||'',
     'Sector':p.sector||'',
     'Departamento':p.departamento||p.datos_extra?.Departamento||'',
     'Estado Empleado':p.estado||'Vigente',
     'Unidad de Negocio':p.un||'',
+    'Fecha calculo antiguedad':p.fecha_calculo_antiguedad||'',
     'Establecimiento':p.establecimiento||p.datos_extra?.Establecimiento||'',
     'Documento':p.documento||p.datos_extra?.Documento||'',
   }));
@@ -1910,11 +1910,14 @@ function buildDetail(id){
       return true;
     });
   }
-  // INDUCCION: filtrar por mes/año de fecha de la capacitación sobre fecha_calculo_antiguedad
+  // INDUCCION: filtrar por mes/año de la fecha de inicio (1° del mes) sobre fecha_calculo_antiguedad
   const esInduccion=c.tipo_codigo==='INDUCCION';
+  const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let induccionMesLabel='';
   if(esInduccion&&c.fecha&&padron.length){
     const [yy,mm]=c.fecha.split('-');
     const mesRef=parseInt(mm);const anioRef=parseInt(yy);
+    induccionMesLabel=`${MESES_ES[mesRef-1]} ${anioRef}`;
     activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(!p.fecha_calculo_antiguedad) return false;
@@ -2231,7 +2234,7 @@ function buildDetail(id){
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
-      <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}</span></div>
+      <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}${esInduccion&&induccionMesLabel?` <span style="font-size:10px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:4px;padding:1px 5px;margin-left:4px">Ingresos ${induccionMesLabel}</span>`:''}</span></div>
       <div class="detail-row"><span class="detail-key">Esperados (meta)</span><span class="detail-val">${esp}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
@@ -3968,7 +3971,13 @@ async function importarCaps(event){
           fecha_fin=bimFin[bimNum]||'';
         }
         const depto=String(r.departamento||r.Departamento||'').trim()||null;
-        const obj={titulo,tipo_codigo:String(r.tipo_codigo||'REMO').trim().toUpperCase(),un:String(r.un||'').trim()||null,departamento:depto,area:String(r.area||'').trim(),fecha,fecha_fin,bimestre,participantes_esperados:parseInt(r.participantes_esperados)||10,duracion:parseFloat(r.duracion)||1,instructor:String(r.instructor||'').trim(),estado:String(r.estado||'Programada').trim(),nota_aprobacion:parseFloat(r.nota_aprobacion)||6,obs:String(r.obs||'').trim(),codigo_redmine:codigo||null};
+        const tipo_codeImp=String(r.tipo_codigo||'REMO').trim().toUpperCase();
+        // INDUCCION: la fecha de inicio siempre es el 1° del mes indicado en la columna fecha
+        if(tipo_codeImp==='INDUCCION'&&fecha){
+          const [yy,mm]=fecha.split('-');
+          fecha=`${yy}-${mm}-01`;
+        }
+        const obj={titulo,tipo_codigo:tipo_codeImp,un:String(r.un||'').trim()||null,departamento:depto,area:String(r.area||'').trim(),fecha,fecha_fin,bimestre,participantes_esperados:parseInt(r.participantes_esperados)||10,duracion:parseFloat(r.duracion)||1,instructor:String(r.instructor||'').trim(),estado:String(r.estado||'Programada').trim(),nota_aprobacion:parseFloat(r.nota_aprobacion)||6,obs:String(r.obs||'').trim(),codigo_redmine:codigo||null};
         try{
           let existente=null;
           if(codigo){

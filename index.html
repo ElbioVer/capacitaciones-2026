@@ -89,9 +89,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .cap-title{font-size:13px;font-weight:600;color:#111;flex:1}
 .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
 .badge.realizada{background:#E1F5EE;color:#085041}
-.badge.pendiente{background:#FAEEDA;color:#854F0B}
+.badge.pendiente,.badge.en-curso{background:#FAEEDA;color:#854F0B}
 .badge.vencida{background:#FCEBEB;color:#A32D2D}
-.badge.programada{background:#E6F1FB;color:#185FA5}
+.badge.programada{background:#EBEBEB;color:#666}
 .cap-meta{display:flex;flex-wrap:wrap;gap:5px;font-size:11px;color:#777;margin-bottom:7px;align-items:center}
 .chip-bim{display:inline-block;padding:2px 6px;border-radius:99px;font-size:10px;font-weight:500;background:#f4f4f2;color:#666}
 .progress-bar{height:4px;background:#eee;border-radius:99px;overflow:hidden}
@@ -341,7 +341,7 @@ select.form-input{cursor:pointer}
   <div class="stats-bar">
     <div class="stat"><div class="stat-num" id="st-tot">—</div><div class="stat-lbl">Total</div></div>
     <div class="stat"><div class="stat-num ok" id="st-ok">—</div><div class="stat-lbl">Realizadas</div></div>
-    <div class="stat"><div class="stat-num pend" id="st-pend">—</div><div class="stat-lbl">Pendientes</div></div>
+    <div class="stat"><div class="stat-num pend" id="st-pend">—</div><div class="stat-lbl">En Curso / Prog.</div></div>
     <div class="stat"><div class="stat-num miss" id="st-venc">—</div><div class="stat-lbl">Vencidas</div></div>
   </div>
   <div class="search-bar" id="search-bar-wrap">
@@ -431,9 +431,10 @@ function canManageParticipants(){return isAdmin()||isCapacitador();}
 function canManageEval(){return isAdmin()||isCapacitador();}
 function canExportParticipants(){return isAdmin()||isCapacitador();}
 
-async function api(method,table,body,query){
+async function api(method,table,body,query,extraHeaders){
   query=query||'';
-  const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}`,{method,headers:H,body:body?JSON.stringify(body):undefined});
+  const hdrs=extraHeaders?Object.assign({},H,extraHeaders):H;
+  const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}`,{method,headers:hdrs,body:body?JSON.stringify(body):undefined});
   if(!r.ok) throw new Error(await r.text());
   if(r.status===204) return null;
   const ct=r.headers.get('content-type')||'';
@@ -650,7 +651,7 @@ function renderStats(f){
 
 function sFill(estado,pct){
   if(estado==='Vencida')return'danger';if(estado==='Pendiente')return'warn';
-  if(estado==='Programada')return'purple';if(pct<50)return'warn';return'';
+  if(estado==='Programada')return'';if(pct<50)return'warn';return'';
 }
 
 function tipoBadge(codigo){
@@ -675,7 +676,7 @@ function capCard(cap){
   return`<div class="cap-card" data-capid="${cap.id}" onclick="openDetail(${cap.id})">
     <div class="cap-top">
       <div class="cap-title">${esc(cap.titulo)}</div>
-      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${(_est||'').toLowerCase()}">${_est}</span></div>
+      <div style="display:flex;gap:4px;align-items:center">${desvBadge}<span class="badge ${estadoClass(_est)}">${estadoLabel(_est)}</span></div>
     </div>
     <div class="cap-meta">
       ${tipoBadge(cap.tipo_codigo)}
@@ -778,7 +779,7 @@ function renderPorTipo(){
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones de este tipo</p>';
     html+=`<div class="plan-block">
       <div class="plan-block-title">
@@ -805,7 +806,7 @@ function renderBim(){
   const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
-      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${(cap.estado||'').toLowerCase()}">${cap.estado}</span></div>`;
+      return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
     }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones</p>';
     return`<div class="plan-block"><div class="plan-block-title"><span>${b}</span><span style="font-size:11px;color:#888;font-weight:400">${ok}/${g.length} · ${pct}%</span></div><div class="progress-bar" style="height:4px;margin-bottom:8px"><div class="progress-fill ${fill}" style="width:${pct}%"></div></div>${rows}</div>`;
   }).join('');
@@ -867,7 +868,7 @@ function renderUN(){
           const as=getA(cap.id).filter(a=>a.un===un.nombre&&(a.departamento===dep||a.sector===dep));
           const comp=as.filter(a=>a.completo).length;
           const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
-          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;
+          return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${comp}/${as.length}</span><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
         }).join(''):'<p style="font-size:11px;color:#ccc;padding:3px 0">Sin capacitaciones registradas</p>';
 
         const barColor=pct>=75?'#1D9E75':pct>=40?'#EF9F27':'#E05555';
@@ -893,7 +894,7 @@ function renderUN(){
       const a=getA(cap.id).filter(x=>x.un===un.nombre);
       return !a.some(x=>x.departamento||x.sector);
     });
-    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${sortCaps(capsSinDep).map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${(estadoCap(cap)||'').toLowerCase()}">${estadoCap(cap)}</span></div>`;}).join('')}</div>`:'';
+    const sinDepRows=capsSinDep.length?`<div style="margin-top:6px"><div style="font-size:11px;color:#aaa;padding:4px 0;margin-bottom:4px;font-weight:600">Sin departamento asignado</div>${sortCaps(capsSinDep).map(cap=>{const as=getA(cap.id).filter(a=>a.un===un.nombre);const comp=as.filter(a=>a.completo).length;const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:5px">${esc(cap.titulo)}${redmineTag}</span><span style="font-size:10px;color:#999;margin-right:5px">${as.length?comp+'/'+as.length:'Sin participantes'}</span><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;}).join('')}</div>`:'';
 
     return`<div class="plan-block" style="padding:10px 12px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-bottom:8px">
@@ -1654,7 +1655,7 @@ async function importarPadron(event){
         const lote=nuevos.slice(i,i+CHUNK);
         toast(`Importando... ${Math.min(i+CHUNK,nuevos.length)} de ${nuevos.length}`,15000);
         try{
-          await api('POST','padron',lote,'?on_conflict=legajo');
+          await api('POST','padron',lote,'?on_conflict=legajo',{'Prefer':'resolution=merge-duplicates'});
           importados+=lote.length;
         }catch(e){errores+=lote.length;console.warn('Error en lote',i,e);}
       }
@@ -1858,7 +1859,7 @@ function renderConfig(){
             <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.titulo)}</div>
             <div style="font-size:10px;color:#999;margin-top:1px">${tipoBadge(c.tipo_codigo||'OTRO')} &nbsp;${c.bimestre?`Bim. ${c.bimestre} &nbsp;`:''} ${c.un?`${esc(c.un)} &nbsp;`:''} ${c.codigo_redmine?`<code style="background:#f4f4f2;padding:1px 4px;border-radius:4px;font-size:10px">${esc(c.codigo_redmine)}</code>`:''}</div>
           </div>
-          <span class="badge ${(estadoCap(c)||'programada').toLowerCase()}" style="flex-shrink:0;margin-top:2px">${estadoCap(c)||'Programada'}</span>
+          <span class="badge ${estadoClass(estadoCap(c)||'Programada')}" style="flex-shrink:0;margin-top:2px">${estadoLabel(estadoCap(c)||'Programada')}</span>
         </label>`).join('')}
     </div>
   </div>`;}
@@ -1931,9 +1932,11 @@ function buildDetail(id){
   const aMeta=a.filter(x=>x.en_meta!==false);
   const aExt=a.filter(x=>x.en_meta===false);
   const nota_aprobacion=c.nota_aprobacion||6;
+  // esInduccion se define aquí para usarse en completaron y más abajo
+  const esInduccion=c.tipo_codigo==='INDUCCION';
 
-  // Completaron = están en la lista con completo:true
-  const completaron=new Set(a.filter(x=>x.completo).map(x=>String(x.legajo)));
+  // Completaron: para INDUCCION requiere completo:true Y nota registrada; para otros tipos solo completo:true
+  const completaron=new Set(a.filter(x=>x.completo&&(!esInduccion||x.nota!=null)).map(x=>String(x.legajo)));
   const comp=completaron.size;
 
   // Posibles = activos del padrón según UN/Depto de la cap (si hay padrón y selección)
@@ -1952,7 +1955,6 @@ function buildDetail(id){
     });
   }
   // INDUCCION: filtrar por mes/año de la fecha de inicio (1° del mes) sobre fecha_calculo_antiguedad
-  const esInduccion=c.tipo_codigo==='INDUCCION';
   const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let induccionMesLabel='';
   if(esInduccion&&c.fecha&&padron.length){
@@ -2265,7 +2267,7 @@ function buildDetail(id){
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
-      <div style="flex:1">${tipoBadge(c.tipo_codigo)}<div style="font-size:14px;font-weight:600;color:#111;margin:5px 0">${esc(c.titulo)}</div><span class="badge ${(estadoCap(c)||'').toLowerCase()}">${estadoCap(c)}</span>${c.bimestre?`<span class="chip-bim" style="margin-left:5px">${c.bimestre}</span>`:''}</div>
+      <div style="flex:1">${tipoBadge(c.tipo_codigo)}<div style="font-size:14px;font-weight:600;color:#111;margin:5px 0">${esc(c.titulo)}</div><span class="badge ${estadoClass(estadoCap(c))}">${estadoLabel(estadoCap(c))}</span>${c.bimestre?`<span class="chip-bim" style="margin-left:5px">${c.bimestre}</span>`:''}</div>
       ${adminBtns}
     </div>
     <div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:3px"><span>Asistencia</span><span>${pct}%</span></div><div class="progress-bar" style="height:5px"><div class="progress-fill ${sFill(estadoCap(c),pct)}" style="width:${pct}%"></div></div></div>
@@ -3055,8 +3057,13 @@ async function importExcel(event,capId){
       const pairs=[...new Map(nuevos.filter(a=>a.sector&&a.un).map(a=>[`${a.sector}|${a.un}`,{nombre:a.sector,un:a.un}])).values()];
       for(const s of pairs){if(!sectores.find(x=>x.nombre===s.nombre&&x.un===s.un)){const r=await api('POST','sectores',s,'');if(r)sectores.push(Array.isArray(r)?r[0]:r);}}
       const capObj=caps.find(c=>c.id===capId);
-      if(capObj&&(capObj.estado==='Programada'||capObj.estado==='Pendiente')&&nuevos.filter(a=>a.completo).length>0){
-        await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);capObj.estado='Realizada';
+      if(capObj&&capObj.estado!=='Realizada'){
+        const esInd=capObj.tipo_codigo==='INDUCCION';
+        const compCnt=nuevos.filter(a=>a.completo&&(!esInd||a.nota!=null)).length;
+        const espCnt=capObj.participantes_esperados||nuevos.length;
+        if(compCnt>0&&compCnt>=espCnt){
+          await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);capObj.estado='Realizada';
+        }
       }
       setSyncStatus('ok');populateFilters();renderContent();buildDetail(capId);
       toast(`${nuevos.length} participantes importados`);
@@ -3071,7 +3078,7 @@ function openEdit(id){if(!canEdit())return;showForm(caps.find(x=>x.id===id));}
 function showForm(c){
   const tipoOpts=tipos.map(t=>`<option value="${t.codigo}"${c&&c.tipo_codigo===t.codigo?' selected':''}>${t.codigo} — ${t.nombre}</option>`).join('');
   const bOpts=BIMESTRES.map(b=>`<option${c&&c.bimestre===b?' selected':''}>${b}</option>`).join('');
-  const eOpts=['Programada','Pendiente','Realizada','Vencida'].map(e=>`<option${c&&c.estado===e?' selected':''}>${e}</option>`).join('');
+  const eOpts=['Programada','Pendiente','Realizada','Vencida'].map(e=>`<option value="${e}"${c&&c.estado===e?' selected':''}>${e==='Pendiente'?'En Curso (Pendiente)':e}</option>`).join('');
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">${c?'Editar capacitación':'Nueva capacitación'}</div>
     <div class="form-group"><label class="form-label">Tipo de capacitación *</label><select class="form-input" id="f-tipo">${tipoOpts}</select></div>
@@ -3245,6 +3252,11 @@ async function mostrarModalActualizarParticipantes(capId, un, departamento){
 
 
 
+// Normaliza estado para mostrar en UI: Pendiente→"En Curso", resto igual
+function estadoLabel(est){return est==='Pendiente'?'En Curso':est||'Programada';}
+// Clase CSS del badge (usa 'pendiente' para En Curso para mantener color naranja)
+function estadoClass(est){const e=est||'Programada';return e==='Pendiente'?'pendiente':e.toLowerCase().replace(/\s+/g,'');}
+
 function estadoCap(cap){return cap._estadoCalc||cap.estado||'Programada';}
 function fechaFinCap(cap){return cap.fecha_fin||cap._fechaFinCalc||'';}
 
@@ -3254,17 +3266,49 @@ function aplicarEstadosEnMemoria(){
     // Asignar fecha_fin en memoria si no tiene
     if(!cap.fecha_fin&&cap.bimestre){
       const ff=fechaFinPorBimestre(cap.bimestre);
-      if(ff) cap._fechaFinCalc=ff; // campo temporal, no se guarda
+      if(ff) cap._fechaFinCalc=ff;
     }
-    // Estado en memoria
-    if(cap.estado!=='Realizada'){
+    // Verificar si completaron >= esperados → Realizada automática (en memoria)
+    const asCap=asistentes.filter(a=>a.capacitacion_id===cap.id);
+    const esInd=cap.tipo_codigo==='INDUCCION';
+    const compCount=asCap.filter(x=>x.completo&&(!esInd||x.nota!=null)).length;
+    const posCount=(()=>{
+      // Posibles: si hay padrón filtrado o inducción
+      if(padron.length&&cap.tipo_codigo==='INDUCCION'&&cap.fecha){
+        const [yy,mm]=cap.fecha.split('-');
+        const yr=parseInt(yy),mo=parseInt(mm);
+        return padron.filter(p=>{
+          if(p.estado&&p.estado!=='Vigente') return false;
+          if(!p.fecha_calculo_antiguedad) return false;
+          const pts=p.fecha_calculo_antiguedad.split('-');
+          return parseInt(pts[0])===yr&&parseInt(pts[1])===mo;
+        }).length;
+      }
+      return asCap.filter(x=>x.en_meta!==false).length||asCap.length;
+    })();
+    const espCount=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posCount;
+
+    // Estado en memoria: Realizada > En Curso > Vencida > Programada
+    if(cap.estado==='Realizada'){
+      cap._estadoCalc='Realizada';
+    } else if(espCount>0&&compCount>=espCount){
+      // Completaron cubren la meta → Realizada automática
+      cap._estadoCalc='Realizada';
+    } else {
       const finStr=cap.fecha_fin||cap._fechaFinCalc||cap.fecha;
+      const iniStr=cap.fecha;
       if(finStr){
         const fin=new Date(finStr+'T00:00:00');
-        cap._estadoCalc=fin<hoy?'Vencida':'Programada';
+        if(fin<hoy){
+          cap._estadoCalc='Vencida';
+        } else if(iniStr){
+          const ini=new Date(iniStr+'T00:00:00');
+          // En Curso: desde la fecha de inicio hasta la fecha fin (inclusive)
+          cap._estadoCalc=(ini<=hoy)?'Pendiente':'Programada';
+        } else {
+          cap._estadoCalc='Programada';
+        }
       }
-    } else {
-      cap._estadoCalc='Realizada';
     }
   }
 }
@@ -3283,9 +3327,18 @@ async function sincronizarFechasYEstados(){
     // 2. Calcular estado automático (solo si no está Realizada)
     if(cap.estado!=='Realizada'){
       const finStr=cap.fecha_fin||cap.fecha;
+      const iniStr=cap.fecha;
       if(finStr){
         const fin=new Date(finStr+'T00:00:00');
-        const nuevoEstado=fin<hoy?'Vencida':'Programada';
+        let nuevoEstado;
+        if(fin<hoy){
+          nuevoEstado='Vencida';
+        } else if(iniStr){
+          const ini=new Date(iniStr+'T00:00:00');
+          nuevoEstado=(ini<=hoy)?'Pendiente':'Programada';
+        } else {
+          nuevoEstado='Programada';
+        }
         if(cap.estado!==nuevoEstado){
           cambios.estado=nuevoEstado;
           cap.estado=nuevoEstado;
@@ -3640,7 +3693,7 @@ function renderCharts(){
           labels:tipoData.map(d=>d.nombre||d.tipo),
           datasets:[
             {label:'Realizadas',data:tipoData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
-            {label:'Pendientes',data:tipoData.map(d=>d.pendientes),backgroundColor:'rgba(133,183,235,0.75)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:4},
+            {label:'En Curso / Prog.',data:tipoData.map(d=>d.pendientes),backgroundColor:'rgba(239,159,39,0.5)',borderColor:'#EF9F27',borderWidth:1.5,borderRadius:4},
             {label:'Vencidas',data:tipoData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
           ]
         },
@@ -3673,7 +3726,7 @@ function renderCharts(){
           labels:bimData.map(d=>d.bim),
           datasets:[
             {label:'Realizadas',data:bimData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
-            {label:'Pendientes',data:bimData.map(d=>d.pendientes),backgroundColor:'rgba(133,183,235,0.75)',borderColor:'#85B7EB',borderWidth:1.5,borderRadius:4},
+            {label:'En Curso / Prog.',data:bimData.map(d=>d.pendientes),backgroundColor:'rgba(239,159,39,0.5)',borderColor:'#EF9F27',borderWidth:1.5,borderRadius:4},
             {label:'Vencidas',data:bimData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
           ]
         },
@@ -5480,10 +5533,12 @@ async function importarMasivaParticipantes(event){
               if(nv) asistentes.push(nv);
               partOk++;
             }
-            // Marcar Realizada si al menos un presente
-            if(completo&&(cap.estado==='Programada'||cap.estado==='Pendiente')){
-              const compTotal=asistentes.filter(a=>a.capacitacion_id===cap.id&&a.completo).length;
-              if(compTotal>0){
+            // Marcar Realizada si completaron >= esperados
+            if(completo&&cap.estado!=='Realizada'){
+              const esInd=cap.tipo_codigo==='INDUCCION';
+              const compTotal=asistentes.filter(a=>a.capacitacion_id===cap.id&&a.completo&&(!esInd||a.nota!=null)).length;
+              const espTotal=cap.participantes_esperados||asistentes.filter(a=>a.capacitacion_id===cap.id).length;
+              if(compTotal>0&&compTotal>=espTotal){
                 await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${cap.id}`);
                 const ci=caps.findIndex(c=>c.id===cap.id);
                 if(ci>=0){caps[ci].estado='Realizada';cap.estado='Realizada';}
@@ -5532,21 +5587,12 @@ async function importarMasivaParticipantes(event){
 
 setInterval(()=>{if(currentUser)loadAll();},30000);
 
-// Validación de CDN al arranque
+// Validación de CDN al arranque (solo consola, sin cartel visual)
 (function checkCDNs(){
   const errores=[];
-  if(typeof XLSX==='undefined') errores.push('SheetJS (XLSX) — necesario para exportar/importar Excel');
-  if(typeof Chart==='undefined') errores.push('Chart.js — necesario para los gráficos e indicadores');
-  if(errores.length>0){
-    const div=document.createElement('div');
-    div.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:14px 20px;font-family:sans-serif;font-size:14px;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,0.4)';
-    div.innerHTML='<strong>⚠️ Error de carga — Librerías no disponibles:</strong><br>'+
-      errores.map(e=>'• '+e).join('<br>')+
-      '<br><br><strong>Causa probable:</strong> El archivo fue guardado con "Guardar página como..." desde el navegador, lo que rompe los scripts externos.<br>'+
-      '<strong>Solución:</strong> Descargá el archivo haciendo clic derecho en el link de descarga → "Guardar enlace como..." y reemplazá el archivo actual.';
-    document.body.appendChild(div);
-    console.error('[EVDigital] CDN faltantes:',errores);
-  }
+  if(typeof XLSX==='undefined') errores.push('SheetJS (XLSX)');
+  if(typeof Chart==='undefined') errores.push('Chart.js');
+  if(errores.length>0) console.warn('[EVDigital] CDN no disponibles:',errores.join(', '));
 })();
 
 init();

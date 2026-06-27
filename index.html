@@ -660,9 +660,17 @@ function tipoBadge(codigo){
 }
 
 function capCard(cap){
-  const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
-  const posibles=a.length;
-  const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
+  const a=getA(cap.id);
+  const esInd=cap.tipo_codigo==='INDUCCION';
+  // Para INDUCCION: comp = con completo+nota; para otros: completo
+  const comp=a.filter(x=>x.completo&&(!esInd||x.nota!=null)).length;
+  // Posibles: para INDUCCION usa el padrón del mes; para otros usa asistentes en lista
+  const posiblesInd=esInd?calcularPosiblesInduccion(cap):0;
+  const posibles=esInd?posiblesInd:a.length;
+  // Esp: INDUCCION = posibles padrón + extras manuales; otros = participantes_esperados o posibles
+  const esp=esInd
+    ? posiblesInd+(cap.participantes_esperados||0)
+    : ((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles);
   const pct=esp?Math.round(comp/esp*100):0;
   const t=getTipo(cap.tipo_codigo);
   const iconos=[];
@@ -773,10 +781,11 @@ function renderPorTipo(){
     const pct=grupo.length?Math.round(ok/grupo.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=grupo.length?grupo.map(cap=>{
-
-      const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
-  const posibles=a.length;
-  const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
+      const a=getA(cap.id);
+      const _esInd=cap.tipo_codigo==='INDUCCION';
+      const comp=a.filter(x=>x.completo&&(!_esInd||x.nota!=null)).length;
+      const _pos=_esInd?calcularPosiblesInduccion(cap):a.length;
+      const esp=_esInd?_pos+(cap.participantes_esperados||0):((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:_pos);
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
       return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
@@ -800,10 +809,11 @@ function renderBim(){
     const pct=g.length?Math.round(ok/g.length*100):0;
     const fill=pct>=75?'':pct>=40?'warn':'danger';
     const rows=g.length?g.map(cap=>{
-
-      const a=getA(cap.id),comp=a.filter(x=>x.completo).length;
-  const posibles=a.length;
-  const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
+      const a=getA(cap.id);
+      const _esInd=cap.tipo_codigo==='INDUCCION';
+      const comp=a.filter(x=>x.completo&&(!_esInd||x.nota!=null)).length;
+      const _pos=_esInd?calcularPosiblesInduccion(cap):a.length;
+      const esp=_esInd?_pos+(cap.participantes_esperados||0):((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:_pos);
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
       return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
@@ -1750,6 +1760,8 @@ function renderConfig(){
     <button class="btn-sm blue" onclick="sincronizarEsperados()">🔄 Sincronizar esperados con asistentes</button>
     <button class="btn-sm green" style="margin-top:6px" onclick="sincronizarFechasYEstados()">📅 Sincronizar fechas fin y estados</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Asigna fecha fin por bimestre y actualiza estados (Programada/Vencida) en Supabase para todas las capacitaciones.</p>
+    <button class="btn-sm" style="margin-top:6px;background:#1a2f6e;color:#fff;border-color:#1a2f6e" onclick="resetearEsperadosInduccion()">🔁 Resetear esperados de INDUCCIÓN</button>
+    <p style="font-size:11px;color:#888;margin-top:4px">Pone <strong>participantes_esperados = 0</strong> en todas las capacitaciones de tipo INDUCCIÓN para que la meta se calcule dinámicamente desde el padrón (fecha de antigüedad).</p>
     <button class="btn-sm" style="margin-top:6px;background:#854F0B;color:#fff;border-color:#854F0B" onclick="sincronizarInduccion()">👥 Sincronizar posibles/faltantes de INDUCCION</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Agrega automáticamente como posibles y faltantes a los empleados del padrón cuya <strong>Fecha cálculo antigüedad</strong> coincida con el mes/año de cada capacitación de tipo INDUCCION.</p>
   </div>
@@ -1942,8 +1954,8 @@ function buildDetail(id){
   // Posibles = activos del padrón según UN/Depto de la cap (si hay padrón y selección)
   // Si la cap no tiene UN ni Depto → es global: usa todo el padrón vigente
   let activosPadron=[];
-  const esGlobal=padron.length&&!c.un&&!c.departamento;
-  const tienePadronFiltro=padron.length&&(c.un||c.departamento);
+  const esGlobal=padron.length&&!c.un&&!c.departamento&&!esInduccion;
+  const tienePadronFiltro=padron.length&&(c.un||c.departamento)&&!esInduccion;
   if(esGlobal){
     activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
   } else if(tienePadronFiltro){
@@ -1954,7 +1966,7 @@ function buildDetail(id){
       return true;
     });
   }
-  // INDUCCION: filtrar por mes/año de la fecha de inicio (1° del mes) sobre fecha_calculo_antiguedad
+  // INDUCCION: filtrar por mes/año de la fecha de inicio sobre fecha_calculo_antiguedad
   const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let induccionMesLabel='';
   if(esInduccion&&c.fecha&&padron.length){
@@ -1970,14 +1982,25 @@ function buildDetail(id){
   }
 
   const posibles=(esGlobal||tienePadronFiltro||esInduccion)?activosPadron.length:aMeta.length;
-  const esp=(c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles;
 
-  // Faltantes = padrón activo que no completó (si hay padrón) o lista sin completar
+  // INDUCCION: esp = posibles del padrón + extras manuales acumulados en participantes_esperados
+  // Otros tipos: esp = participantes_esperados si definido, sino posibles
+  const esp=esInduccion
+    ? posibles+(c.participantes_esperados||0)
+    : ((c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles);
+
+  // Faltantes para INDUCCION: los del padrón que no completaron + los extras manuales que no completaron
+  // Para otros tipos: padrón activo sin completar, o lista sin completar
   const faltantesPadron=(esGlobal||tienePadronFiltro||esInduccion)
     ?activosPadron.filter(p=>!completaron.has(String(p.legajo)))
     :aMeta.filter(x=>!x.completo);
-  const faltantesReal=faltantesPadron.length;
-  const pct=posibles?Math.round(comp/posibles*100):0;
+  // Extras en lista que no están en el padrón del mes (solo para INDUCCION)
+  const legajosPadronMes=esInduccion?new Set(activosPadron.map(p=>String(p.legajo))):new Set();
+  const extrasNoCompletaron=esInduccion
+    ?a.filter(x=>!legajosPadronMes.has(String(x.legajo))&&(!x.completo||x.nota==null))
+    :[];
+  const faltantesReal=faltantesPadron.length+extrasNoCompletaron.length;
+  const pct=esp?Math.round(comp/esp*100):0;
 
   // ── TABLA UNIFICADA con filtro Todos / Completaron / Faltantes ──
   const hasNota=t.tiene_evaluacion;
@@ -3043,24 +3066,28 @@ async function importExcel(event,capId){
       await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
       asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
       const ins=await api('POST','asistentes',nuevos,'');
+      const capObj=caps.find(c=>c.id===capId);
+      const cIdx=caps.findIndex(x=>x.id===capId);
       if(ins){
         asistentes=[...asistentes,...(Array.isArray(ins)?ins:[ins])];
-        // Actualizar participantes_esperados al total real
-        const totalAsis=getA(capId).length;
-        await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
-        const cIdx=caps.findIndex(x=>x.id===capId);
-        if(cIdx>=0) caps[cIdx].participantes_esperados=totalAsis;
+        // INDUCCION: NO sobreescribir participantes_esperados — la meta viene del padrón dinámicamente.
+        // Otros tipos: actualizar participantes_esperados al total importado.
+        if(capObj&&capObj.tipo_codigo!=='INDUCCION'){
+          const totalAsis=getA(capId).length;
+          await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+          if(cIdx>=0) caps[cIdx].participantes_esperados=totalAsis;
+        }
       }
       for(const nombre of [...new Set(nuevos.map(a=>a.un).filter(Boolean))]){
         if(!uns.find(u=>u.nombre===nombre)){const r=await api('POST','unidades_negocio',{nombre},'');if(r)uns.push(Array.isArray(r)?r[0]:r);}
       }
       const pairs=[...new Map(nuevos.filter(a=>a.sector&&a.un).map(a=>[`${a.sector}|${a.un}`,{nombre:a.sector,un:a.un}])).values()];
       for(const s of pairs){if(!sectores.find(x=>x.nombre===s.nombre&&x.un===s.un)){const r=await api('POST','sectores',s,'');if(r)sectores.push(Array.isArray(r)?r[0]:r);}}
-      const capObj=caps.find(c=>c.id===capId);
       if(capObj&&capObj.estado!=='Realizada'){
         const esInd=capObj.tipo_codigo==='INDUCCION';
         const compCnt=nuevos.filter(a=>a.completo&&(!esInd||a.nota!=null)).length;
-        const espCnt=capObj.participantes_esperados||nuevos.length;
+        // Para INDUCCION la meta se calcula dinámicamente del padrón (ver calcularEspInduccion)
+        const espCnt=esInd?calcularPosiblesInduccion(capObj):(capObj.participantes_esperados||nuevos.length);
         if(compCnt>0&&compCnt>=espCnt){
           await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);capObj.estado='Realizada';
         }
@@ -3252,6 +3279,22 @@ async function mostrarModalActualizarParticipantes(capId, un, departamento){
 
 
 
+// ── Helper: calcula cuántos empleados del padrón corresponden a una cap INDUCCION ──
+// Retorna el número de vigentes cuya fecha_calculo_antiguedad coincide con mes/año de la cap.
+// Si la cap no tiene fecha o no hay padrón, retorna 0.
+function calcularPosiblesInduccion(cap){
+  if(!cap||!cap.fecha||!padron.length) return 0;
+  const parts=cap.fecha.split('-');
+  if(parts.length<2) return 0;
+  const yr=parseInt(parts[0]), mo=parseInt(parts[1]);
+  return padron.filter(p=>{
+    if(p.estado&&p.estado!=='Vigente') return false;
+    if(!p.fecha_calculo_antiguedad) return false;
+    const fp=p.fecha_calculo_antiguedad.split('-');
+    return parseInt(fp[0])===yr&&parseInt(fp[1])===mo;
+  }).length;
+}
+
 // Normaliza estado para mostrar en UI: Pendiente→"En Curso", resto igual
 function estadoLabel(est){return est==='Pendiente'?'En Curso':est||'Programada';}
 // Clase CSS del badge (usa 'pendiente' para En Curso para mantener color naranja)
@@ -3272,27 +3315,16 @@ function aplicarEstadosEnMemoria(){
     const asCap=asistentes.filter(a=>a.capacitacion_id===cap.id);
     const esInd=cap.tipo_codigo==='INDUCCION';
     const compCount=asCap.filter(x=>x.completo&&(!esInd||x.nota!=null)).length;
-    const posCount=(()=>{
-      // Posibles: si hay padrón filtrado o inducción
-      if(padron.length&&cap.tipo_codigo==='INDUCCION'&&cap.fecha){
-        const [yy,mm]=cap.fecha.split('-');
-        const yr=parseInt(yy),mo=parseInt(mm);
-        return padron.filter(p=>{
-          if(p.estado&&p.estado!=='Vigente') return false;
-          if(!p.fecha_calculo_antiguedad) return false;
-          const pts=p.fecha_calculo_antiguedad.split('-');
-          return parseInt(pts[0])===yr&&parseInt(pts[1])===mo;
-        }).length;
-      }
-      return asCap.filter(x=>x.en_meta!==false).length||asCap.length;
-    })();
-    const espCount=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posCount;
+    // Para INDUCCION: posibles = padrón del mes. esp = posibles + extras manuales (participantes_esperados > 0 acumula los extras)
+    const posCount=esInd?calcularPosiblesInduccion(cap):(asCap.filter(x=>x.en_meta!==false).length||asCap.length);
+    const espCount=esInd
+      ? posCount+(cap.participantes_esperados||0)   // posibles del padrón + extras agregados manualmente
+      : ((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posCount);
 
     // Estado en memoria: Realizada > En Curso > Vencida > Programada
     if(cap.estado==='Realizada'){
       cap._estadoCalc='Realizada';
     } else if(espCount>0&&compCount>=espCount){
-      // Completaron cubren la meta → Realizada automática
       cap._estadoCalc='Realizada';
     } else {
       const finStr=cap.fecha_fin||cap._fechaFinCalc||cap.fecha;
@@ -3303,7 +3335,6 @@ function aplicarEstadosEnMemoria(){
           cap._estadoCalc='Vencida';
         } else if(iniStr){
           const ini=new Date(iniStr+'T00:00:00');
-          // En Curso: desde la fecha de inicio hasta la fecha fin (inclusive)
           cap._estadoCalc=(ini<=hoy)?'Pendiente':'Programada';
         } else {
           cap._estadoCalc='Programada';
@@ -3452,8 +3483,9 @@ async function sincronizarEsperados(){
   let actualizadas=0;
   try{
     for(const cap of caps){
+      // INDUCCION: no sincronizar con asistentes, su meta viene del padrón
+      if(cap.tipo_codigo==='INDUCCION') continue;
       const total=getA(cap.id).length;
-      // Solo sincronizar si esperados es menor que asistentes reales (nunca reducir)
       if(total>0 && (cap.participantes_esperados||0)<total){
         await api('PATCH','capacitaciones',{participantes_esperados:total},`?id=eq.${cap.id}`);
         cap.participantes_esperados=total;
@@ -3464,6 +3496,26 @@ async function sincronizarEsperados(){
     toast(`Sincronización completa: ${actualizadas} capacitaciones actualizadas`);
     renderContent();
   }catch(e){setSyncStatus('error');toast('Error al sincronizar');}
+}
+
+async function resetearEsperadosInduccion(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const capsInd=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&(c.participantes_esperados||0)>0);
+  if(!capsInd.length){toast('Todas las INDUCCIÓN ya tienen esperados = 0');return;}
+  if(!confirm(`Se resetearán a 0 los "participantes esperados" de ${capsInd.length} capacitación${capsInd.length!==1?'es':''} de tipo INDUCCIÓN.\n\nEsto hace que la meta se calcule automáticamente desde el padrón (fecha de antigüedad).\n\n¿Continuar?`)) return;
+  setSyncStatus('syncing');
+  let ok=0;
+  try{
+    for(const cap of capsInd){
+      await api('PATCH','capacitaciones',{participantes_esperados:0},`?id=eq.${cap.id}`);
+      cap.participantes_esperados=0;
+      ok++;
+    }
+    aplicarEstadosEnMemoria();
+    setSyncStatus('ok');
+    toast(`${ok} INDUCCIÓN${ok!==1?'es':''} reseteadas — la meta ahora viene del padrón`);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
 }
 
 async function deleteCap(id){
@@ -3897,11 +3949,34 @@ async function agregarParticipanteIndividual(capId){
     const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector:'',departamento:depto,cuil,completo:false,en_meta:esMeta},'');
     const nv=Array.isArray(r)?r[0]:r;
     if(nv) asistentes.push(nv);
-    const totalNuevo=getA(capId).length;
     const capObj=caps.find(x=>x.id===capId);
-    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
-      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
-      capObj.participantes_esperados=totalNuevo;
+    if(capObj){
+      if(capObj.tipo_codigo==='INDUCCION'){
+        // Para INDUCCION: solo incrementar si el empleado NO estaba en los posibles del padrón del mes
+        const posiblesDelMes=calcularPosiblesInduccion(capObj);
+        const padronMesLegajos=new Set(
+          padron.filter(p=>{
+            if(p.estado&&p.estado!=='Vigente') return false;
+            if(!p.fecha_calculo_antiguedad||!capObj.fecha) return false;
+            const fp=p.fecha_calculo_antiguedad.split('-');
+            const fc=capObj.fecha.split('-');
+            return parseInt(fp[0])===parseInt(fc[0])&&parseInt(fp[1])===parseInt(fc[1]);
+          }).map(p=>String(p.legajo))
+        );
+        if(!padronMesLegajos.has(String(legajo))){
+          // Es un extra fuera del padrón del mes → acumular en participantes_esperados
+          const nuevosExtras=(capObj.participantes_esperados||0)+1;
+          await api('PATCH','capacitaciones',{participantes_esperados:nuevosExtras},`?id=eq.${capId}`);
+          capObj.participantes_esperados=nuevosExtras;
+        }
+      } else {
+        // Otros tipos: actualizar si supera el valor actual
+        const totalNuevo=getA(capId).length;
+        if(totalNuevo>(capObj.participantes_esperados||0)){
+          await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+          capObj.participantes_esperados=totalNuevo;
+        }
+      }
     }
     setSyncStatus('ok');
     toast(`${nombre} agregado`);
@@ -3925,11 +4000,32 @@ async function confirmarAgregarSeleccionados(capId){
       const nv=Array.isArray(r)?r[0]:r;
       if(nv) asistentes.push(nv);
     }
-    const totalNuevo=getA(capId).length;
     const capObj=caps.find(x=>x.id===capId);
-    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
-      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
-      capObj.participantes_esperados=totalNuevo;
+    if(capObj){
+      if(capObj.tipo_codigo==='INDUCCION'){
+        // Contar cuántos de los nuevos NO estaban en el padrón del mes (extras que mueven la meta)
+        const padronMesLegajos=new Set(
+          padron.filter(p=>{
+            if(p.estado&&p.estado!=='Vigente') return false;
+            if(!p.fecha_calculo_antiguedad||!capObj.fecha) return false;
+            const fp=p.fecha_calculo_antiguedad.split('-');
+            const fc=capObj.fecha.split('-');
+            return parseInt(fp[0])===parseInt(fc[0])&&parseInt(fp[1])===parseInt(fc[1]);
+          }).map(p=>String(p.legajo))
+        );
+        const extrasCount=nuevos.filter(n=>!padronMesLegajos.has(String(n.legajo))).length;
+        if(extrasCount>0){
+          const nuevosExtras=(capObj.participantes_esperados||0)+extrasCount;
+          await api('PATCH','capacitaciones',{participantes_esperados:nuevosExtras},`?id=eq.${capId}`);
+          capObj.participantes_esperados=nuevosExtras;
+        }
+      } else {
+        const totalNuevo=getA(capId).length;
+        if(totalNuevo>(capObj.participantes_esperados||0)){
+          await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+          capObj.participantes_esperados=totalNuevo;
+        }
+      }
     }
     setSyncStatus('ok');
     toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);

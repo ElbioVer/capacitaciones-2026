@@ -1765,6 +1765,15 @@ function renderConfig(){
     <button class="btn-sm" style="margin-top:6px;background:#854F0B;color:#fff;border-color:#854F0B" onclick="sincronizarInduccion()">👥 Sincronizar posibles/faltantes de INDUCCION</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Agrega automáticamente como posibles y faltantes a los empleados del padrón cuya <strong>Fecha cálculo antigüedad</strong> coincida con el mes/año de cada capacitación de tipo INDUCCION.</p>
   </div>
+  <div class="config-section">
+    <div class="config-title">📊 Exportación global — Completados</div>
+    <p style="font-size:12px;color:#777;margin-bottom:10px">Exporta en un único Excel todos los participantes que completaron capacitaciones, con notas, fechas de evaluación y datos de cada capacitación.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn-sm green" onclick="exportarTodosCompletados('todos')">📥 Todos los completados</button>
+      <button class="btn-sm blue" onclick="exportarTodosCompletados('conNota')">📥 Con calificación</button>
+    </div>
+    <p style="font-size:11px;color:#888">Incluye: Legajo · Nombre · CUIL · UN · Departamento · Completó · Nota · Fecha Evaluación · Capacitación · Tipo · Fecha Cap · Bimestre · Instructor</p>
+  </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <button class="btn-sm green" onclick="exportPlantillaAsistentes()" style="margin-bottom:8px">📥 Plantilla Excel asistentes</button>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
@@ -2286,7 +2295,7 @@ function buildDetail(id){
   const importBtn=canManageParticipants()?`<label class="upload-label">📂 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,${id})"></label>`:'';
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
   const agregarBtn=canManageParticipants()?`<button class="btn-sm" style="background:#1D9E75;color:#fff;border-color:#1D9E75" onclick="openAgregarParticipante(${id})" title="Agregar participante designado">+ Agregar</button>`:'';
-  const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
+  const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" id="btn-limpiar-${id}" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
@@ -2804,10 +2813,42 @@ async function limpiarParticipantes(capId, total){
   if(!canManageParticipants()) return;
   const c=caps.find(x=>x.id===capId);
   if(!c) return;
-  // Primera advertencia
+
+  // Detectar si la vista activa es "faltantes" → borrar solo los que no completaron
+  const vistaActiva=window[`_asisVista_${capId}`]||'todos';
+  const esInd=c.tipo_codigo==='INDUCCION';
+
+  if(vistaActiva==='faltantes'){
+    // Borrar solo los que están en la lista (asistentes en BD) y NO completaron
+    const aLista=getA(capId);
+    const faltantesEnLista=aLista.filter(x=>!(x.completo&&(!esInd||x.nota!=null)));
+    if(!faltantesEnLista.length){toast('No hay faltantes en la lista para eliminar');return;}
+    const ok=confirm(`⚠️ Se eliminarán ${faltantesEnLista.length} participante${faltantesEnLista.length!==1?'s':''} que NO completaron de:\n\n"${c.titulo}"\n\nLos que sí completaron se mantienen.\n\n¿Continuar?`);
+    if(!ok) return;
+    try{
+      setSyncStatus('syncing');
+      for(const x of faltantesEnLista){
+        await api('DELETE','asistentes','',`?id=eq.${x.id}`);
+        asistentes=asistentes.filter(a=>a.id!==x.id);
+      }
+      // Para no-INDUCCION actualizar participantes_esperados al nuevo total
+      if(c.tipo_codigo!=='INDUCCION'){
+        const nuevoTotal=getA(capId).length;
+        await api('PATCH','capacitaciones',{participantes_esperados:nuevoTotal},`?id=eq.${capId}`);
+        const cIdx=caps.findIndex(x=>x.id===capId);
+        if(cIdx>=0) caps[cIdx].participantes_esperados=nuevoTotal;
+      }
+      setSyncStatus('ok');
+      toast(`${faltantesEnLista.length} faltante${faltantesEnLista.length!==1?'s':''} eliminado${faltantesEnLista.length!==1?'s':''} — los completados se conservan`);
+      buildDetail(capId);
+      renderContent();
+    }catch(e){setSyncStatus('error');toast('Error al eliminar: '+e.message);}
+    return;
+  }
+
+  // Vista todos o completaron → confirmar eliminación total (comportamiento original)
   const ok1=confirm(`⚠️ ADVERTENCIA\n\nEstás por eliminar los ${total} participante${total!==1?'s':''} de:\n\n"${c.titulo}"\n\nEsta acción NO se puede deshacer.\n\n¿Querés continuar?`);
   if(!ok1) return;
-  // Segunda confirmación
   const ok2=confirm(`🚨 CONFIRMACIÓN FINAL\n\nSe eliminarán TODOS los registros de asistencia de esta capacitación.\n\n¿Estás completamente seguro?`);
   if(!ok2) return;
   try{
@@ -2833,6 +2874,8 @@ function filtrarAsistentes(vista, capId){
   if(!data) return;
   const tbody=document.getElementById(`tbody-asis-${capId}`);
   if(!tbody) return;
+  // Guardar vista activa para que limpiarParticipantes pueda leer el contexto
+  window[`_asisVista_${capId}`]=vista;
   // Actualizar botones activos
   ['todos','comp','falt'].forEach(k=>{
     const btn=document.getElementById(`fab-${k}-${capId}`);
@@ -2841,6 +2884,17 @@ function filtrarAsistentes(vista, capId){
     btn.style.background=activo?(k==='falt'?'#EF9F27':'#1D9E75'):'#fff';
     btn.style.color=activo?'#fff':(k==='falt'?'#854F0B':'#1D9E75');
   });
+  // Actualizar texto del botón Limpiar según la vista
+  const limpBtn=document.getElementById(`btn-limpiar-${capId}`);
+  if(limpBtn){
+    if(vista==='faltantes'){
+      limpBtn.textContent='🗑 Limpiar faltantes';
+      limpBtn.title='Eliminar solo los participantes que no completaron (mantiene los que sí completaron)';
+    } else {
+      limpBtn.textContent='🗑 Limpiar lista';
+      limpBtn.title='Eliminar todos los participantes';
+    }
+  }
   tbody.innerHTML=data[vista]||data.todos;
 }
 
@@ -2997,6 +3051,57 @@ function exportAll(capId){
   XLSX.utils.book_append_sheet(wb,ws,'Participantes');
   XLSX.writeFile(wb,`participantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
   toast('Excel descargado');
+}
+
+function exportarTodosCompletados(modo){
+  // modo: 'todos' = completo:true de cualquier tipo | 'conNota' = completo:true y nota != null
+  if(!caps.length){toast('Sin capacitaciones');return;}
+  const rows=[];
+  caps.forEach(cap=>{
+    const c=cap;
+    const asis=getA(cap.id);
+    const esInd=cap.tipo_codigo==='INDUCCION';
+    asis.forEach(x=>{
+      const cumpleCompleto=x.completo&&(!esInd||x.nota!=null);
+      if(!cumpleCompleto) return;
+      if(modo==='conNota'&&x.nota==null) return;
+      rows.push({
+        '#Redmine':c.codigo_redmine||'',
+        'Legajo':x.legajo,
+        'Nombre':x.nombre,
+        'CUIL':x.cuil||'',
+        'UN':x.un||'',
+        'Departamento':x.departamento||x.sector||'',
+        'Sector':x.sector||'',
+        'Nota':x.nota!=null?x.nota:'',
+        'Aprobó':x.nota!=null?(x.nota>=(c.nota_aprobacion||6)?'Sí':'No'):'',
+        'Fecha Evaluación':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
+        'Capacitación':c.titulo,
+        'Tipo':c.tipo_codigo||'',
+        'Fecha Capacitación':c.fecha?fmtF(c.fecha):'',
+        'Bimestre':c.bimestre||'',
+        'Instructor':c.instructor||''
+      });
+    });
+  });
+  if(!rows.length){
+    toast(modo==='conNota'?'No hay completados con calificación':'No hay completados registrados');
+    return;
+  }
+  // Ordenar por Tipo → Bimestre → Capacitación → Nombre
+  rows.sort((a,b)=>
+    (a['Tipo']||'').localeCompare(b['Tipo']||'')||
+    (a['Bimestre']||'').localeCompare(b['Bimestre']||'')||
+    (a['Capacitación']||'').localeCompare(b['Capacitación']||'')||
+    (a['Nombre']||'').localeCompare(b['Nombre']||'')
+  );
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:8},{wch:28},{wch:16},{wch:18},{wch:20},{wch:16},{wch:6},{wch:7},{wch:14},{wch:35},{wch:12},{wch:14},{wch:22},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'Completados');
+  const fecha=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`completados_${modo==='conNota'?'con_nota_':''}${fecha}.xlsx`);
+  toast(`${rows.length} registros exportados`);
 }
 
 async function exportRespuestas(capId){

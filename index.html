@@ -785,7 +785,7 @@ function renderPorTipo(){
       const _esInd=cap.tipo_codigo==='INDUCCION';
       const comp=a.filter(x=>x.completo&&(!_esInd||x.nota!=null)).length;
       const _pos=_esInd?calcularPosiblesInduccion(cap):a.length;
-      const esp=_esInd?_pos+(cap.participantes_esperados||0):((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:_pos);
+      const esp=a.length||_pos;  // Esperados = lista (fuente de verdad con nuevo modelo)
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
       return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})"><span class="plan-item-name">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
@@ -813,7 +813,7 @@ function renderBim(){
       const _esInd=cap.tipo_codigo==='INDUCCION';
       const comp=a.filter(x=>x.completo&&(!_esInd||x.nota!=null)).length;
       const _pos=_esInd?calcularPosiblesInduccion(cap):a.length;
-      const esp=_esInd?_pos+(cap.participantes_esperados||0):((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:_pos);
+      const esp=a.length||_pos;  // Esperados = lista (fuente de verdad con nuevo modelo)
       const p=esp?Math.round(comp/esp*100):0;
       const redmineTag=cap.codigo_redmine?`<span style="font-size:10px;color:#185FA5;font-weight:600;margin-left:4px">${esc(cap.codigo_redmine)}</span>`:'';
       return`<div class="plan-row-item" data-capid="${cap.id}" onclick="openDetail(${cap.id})">${tipoBadge(cap.tipo_codigo)}<span class="plan-item-name" style="margin-left:6px">${esc(cap.titulo)}${redmineTag}${cap.un?`<span style="font-size:10px;color:#1a2f6e;font-weight:500;margin-left:5px">· ${esc(cap.un)}</span>`:''}</span><div class="mini-bar"><div class="mini-fill ${p>=75?'':p>=40?'warn':'danger'}" style="width:${p}%"></div></div><span class="badge ${estadoClass(estadoCap(cap))}">${estadoLabel(estadoCap(cap))}</span></div>`;
@@ -2339,7 +2339,7 @@ function buildDetail(id){
     ${repoHtml}
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
-      <div class="modal-section-title" style="margin:0">Asistentes${listaCerrada?' 🔒':''}${posibles&&!listaCerrada?' — '+posibles+' en padrón':''}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
+      <div class="modal-section-title" style="margin:0" data-capid-title="${id}">Asistentes${listaCerrada?' 🔒':''}${posibles&&!listaCerrada?' — '+posibles+' en padrón':''}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">${cerrarListaBtn}${qrPresBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
@@ -2894,12 +2894,17 @@ function filtrarAsistentes(vista, capId){
   // Guardar vista activa para que limpiarParticipantes pueda leer el contexto
   window[`_asisVista_${capId}`]=vista;
   // Actualizar botones activos
-  ['todos','comp','falt'].forEach(k=>{
+  ['todos','comp','falt','noenlista'].forEach(k=>{
     const btn=document.getElementById(`fab-${k}-${capId}`);
     if(!btn) return;
     const activo=(k==='todos'&&vista==='todos')||(k==='comp'&&vista==='completaron')||(k==='falt'&&vista==='faltantes')||(k==='noenlista'&&vista==='noenlista');
-    btn.style.background=activo?(k==='falt'?'#EF9F27':'#1D9E75'):'#fff';
-    btn.style.color=activo?'#fff':(k==='falt'?'#854F0B':'#1D9E75');
+    if(activo){
+      btn.style.background=(k==='falt'?'#EF9F27':k==='noenlista'?'#888':'#1D9E75');
+      btn.style.color='#fff';
+    } else {
+      btn.style.background='#fff';
+      btn.style.color=(k==='falt'?'#854F0B':k==='noenlista'?'#888':'#1D9E75');
+    }
   });
   // Actualizar texto del botón Limpiar según la vista
   const limpBtn=document.getElementById(`btn-limpiar-${capId}`);
@@ -2915,7 +2920,20 @@ function filtrarAsistentes(vista, capId){
       limpBtn.title='Eliminar todos los participantes';
     }
   }
-  tbody.innerHTML=data[vista]||data.todos;
+  // Mostrar filas de la vista
+  const rowsHtml=data[vista]||data.todos;
+  tbody.innerHTML=rowsHtml;
+  
+  // Actualizar título de la sección según vista activa
+  const titleEl=document.querySelector(`[data-capid-title="${capId}"]`);
+  if(titleEl){
+    let newTitle='Asistentes';
+    if(vista==='completaron') newTitle='✓ Completaron';
+    else if(vista==='faltantes') newTitle='⚠ Faltantes';
+    else if(vista==='noenlista') newTitle='📋 No en lista';
+    else newTitle='Todos';
+    titleEl.textContent=newTitle;
+  }
 }
 
 async function deleteA(aid,capId){

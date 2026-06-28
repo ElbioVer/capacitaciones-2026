@@ -2078,7 +2078,15 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const tableHead=`<thead><tr><th style="width:35px;text-align:center">#</th><th style="width:52px">Legajo</th><th class="col-nombre">Nombre</th><th class="col-cuil" style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const colAntig=esInduccion?'<th style="width:78px">F. Antigüedad</th>':'';
+  const tableHead=`<thead><tr><th style="width:35px;text-align:center">#</th><th style="width:52px">Legajo</th><th class="col-nombre">Nombre</th><th class="col-cuil" style="width:80px">CUIL</th><th style="width:75px">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
+
+  // Mapa legajo → fecha_calculo_antiguedad del padrón (para INDUCCIÓN)
+  function getFechaAntiguedad(legajo){
+    if(!esInduccion) return '';
+    const emp=padron.find(p=>String(p.legajo)===String(legajo));
+    return emp?(emp.fecha_calculo_antiguedad||''):'';
+  }
 
   function buildRow(x, esFaltantePadron=false, index=null){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
@@ -2086,11 +2094,13 @@ function buildDetail(id){
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
+    const _fAntig=getFechaAntiguedad(x.legajo);
+    const antigCell=esInduccion?`<td style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`:'';
     if(esFaltantePadron){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
         :'';
-      return`<tr style="background:#FFFAF0">${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
+      return`<tr style="background:#FFFAF0">${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
@@ -2098,7 +2108,7 @@ function buildDetail(id){
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
     const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
-    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view

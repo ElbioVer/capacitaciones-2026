@@ -696,7 +696,7 @@ function capCard(cap){
       ${_ffin?`<span style="font-size:10px;color:#888">Fin: ${fmtF(_ffin)}</span>`:''}
       ${iconos.length?`<span style="color:#888">${iconos.join(' ')}</span>`:''}
     </div>
-    <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron${posibles!==esp?` <span style="font-size:10px;color:#aaa">(${posibles} en lista)</span>`:""}</span><span class="asist-pct">${pct}%</span></div>
+    <div class="cap-asist"><span class="asist-nums">${comp} / ${esp} completaron${cap.lista_cerrada?' <span style="font-size:9px;color:#1D9E75;font-weight:700">🔒</span>':''}</span><span class="asist-pct">${pct}%</span></div>
     <div class="progress-bar" style="margin-top:4px"><div class="progress-fill ${sFill(estadoCap(cap),pct)}" style="width:${Math.min(pct,100)}%"></div></div>
   </div>`;
 }
@@ -937,11 +937,8 @@ function renderResumen(){
   });
   const totalComp=asisFiltrados.filter(a=>a.completo).length;
   const totalPosibles=f.reduce((s,cap)=>s+getA(cap.id).length,0);
-  const totalEsp=f.reduce((s,cap)=>{
-    const posibles=getA(cap.id).length;
-    const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:posibles;
-    return s+esp;
-  },0);
+  // Esperados = lista de asistentes (fuente de verdad, especialmente cuando lista_cerrada)
+  const totalEsp=f.reduce((s,cap)=>s+getA(cap.id).length,0);
   const totalFaltantes=Math.max(0,totalEsp-totalComp);
   const pctA=totalEsp?Math.round(totalComp/totalEsp*100):0;
   // Contexto activo para mostrar en el título
@@ -953,7 +950,7 @@ function renderResumen(){
     const p=g.length?Math.round(r/g.length*100):0;
     // Asistencia real de este tipo
     const compTipo=g.reduce((s,cap)=>s+getA(cap.id).filter(a=>a.completo).length,0);
-    const espTipo=g.reduce((s,cap)=>{const pos=getA(cap.id).length;return s+((cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:pos);},0);
+    const espTipo=g.reduce((s,cap)=>s+getA(cap.id).length,0);
     const pctAsis=espTipo?Math.round(compTipo/espTipo*100):0;
     return`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
@@ -1099,16 +1096,14 @@ function renderResumen(){
 
 
 async function cargarParticipantesDesdePadron(capId, un, departamento){
-  // Si no hay UN ni depto → capacitación global: cargar todo el plantel vigente
-  const esGlobal=!un&&!departamento;
+  // Soporte multi-depto: departamento puede ser 'Dep1||Dep2||...'
+  const deps=departamento?departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+  const esGlobal=!un&&!deps.length;
   const activos=padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
     if(!esGlobal){
       if(un&&p.un!==un) return false;
-      if(departamento&&departamento.trim()){
-        const d=p.departamento||p.datos_extra?.Departamento||'';
-        if(d!==departamento.trim()) return false;
-      }
+      if(deps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!deps.includes(d)) return false;}
     }
     return true;
   });
@@ -1184,16 +1179,25 @@ function onChangeBimestre(val){
 }
 
 function onChangeFormUN(unNombre){
-  const secSel=document.getElementById('f-sec');
-  if(!secSel) return;
-  // Deptos filtrados desde el padrón
+  const wrap=document.getElementById('f-sec-wrap');
+  if(!wrap) return;
+  // Refiltrar deptos según UN elegida
   const deptos=[...new Set(
     padron.filter(p=>!unNombre||p.un===unNombre)
       .map(p=>p.departamento||p.datos_extra?.Departamento)
       .filter(Boolean)
   )].sort();
-  secSel.innerHTML=deptos.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')
-    +'<option value="">Sin departamento (carga manual)</option>';
+  // Mantener selección previa que siga disponible
+  const prevSel=new Set([...wrap.querySelectorAll('.chk-depto-form:checked')].map(c=>c.value));
+  wrap.innerHTML=deptos.map(d=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:12px;cursor:pointer">
+    <input type="checkbox" class="chk-depto-form" value="${esc(d)}" ${prevSel.has(d)?'checked':''} onchange="updatePadronPreview()">
+    ${esc(d)}</label>`).join('');
+  if(!deptos.length) wrap.innerHTML='<div style="font-size:11px;color:#aaa;padding:4px">Sin departamentos para esta UN</div>';
+  updatePadronPreview();
+}
+
+function toggleTodosDeptos(sel){
+  document.querySelectorAll('.chk-depto-form').forEach(c=>c.checked=sel);
   updatePadronPreview();
 }
 
@@ -1239,14 +1243,14 @@ function toggleParField(){
   if(!chk||!inp) return;
   if(chk.checked){
     const un=document.getElementById('f-un')?document.getElementById('f-un').value.trim():'';
-    const dep=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim():'';
-    const esGlobal=!un&&!dep;
-    // Activos del padrón según UN/Depto (o todos si es global)
+    const deps=getFormDeptos();
+    const esGlobal=!un&&!deps.length;
+    // Activos del padrón según UN/Deptos (o todos si es global)
     const activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(!esGlobal){
         if(un&&p.un!==un) return false;
-        if(dep){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==dep) return false;}
+        if(deps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!deps.includes(d)) return false;}
       }
       return true;
     });
@@ -1764,6 +1768,13 @@ function renderConfig(){
     <p style="font-size:11px;color:#888;margin-top:4px">Pone <strong>participantes_esperados = 0</strong> en todas las capacitaciones de tipo INDUCCIÓN para que la meta se calcule dinámicamente desde el padrón (fecha de antigüedad).</p>
     <button class="btn-sm" style="margin-top:6px;background:#854F0B;color:#fff;border-color:#854F0B" onclick="sincronizarInduccion()">👥 Sincronizar posibles/faltantes de INDUCCION</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Agrega automáticamente como posibles y faltantes a los empleados del padrón cuya <strong>Fecha cálculo antigüedad</strong> coincida con el mes/año de cada capacitación de tipo INDUCCION.</p>
+    <div style="margin-top:14px;background:#F0FBF7;border:1px solid #1D9E75;border-radius:8px;padding:10px 12px">
+      <div style="font-size:12px;font-weight:600;color:#085041;margin-bottom:6px">🗄️ SQL requerido en Supabase — Nuevas columnas</div>
+      <p style="font-size:11px;color:#555;margin-bottom:8px">Ejecutar una sola vez en el <strong>SQL Editor</strong> de Supabase para habilitar "Lista cerrada" y multi-departamento:</p>
+      <pre style="background:#1a2f6e;color:#e8f4fd;border-radius:6px;padding:10px;font-size:10px;overflow-x:auto;white-space:pre-wrap;line-height:1.5">ALTER TABLE capacitaciones ADD COLUMN IF NOT EXISTS lista_cerrada BOOLEAN DEFAULT FALSE;
+ALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEFAULT NULL;</pre>
+      <button class="btn-sm" style="margin-top:6px;font-size:10px" onclick="navigator.clipboard.writeText('ALTER TABLE capacitaciones ADD COLUMN IF NOT EXISTS lista_cerrada BOOLEAN DEFAULT FALSE;\nALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEFAULT NULL;').then(()=>toast('SQL copiado al portapapeles'))">📋 Copiar SQL</button>
+    </div>
   </div>
   <div class="config-section">
     <div class="config-title">📊 Exportación global — Completados</div>
@@ -1965,13 +1976,15 @@ function buildDetail(id){
   let activosPadron=[];
   const esGlobal=padron.length&&!c.un&&!c.departamento&&!esInduccion;
   const tienePadronFiltro=padron.length&&(c.un||c.departamento)&&!esInduccion;
+  // Soporte multi-depto separado por '||'
+  const _capDeps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
   if(esGlobal){
     activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
   } else if(tienePadronFiltro){
     activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(c.un&&p.un!==c.un) return false;
-      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      if(_capDeps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_capDeps.includes(d)) return false;}
       return true;
     });
   }
@@ -1990,25 +2003,21 @@ function buildDetail(id){
     });
   }
 
-  const posibles=(esGlobal||tienePadronFiltro||esInduccion)?activosPadron.length:aMeta.length;
+  // lista_cerrada: si está cerrada, los Esperados son los de la lista; si abierta, los posibles del padrón
+  const listaCerrada=!!c.lista_cerrada;
+  const posibles=(esGlobal||tienePadronFiltro||esInduccion)?activosPadron.length:a.length;
 
-  // INDUCCION: esp = posibles del padrón + extras manuales acumulados en participantes_esperados
-  // Otros tipos: esp = participantes_esperados si definido, sino posibles
-  const esp=esInduccion
-    ? posibles+(c.participantes_esperados||0)
-    : ((c.participantes_esperados&&c.participantes_esperados>0)?c.participantes_esperados:posibles);
+  // Esperados = siempre la lista de asistentes (fuente de verdad al cerrar)
+  const esp=a.length||posibles;
 
-  // Faltantes para INDUCCION: los del padrón que no completaron + los extras manuales que no completaron
-  // Para otros tipos: padrón activo sin completar, o lista sin completar
-  const faltantesPadron=(esGlobal||tienePadronFiltro||esInduccion)
-    ?activosPadron.filter(p=>!completaron.has(String(p.legajo)))
-    :aMeta.filter(x=>!x.completo);
-  // Extras en lista que no están en el padrón del mes (solo para INDUCCION)
-  const legajosPadronMes=esInduccion?new Set(activosPadron.map(p=>String(p.legajo))):new Set();
-  const extrasNoCompletaron=esInduccion
-    ?a.filter(x=>!legajosPadronMes.has(String(x.legajo))&&(!x.completo||x.nota==null))
+  // Faltantes: los de la lista que no completaron
+  // Si lista abierta Y hay padrón: también los del padrón que no están en lista ni completaron
+  const faltantesLista=a.filter(x=>!(x.completo&&(!esInduccion||x.nota!=null)));
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  const faltantesPadronNoEnLista=(!listaCerrada&&(esGlobal||tienePadronFiltro||esInduccion))
+    ?activosPadron.filter(p=>!completaron.has(String(p.legajo))&&!legajosEnLista.has(String(p.legajo)))
     :[];
-  const faltantesReal=faltantesPadron.length+extrasNoCompletaron.length;
+  const faltantesReal=faltantesLista.length+faltantesPadronNoEnLista.length;
   const pct=esp?Math.round(comp/esp*100):0;
 
   // ── TABLA UNIFICADA con filtro Todos / Completaron / Faltantes ──
@@ -2033,17 +2042,15 @@ function buildDetail(id){
       ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
-    return`<tr><td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+    const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
+    return`<tr><td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view
   // Todos los de la lista (meta + ext)
   const todasFilasLista=a.map(x=>buildRow(x,false));
-  // Faltantes del padrón que no están en la lista en absoluto
-  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
-  const faltantesSolopadron=(esGlobal||tienePadronFiltro||esInduccion)
-    ?activosPadron.filter(p=>!completaron.has(String(p.legajo))&&!legajosEnLista.has(String(p.legajo)))
-    :[];
+  // faltantesSolopadron ya calculado arriba como faltantesPadronNoEnLista (legajosEnLista también ya declarado)
+  const faltantesSolopadron=faltantesPadronNoEnLista;
   const filasFaltantesPadron=faltantesSolopadron.map(p=>buildRow({
     legajo:p.legajo,nombre:p.nombre,
     // Buscar cuil en todas las variantes posibles (columna propia o datos_extra)
@@ -2069,6 +2076,9 @@ function buildDetail(id){
       <button class="btn-asis-filter" onclick="filtrarAsistentes('faltantes',${id})" id="fab-falt-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #EF9F27;background:#fff;color:#854F0B;cursor:pointer;font-weight:600">
         ⚠ Faltantes (${faltantesReal})
       </button>
+      ${!listaCerrada&&faltantesSolopadron.length?`<button class="btn-asis-filter" onclick="filtrarAsistentes('noenlista',${id})" id="fab-noenlista-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #aaa;background:#fff;color:#555;cursor:pointer;font-weight:600">
+        📋 No en lista (${faltantesSolopadron.length})
+      </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
       ${a.length||faltantesSolopadron.length
@@ -2082,6 +2092,7 @@ function buildDetail(id){
     todos:todasFilasLista.join('')+filasFaltantesPadron.join(''),
     completaron:a.filter(x=>x.completo).map(x=>buildRow(x,false)).join(''),
     faltantes:filasListaSinCompletar.join('')+filasFaltantesPadron.join(''),
+    noenlista:filasFaltantesPadron.join(''),
     tableHead
   };
 
@@ -2296,6 +2307,7 @@ function buildDetail(id){
   const forzarBtn=canManageParticipants()?`<button class="btn-sm blue" onclick="openForzarCumplimiento(${id})" title="Registrar asistentes en papel">✍ Papel</button>`:'';
   const agregarBtn=canManageParticipants()?`<button class="btn-sm" style="background:#1D9E75;color:#fff;border-color:#1D9E75" onclick="openAgregarParticipante(${id})" title="Agregar participante designado">+ Agregar</button>`:'';
   const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" id="btn-limpiar-${id}" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
+  const cerrarListaBtn=canManageParticipants()?`<button class="btn-sm" style="background:${listaCerrada?'#EF9F27':'#1a2f6e'};color:#fff;border-color:${listaCerrada?'#EF9F27':'#1a2f6e'};font-weight:600" onclick="toggleListaCerrada(${id},${!listaCerrada})" title="${listaCerrada?'Abrir lista de participantes':'Cerrar lista de participantes'}">${listaCerrada?'🔓 Abrir lista':'🔒 Cerrar lista'}</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
@@ -2307,11 +2319,12 @@ function buildDetail(id){
       <div class="modal-section-title">Información</div>
       ${c.codigo_redmine?`<div class="detail-row"><span class="detail-key">Redmine</span><span class="detail-val" style="color:#185FA5;font-weight:600">${esc(c.codigo_redmine)}</span></div>`:''}
       ${c.un?`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val">${esc(c.un)}</span></div>`:`<div class="detail-row"><span class="detail-key">UN</span><span class="detail-val"><span class="chip-global">🌍 Todas las UN y áreas</span></span></div>`}
+      ${_capDeps.length?`<div class="detail-row"><span class="detail-key">Departamento(s)</span><span class="detail-val" style="font-size:11px">${_capDeps.map(d=>esc(d)).join(' · ')}</span></div>`:''}
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
       <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}${esInduccion&&induccionMesLabel?` <span style="font-size:10px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:4px;padding:1px 5px;margin-left:4px">Ingresos ${induccionMesLabel}</span>`:''}</span></div>
-      <div class="detail-row"><span class="detail-key">Esperados (meta)</span><span class="detail-val">${esp}</span></div>
+      <div class="detail-row"><span class="detail-key">En lista (esperados)</span><span class="detail-val">${a.length}${listaCerrada?' <span style="font-size:10px;background:#E1F5EE;color:#085041;border:1px solid #1D9E75;border-radius:4px;padding:1px 5px;margin-left:4px">🔒 Lista cerrada</span>':''}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
       ${hasNota?`<div class="detail-row"><span class="detail-key">Nota aprobación</span><span class="detail-val">≥ ${nota_aprobacion}</span></div>`:''}
@@ -2322,8 +2335,8 @@ function buildDetail(id){
     ${repoHtml}
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
-      <div class="modal-section-title" style="margin:0">Asistentes — Posibles: ${posibles}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${qrPresBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div class="modal-section-title" style="margin:0">Asistentes${listaCerrada?' 🔒':''}${posibles&&!listaCerrada?' — '+posibles+' en padrón':''}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${cerrarListaBtn}${qrPresBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -2880,14 +2893,17 @@ function filtrarAsistentes(vista, capId){
   ['todos','comp','falt'].forEach(k=>{
     const btn=document.getElementById(`fab-${k}-${capId}`);
     if(!btn) return;
-    const activo=(k==='todos'&&vista==='todos')||(k==='comp'&&vista==='completaron')||(k==='falt'&&vista==='faltantes');
+    const activo=(k==='todos'&&vista==='todos')||(k==='comp'&&vista==='completaron')||(k==='falt'&&vista==='faltantes')||(k==='noenlista'&&vista==='noenlista');
     btn.style.background=activo?(k==='falt'?'#EF9F27':'#1D9E75'):'#fff';
     btn.style.color=activo?'#fff':(k==='falt'?'#854F0B':'#1D9E75');
   });
   // Actualizar texto del botón Limpiar según la vista
   const limpBtn=document.getElementById(`btn-limpiar-${capId}`);
   if(limpBtn){
-    if(vista==='faltantes'){
+    if(vista==='noenlista'){
+      limpBtn.textContent='🗑 Eliminar no-seleccionados';
+      limpBtn.onclick=()=>limpiarNoEnLista(capId);
+    } else if(vista==='faltantes'){
       limpBtn.textContent='🗑 Limpiar faltantes';
       limpBtn.title='Eliminar solo los participantes que no completaron (mantiene los que sí completaron)';
     } else {
@@ -3243,8 +3259,23 @@ function showForm(c){
     </div>
     <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">Fecha fin planificada</label><input class="form-input" id="f-fecha-fin" type="date" value="${c&&c.fecha_fin?c.fecha_fin:(c?fechaFinPorBimestre(c.bimestre):'')}" oninput="this._manual=true"><div style="font-size:10px;color:#888;margin-top:2px">Se completa automáticamente al elegir bimestre</div></div></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">UN</label><select class="form-input" id="f-un" onchange="onChangeFormUN(this.value)">${uns.map(u=>`<option value="${esc(u.nombre)}"${c&&c.un===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('')}<option value="">Sin UN</option></select></div>
-      <div class="form-group"><label class="form-label">Departamento</label><select class="form-input" id="f-sec" onchange="updatePadronPreview()">${(()=>{const deptos=[...new Set(padron.filter(p=>!c||!c.un||p.un===(c&&c.un)).map(p=>p.departamento||p.datos_extra?.Departamento).filter(Boolean))].sort();const unSel=c&&c.un;const allDeptos=unSel?deptos:([...new Set(padron.map(p=>p.departamento||p.datos_extra?.Departamento).filter(Boolean))].sort());return allDeptos.map(d=>`<option value="${esc(d)}"${c&&c.departamento===d?' selected':''}>${esc(d)}</option>`).join('');})()}<option value="">Sin departamento (carga manual)</option></select></div>
+      <div class="form-group"><label class="form-label">UN</label><select class="form-input" id="f-un" onchange="onChangeFormUN(this.value)"><option value="">— Sin UN (global) —</option>${uns.map(u=>`<option value="${esc(u.nombre)}"${c&&c.un===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Departamento(s)</label>
+        <div id="f-sec-wrap" style="border:1px solid #ddd;border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;padding:4px 6px">
+          ${(()=>{
+            const allDeptos=[...new Set(padron.map(p=>p.departamento||p.datos_extra?.Departamento).filter(Boolean))].sort();
+            const selDeptos=c&&c.departamento?c.departamento.split('||'):[];
+            return allDeptos.map(d=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:12px;cursor:pointer">
+              <input type="checkbox" class="chk-depto-form" value="${esc(d)}" ${selDeptos.includes(d)?'checked':''} onchange="updatePadronPreview()">
+              ${esc(d)}</label>`).join('');
+          })()}
+          ${!padron.length?'<div style="font-size:11px;color:#aaa;padding:4px">Sin departamentos en padrón</div>':''}
+        </div>
+        <div style="margin-top:4px;display:flex;gap:6px">
+          <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptos(true)">Todos</button>
+          <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptos(false)">Ninguno</button>
+        </div>
+      </div>
     </div>
     <div id="padron-preview" style="font-size:11px;color:#1D9E75;padding:4px 0;display:none"></div>
     <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="f-obs" rows="2">${c?esc(c.obs||''):''}</textarea></div>
@@ -3264,7 +3295,8 @@ async function saveCap(id){
   const tit=document.getElementById('f-tit').value.trim();
   if(!tit){alert('El título es obligatorio');return;}
   const unSel=document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null;
-  const secSel=document.getElementById('f-sec')?document.getElementById('f-sec').value.trim()||null:null;
+  const depsSelArr=getFormDeptos();
+  const secSel=depsSelArr.length?depsSelArr.join('||'):null;
   const _ffRaw=document.getElementById('f-fecha-fin')?document.getElementById('f-fecha-fin').value:'';
   const _bimVal=document.getElementById('f-bim')?document.getElementById('f-bim').value:'';
   const fechaFin=_ffRaw||fechaFinPorBimestre(_bimVal)||null;
@@ -3528,6 +3560,7 @@ async function sincronizarInduccion(){
   let totalAgregados=0, totalYaExistian=0, errores=0;
 
   for(const c of capsInduccion){
+    if(c.lista_cerrada){totalYaExistian+=(asistentes.filter(a=>a.capacitacion_id===c.id).length);continue;}
     const [yy,mm]=c.fecha.split('-');
     const mesRef=parseInt(mm), anioRef=parseInt(yy);
 
@@ -3590,6 +3623,7 @@ async function sincronizarEsperados(){
     for(const cap of caps){
       // INDUCCION: no sincronizar con asistentes, su meta viene del padrón
       if(cap.tipo_codigo==='INDUCCION') continue;
+      if(cap.lista_cerrada) continue;
       const total=getA(cap.id).length;
       if(total>0 && (cap.participantes_esperados||0)<total){
         await api('PATCH','capacitaciones',{participantes_esperados:total},`?id=eq.${cap.id}`);
@@ -3926,20 +3960,95 @@ async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
   }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
 }
 
+// ── TOGGLE LISTA CERRADA ────────────────────────────────────────────────────
+async function toggleListaCerrada(capId, cerrar){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const msg=cerrar
+    ?`¿Cerrar la lista de participantes de "${c.titulo}"?
+
+Una vez cerrada:
+• No se agregarán participantes automáticamente
+• Los Posibles del padrón dejarán de mostrarse al pie
+• La sincronización automática quedará bloqueada
+• Podés volver a abrirla cuando quieras`
+    :`¿Abrir la lista de "${c.titulo}"?
+
+Volvés al modo normal: los Posibles del padrón se mostrarán de nuevo y se permite agregar participantes.`;
+  if(!confirm(msg)) return;
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','capacitaciones',{lista_cerrada:cerrar},`?id=eq.${capId}`);
+    const idx=caps.findIndex(x=>x.id===capId);
+    if(idx>=0) caps[idx].lista_cerrada=cerrar;
+    setSyncStatus('ok');
+    toast(cerrar?'🔒 Lista cerrada':'🔓 Lista abierta');
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+// ── ELIMINAR NO SELECCIONADOS (padrón no agregados a lista) ─────────────────
+async function limpiarNoEnLista(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  // Recalcular posibles del padrón
+  const _deps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+  const esGlob=!c.un&&!_deps.length;
+  const esInd=c.tipo_codigo==='INDUCCION';
+  let padronRef=[];
+  if(esInd&&c.fecha){
+    const [yy,mm]=c.fecha.split('-');
+    padronRef=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!p.fecha_calculo_antiguedad) return false;
+      const parts=p.fecha_calculo_antiguedad.split('-');
+      return parseInt(parts[0])===parseInt(yy)&&parseInt(parts[1])===parseInt(mm);
+    });
+  } else {
+    padronRef=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!esGlob){
+        if(c.un&&p.un!==c.un) return false;
+        if(_deps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_deps.includes(d)) return false;}
+      }
+      return true;
+    });
+  }
+  const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  if(!noEnLista.length){toast('No hay participantes del padrón fuera de la lista');return;}
+  if(!confirm(`Se eliminarán ${noEnLista.length} persona${noEnLista.length!==1?'s':''} del padrón que NO están en la lista de "${c.titulo}".
+
+Esta acción solo oculta los "Posibles" no confirmados. ¿Continuar?`)) return;
+  // No hay nada que borrar de la BD — son solo registros del padrón en memoria
+  // Lo que hacemos es cerrar la lista automáticamente para que dejen de mostrarse
+  if(!c.lista_cerrada){
+    await api('PATCH','capacitaciones',{lista_cerrada:true},`?id=eq.${capId}`);
+    const idx=caps.findIndex(x=>x.id===capId);
+    if(idx>=0) caps[idx].lista_cerrada=true;
+    toast(`Lista cerrada — los ${noEnLista.length} no seleccionados ya no se muestran`);
+  } else {
+    toast(`Los ${noEnLista.length} del padrón ya no se muestran (lista cerrada)`);
+  }
+  buildDetail(capId);
+  renderContent();
+}
+
 function openAgregarParticipante(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
   const a=getA(capId);
   const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
   let activosPadron=[];
   const esGlobal=padron.length&&!c.un&&!c.departamento;
-  const tienePadronFiltro=padron.length&&(c.un||c.departamento);
+  const _agDeps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+  const tienePadronFiltro=padron.length&&(c.un||_agDeps.length);
   if(esGlobal){
     activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
   } else if(tienePadronFiltro){
     activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(c.un&&p.un!==c.un) return false;
-      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      if(_agDeps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_agDeps.includes(d)) return false;}
       return true;
     });
   }
@@ -4051,38 +4160,13 @@ async function agregarParticipanteIndividual(capId){
   try{
     setSyncStatus('syncing');
     const esMeta=padron.length>0?!!getPadronEmpleado(legajo):true;
-    const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector:'',departamento:depto,cuil,completo:false,en_meta:esMeta},'');
+    const capObjA=caps.find(x=>x.id===capId);
+  const esCerradaA=!!(capObjA&&capObjA.lista_cerrada);
+  const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector:'',departamento:depto,cuil,completo:false,en_meta:esMeta,agregado_post_cierre:esCerradaA||null},'');
     const nv=Array.isArray(r)?r[0]:r;
     if(nv) asistentes.push(nv);
     const capObj=caps.find(x=>x.id===capId);
-    if(capObj){
-      if(capObj.tipo_codigo==='INDUCCION'){
-        // Para INDUCCION: solo incrementar si el empleado NO estaba en los posibles del padrón del mes
-        const posiblesDelMes=calcularPosiblesInduccion(capObj);
-        const padronMesLegajos=new Set(
-          padron.filter(p=>{
-            if(p.estado&&p.estado!=='Vigente') return false;
-            if(!p.fecha_calculo_antiguedad||!capObj.fecha) return false;
-            const fp=p.fecha_calculo_antiguedad.split('-');
-            const fc=capObj.fecha.split('-');
-            return parseInt(fp[0])===parseInt(fc[0])&&parseInt(fp[1])===parseInt(fc[1]);
-          }).map(p=>String(p.legajo))
-        );
-        if(!padronMesLegajos.has(String(legajo))){
-          // Es un extra fuera del padrón del mes → acumular en participantes_esperados
-          const nuevosExtras=(capObj.participantes_esperados||0)+1;
-          await api('PATCH','capacitaciones',{participantes_esperados:nuevosExtras},`?id=eq.${capId}`);
-          capObj.participantes_esperados=nuevosExtras;
-        }
-      } else {
-        // Otros tipos: actualizar si supera el valor actual
-        const totalNuevo=getA(capId).length;
-        if(totalNuevo>(capObj.participantes_esperados||0)){
-          await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
-          capObj.participantes_esperados=totalNuevo;
-        }
-      }
-    }
+    // Esperados ahora = lista de asistentes — no actualizamos participantes_esperados
     setSyncStatus('ok');
     toast(`${nombre} agregado`);
     openAgregarParticipante(capId);
@@ -4101,37 +4185,14 @@ async function confirmarAgregarSeleccionados(capId){
   try{
     setSyncStatus('syncing');
     for(const p of nuevos){
-      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,completo:false,en_meta:true},'');
+      const _capC=caps.find(x=>x.id===capId);
+      const _esCerC=!!(_capC&&_capC.lista_cerrada);
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,completo:false,en_meta:true,agregado_post_cierre:_esCerC||null},'');
       const nv=Array.isArray(r)?r[0]:r;
       if(nv) asistentes.push(nv);
     }
     const capObj=caps.find(x=>x.id===capId);
-    if(capObj){
-      if(capObj.tipo_codigo==='INDUCCION'){
-        // Contar cuántos de los nuevos NO estaban en el padrón del mes (extras que mueven la meta)
-        const padronMesLegajos=new Set(
-          padron.filter(p=>{
-            if(p.estado&&p.estado!=='Vigente') return false;
-            if(!p.fecha_calculo_antiguedad||!capObj.fecha) return false;
-            const fp=p.fecha_calculo_antiguedad.split('-');
-            const fc=capObj.fecha.split('-');
-            return parseInt(fp[0])===parseInt(fc[0])&&parseInt(fp[1])===parseInt(fc[1]);
-          }).map(p=>String(p.legajo))
-        );
-        const extrasCount=nuevos.filter(n=>!padronMesLegajos.has(String(n.legajo))).length;
-        if(extrasCount>0){
-          const nuevosExtras=(capObj.participantes_esperados||0)+extrasCount;
-          await api('PATCH','capacitaciones',{participantes_esperados:nuevosExtras},`?id=eq.${capId}`);
-          capObj.participantes_esperados=nuevosExtras;
-        }
-      } else {
-        const totalNuevo=getA(capId).length;
-        if(totalNuevo>(capObj.participantes_esperados||0)){
-          await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
-          capObj.participantes_esperados=totalNuevo;
-        }
-      }
-    }
+    // Esperados ahora = lista de asistentes — no actualizamos participantes_esperados
     setSyncStatus('ok');
     toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);
     openAgregarParticipante(capId);

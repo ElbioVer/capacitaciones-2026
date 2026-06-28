@@ -3320,8 +3320,9 @@ async function saveCap(id){
     } else {
       await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);
       const idx=caps.findIndex(c=>c.id===Number(id));
+      // Leer capAnterior ANTES de sobreescribir para poder comparar
+      const capAnterior=idx>=0?{...caps[idx]}:{};
       if(idx>=0)caps[idx]={...caps[idx],...obj};
-      const capAnterior=caps[idx]||{};
       const cambioUnDepto=(capAnterior.un!==obj.un||capAnterior.departamento!==obj.departamento);
       if(cambioUnDepto){
         // Mostrar modal de opciones en lugar de confirm nativo
@@ -3342,11 +3343,12 @@ async function mostrarModalActualizarParticipantes(capId, un, departamento){
     card.style.cssText='background:#fff;border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)';
     // Contar activos nuevos y los que se podrían eliminar
     const esGlobalModal=!un&&!departamento;
+    const _modalDeps=departamento?departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
     const activosPadron=padron.filter(p=>{
       if(p.estado&&p.estado!=='Vigente') return false;
       if(!esGlobalModal){
         if(un&&p.un!==un) return false;
-        if(departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==departamento.trim()) return false;}
+        if(_modalDeps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_modalDeps.includes(d)) return false;}
       }
       return true;
     });
@@ -4195,7 +4197,7 @@ async function confirmarAgregarSeleccionados(capId){
     // Esperados ahora = lista de asistentes — no actualizamos participantes_esperados
     setSyncStatus('ok');
     toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);
-    openAgregarParticipante(capId);
+    buildDetail(capId);
     renderContent();
   }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
 }

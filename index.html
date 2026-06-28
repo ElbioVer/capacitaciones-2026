@@ -4192,19 +4192,24 @@ async function confirmarAgregarSeleccionados(capId){
     setSyncStatus('syncing');
     const _capC=caps.find(x=>x.id===capId);
     const _esCerC=!!(_capC&&_capC.lista_cerrada);
-    const payload=nuevos.map(p=>({
-      capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,
-      un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,
-      completo:false,en_meta:true,
-      agregado_post_cierre:_esCerC||null
-    }));
-    // Insertar en lote de hasta 50, ignorando duplicados
+    // Consultar BD para saber qué legajos ya existen — evita duplicados sin necesitar constraint
+    const yaEnBD=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&select=legajo`);
+    const legajosBD=new Set((yaEnBD||[]).map(x=>String(x.legajo)));
+    const payload=nuevos
+      .filter(p=>!legajosBD.has(String(p.legajo)))
+      .map(p=>({
+        capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,
+        un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,
+        completo:false,en_meta:true,
+        agregado_post_cierre:_esCerC||null
+      }));
+    // Insertar en lotes de 50
     const LOTE=50;
     for(let i=0;i<payload.length;i+=LOTE){
       const lote=payload.slice(i,i+LOTE);
-      await api('POST','asistentes',lote,'?on_conflict=capacitacion_id,legajo',{'Prefer':'resolution=ignore-duplicates,return=representation'});
+      await api('POST','asistentes',lote,'');
     }
-    // Recargar asistentes de esta cap desde el servidor para tener el estado real
+    // Recargar asistentes completos de esta cap desde el servidor
     const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
     if(frescos){
       asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);

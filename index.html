@@ -494,7 +494,7 @@ async function loadAll(){
   try{
     const queries=[
       api('GET','capacitaciones','','?order=fecha.asc'),
-      api('GET','asistentes','','?order=nombre.asc'),
+      api('GET','asistentes','','?order=id.asc&limit=1000&offset=0'),
       api('GET','unidades_negocio','','?order=nombre.asc'),
       api('GET','sectores','','?order=nombre.asc'),
       api('GET','tipos_capacitacion','','?activo=eq.true&order=codigo.asc'),
@@ -505,8 +505,21 @@ async function loadAll(){
     ];
     if(isAdmin()) queries.push(api('GET','usuarios','','?order=nombre.asc'));
     const res=await Promise.all(queries);
-    caps=res[0]||[];asistentes=res[1]||[];uns=res[2]||[];sectores=res[3]||[];
+    caps=res[0]||[];uns=res[2]||[];sectores=res[3]||[];
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
+    // Cargar asistentes con paginación (soporta miles de registros)
+    let asisAcum=res[1]||[];
+    let offset=1000;
+    while(asisAcum.length===offset){
+      try{
+        const sig=await api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${offset}`);
+        if(!sig||!sig.length) break;
+        asisAcum=[...asisAcum,...sig];
+        offset+=1000;
+        if(offset>20000) break; // tope de seguridad
+      }catch(e){break;}
+    }
+    asistentes=asisAcum;
     // Cargar padrón con paginación para soportar hasta 2000 registros
     let padronPage1=res[8]||[];
     if(padronPage1.length===1000){
@@ -5941,7 +5954,13 @@ async function importarMasivaParticipantes(event){
 }
 
 
-setInterval(()=>{if(currentUser)loadAll();},30000);
+setInterval(()=>{
+  if(!currentUser) return;
+  // No recargar si hay un modal abierto (evita perder contexto de trabajo)
+  const modal=document.getElementById('modal-overlay');
+  if(modal&&modal.classList.contains('open')) return;
+  loadAll();
+},30000);
 
 // Validación de CDN al arranque (solo consola, sin cartel visual)
 (function checkCDNs(){

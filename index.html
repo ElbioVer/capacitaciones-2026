@@ -2028,18 +2028,19 @@ function buildDetail(id){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const tableHead=`<thead><tr><th style="width:52px">Legajo</th><th class="col-nombre">Nombre</th><th class="col-cuil" style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr><th style="width:35px;text-align:center">#</th><th style="width:52px">Legajo</th><th class="col-nombre">Nombre</th><th class="col-cuil" style="width:80px">CUIL</th><th style="width:75px">Depto</th><th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
 
-  function buildRow(x, esFaltantePadron=false){
+  function buildRow(x, esFaltantePadron=false, index=null){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
     if(esFaltantePadron){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
         :'';
-      return`<tr style="background:#FFFAF0"><td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
+      return`<tr style="background:#FFFAF0">${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td><td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
@@ -2047,24 +2048,24 @@ function buildDetail(id){
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
     const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
-    return`<tr><td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td><td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view
   // Todos los de la lista (meta + ext)
-  const todasFilasLista=a.map(x=>buildRow(x,false));
+  const todasFilasLista=a.map((x,i)=>buildRow(x,false,i));
   // faltantesSolopadron ya calculado arriba como faltantesPadronNoEnLista (legajosEnLista también ya declarado)
   const faltantesSolopadron=faltantesPadronNoEnLista;
-  const filasFaltantesPadron=faltantesSolopadron.map(p=>buildRow({
+  const filasFaltantesPadron=faltantesSolopadron.map((p,i)=>buildRow({
     legajo:p.legajo,nombre:p.nombre,
     // Buscar cuil en todas las variantes posibles (columna propia o datos_extra)
     cuil:p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||p.datos_extra?.cuil||'',
     departamento:p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'',
     datos_extra:p.datos_extra||{},
     completo:false,nota:null,fecha_evaluacion:null
-  },true));
+  },true,a.length+i));  // índice comienza después de los de la lista
   // Faltantes de la lista (en lista pero sin completar)
-  const filasListaSinCompletar=a.filter(x=>!x.completo).map(x=>buildRow(x,false));
+  const filasListaSinCompletar=a.filter(x=>!x.completo).map((x,i)=>buildRow(x,false,i));
 
   const emptyMsg=`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-top:6px">${canManageParticipants()?'Sin asistentes. Importá desde Excel o registrá con ✍ Papel.':'Sin asistentes registrados.'}</div>`;
 
@@ -2094,11 +2095,14 @@ function buildDetail(id){
   // guardar filas en window para el filtro
   window[`_asisData_${id}`]={
     todos:todasFilasLista.join('')+filasFaltantesPadron.join(''),
-    completaron:a.filter(x=>x.completo).map(x=>buildRow(x,false)).join(''),
+    completaron:a.filter(x=>x.completo).map((x,i)=>buildRow(x,false,i)).join(''),
     faltantes:filasListaSinCompletar.join('')+filasFaltantesPadron.join(''),
     noenlista:filasFaltantesPadron.join(''),
     tableHead
   };
+
+  // Guardar legajos no en lista para cuando se abre agregar desde ese filtro
+  window[`_noEnListaLegajos_${id}`]=new Set(faltantesSolopadron.map(p=>String(p.legajo)));
 
   // repositorio
   let repoHtml='';
@@ -4076,7 +4080,13 @@ function openAgregarParticipante(capId){
       return true;
     });
   }
-  const pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  // Si estamos en vista 'noenlista', filtrar a solo los del padrón no agregados
+  const vistaActiva=window[`_asisVista_${capId}`];
+  const noEnListaLegajos=window[`_noEnListaLegajos_${capId}`]||new Set();
+  let pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  if(vistaActiva==='noenlista'&&noEnListaLegajos.size>0){
+    pendientes=pendientes.filter(p=>noEnListaLegajos.has(String(p.legajo)));
+  }
   const listaPadronHtml=pendientes.length
     ?`<div style="max-height:240px;overflow-y:auto;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:12px">
         <table style="width:100%;border-collapse:collapse;font-size:11px">

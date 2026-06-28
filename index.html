@@ -4183,40 +4183,52 @@ async function agregarParticipanteIndividual(capId){
 async function confirmarAgregarSeleccionados(capId){
   const checks=[...document.querySelectorAll('.chk-padron-item:checked')];
   if(!checks.length){alert('Seleccioná al menos un participante');return;}
-  const a=getA(capId);
-  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
-  const nuevos=checks.filter(c=>!legajosEnLista.has(String(c.value))).map(c=>({legajo:c.value,nombre:c.dataset.nombre,cuil:c.dataset.cuil,departamento:c.dataset.depto,un:c.dataset.un,sector:c.dataset.sector}));
-  if(!nuevos.length){toast('Todos los seleccionados ya están en la lista');return;}
-  if(!confirm(`¿Agregar ${nuevos.length} participante${nuevos.length!==1?'s':''} a esta capacitación?`)) return;
+  if(!confirm(`¿Agregar ${checks.length} participante${checks.length!==1?'s':''} a esta capacitación?`)) return;
   try{
     setSyncStatus('syncing');
     const _capC=caps.find(x=>x.id===capId);
     const _esCerC=!!(_capC&&_capC.lista_cerrada);
-    // Consultar BD para saber qué legajos ya existen — evita duplicados sin necesitar constraint
-    const yaEnBD=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&select=legajo`);
+    // Siempre consultar BD fresca para evitar duplicados — no confiar en memoria
+    const yaEnBD=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&select=legajo,id`);
     const legajosBD=new Set((yaEnBD||[]).map(x=>String(x.legajo)));
-    const payload=nuevos
-      .filter(p=>!legajosBD.has(String(p.legajo)))
-      .map(p=>({
-        capacitacion_id:capId,legajo:p.legajo,nombre:p.nombre,
-        un:p.un,sector:p.sector,departamento:p.departamento,cuil:p.cuil,
-        completo:false,en_meta:true,
+    // Filtrar solo los que NO están en BD
+    const payload=checks
+      .filter(c=>!legajosBD.has(String(c.value)))
+      .map(c=>({
+        capacitacion_id:capId,
+        legajo:c.value,
+        nombre:c.dataset.nombre,
+        un:c.dataset.un,
+        sector:c.dataset.sector,
+        departamento:c.dataset.depto,
+        cuil:c.dataset.cuil,
+        completo:false,
+        en_meta:true,
         agregado_post_cierre:_esCerC||null
       }));
-    // Insertar en lotes de 50
-    const LOTE=50;
-    for(let i=0;i<payload.length;i+=LOTE){
-      const lote=payload.slice(i,i+LOTE);
-      await api('POST','asistentes',lote,'');
+    if(!payload.length){
+      // Todos ya estaban — recargar y mostrar
+      const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
+      if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
+      setSyncStatus('ok');toast('Todos los seleccionados ya estaban en la lista');
+      buildDetail(capId);renderContent();return;
     }
-    // Recargar asistentes completos de esta cap desde el servidor
+    // Insertar de a UNO para detectar errores individuales sin cortar el lote
+    let insertados=0;
+    for(const p of payload){
+      try{
+        const r=await api('POST','asistentes',p,'');
+        const nv=Array.isArray(r)?r[0]:r;
+        if(nv){asistentes.push(nv);insertados++;}
+      }catch(err){
+        console.warn('No se pudo insertar legajo',p.legajo,err.message);
+      }
+    }
+    // Recargar desde servidor para estado real
     const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
-    if(frescos){
-      asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
-      asistentes=[...asistentes,...frescos];
-    }
+    if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
     setSyncStatus('ok');
-    toast(`${nuevos.length} participante${nuevos.length!==1?'s':''} agregado${nuevos.length!==1?'s':''}`);
+    toast(`${insertados} participante${insertados!==1?'s':''} agregado${insertados!==1?'s':''}`);
     buildDetail(capId);
     renderContent();
   }catch(e){setSyncStatus('error');toast('Error: '+e.message);}

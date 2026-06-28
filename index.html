@@ -4983,22 +4983,22 @@ function renderGantt(){
   const mesHeaders=meses.map((m,i)=>{
     const hoy=new Date();
     const actual=(hoy.getFullYear()===year&&hoy.getMonth()===i);
-    return `<th style="min-width:${colW}px;width:${colW}px;text-align:center;padding:5px 2px;font-size:10px;background:${actual?'#0D1F5C':'#1A2F6E'};color:#fff;border-right:1px solid rgba(255,255,255,0.12);${actual?'box-shadow:inset 0 -2px 0 #EF9F27':''}">${m}${actual?' ◀':''}</th>`;
+    return `<th style="min-width:${colW}px;width:${colW}px;text-align:center;padding:5px 2px;font-size:10px;background:${actual?'#0D1F5C':'#1A2F6E'};color:#fff;border-right:1px solid rgba(255,255,255,0.12);position:sticky;top:0;z-index:2;${actual?'box-shadow:inset 0 -2px 0 #EF9F27':''}">${m}${actual?' ◀':''}</th>`;
   }).join('');
 
   let rows='';
   Object.keys(grupos).sort().forEach(un=>{
-    rows+=`<tr style="background:#EAF0FC"><td style="padding:5px 10px;font-size:11px;font-weight:700;color:#1A2F6E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #d0ddf0">📁 ${esc(un)}</td>${meses.map(()=>`<td style="background:#EAF0FC;border-right:1px solid #d8e5f4;border-bottom:1px solid #d0ddf0"></td>`).join('')}</tr>`;
+    rows+=`<tr style="background:#EAF0FC"><td style="padding:5px 10px;font-size:11px;font-weight:700;color:#1A2F6E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #d0ddf0;position:sticky;left:0;z-index:1;background:#EAF0FC">📁 ${esc(un)}</td>${meses.map(()=>`<td style="background:#EAF0FC;border-right:1px solid #d8e5f4;border-bottom:1px solid #d0ddf0"></td>`).join('')}</tr>`;
     Object.keys(grupos[un]).sort().forEach(dep=>{
       const capsDepto=grupos[un][dep];
-      rows+=`<tr style="background:#F4F7FF"><td style="padding:3px 10px 3px 20px;font-size:10px;font-weight:600;color:#3A5A9E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #e5eaf8">${esc(dep)}</td>${meses.map(()=>`<td style="background:#F4F7FF;border-right:1px solid #eaeef8;border-bottom:1px solid #e5eaf8"></td>`).join('')}</tr>`;
+      rows+=`<tr style="background:#F4F7FF"><td style="padding:3px 10px 3px 20px;font-size:10px;font-weight:600;color:#3A5A9E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #e5eaf8;position:sticky;left:0;z-index:1;background:#F4F7FF">${esc(dep)}</td>${meses.map(()=>`<td style="background:#F4F7FF;border-right:1px solid #eaeef8;border-bottom:1px solid #e5eaf8"></td>`).join('')}</tr>`;
       capsDepto.forEach(cap=>{
         const estado=estadoCap(cap);
         const color=statusColors[estado]||'#bbb';
-        // Calcular % cumplimiento de esta cap
-        const asist=getA(cap.id);
-        const esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:asist.length;
-        const comp=asist.filter(a=>a.completo).length;
+        // Calcular % cumplimiento usando métricas centralizadas
+        const _mg=metricas(cap);
+        const esp=_mg.esperados;
+        const comp=_mg.comp;
         const pctNum=esp>0?Math.round(comp/esp*100):(estado==='Realizada'?100:0);
         const pctLabel=esp>0||estado==='Realizada'?pctNum+'%':'';
         const ff=fechaFinCap(cap)||cap.fecha;
@@ -5018,7 +5018,7 @@ function renderGantt(){
           }
           return `<td style="${bdr};background:${alt}"></td>`;
         }).join('');
-        rows+=`<tr><td style="padding:2px 10px 2px 28px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #f0f3fb;cursor:pointer" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>${esc(cap.titulo)}</td>${celdas}</tr>`;
+        rows+=`<tr><td style="padding:2px 10px 2px 28px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #f0f3fb;cursor:pointer;position:sticky;left:0;z-index:1;background:#fff" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>${esc(cap.titulo)}</td>${celdas}</tr>`;
       });
     });
   });
@@ -5032,14 +5032,14 @@ function renderGantt(){
       <div class="plan-block-title" style="margin:0">📅 Gantt de Capacitaciones ${year}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${leyenda}</div>
     </div>
-    <div style="overflow-x:auto;width:100%">
+    <div style="overflow:auto;width:100%;max-height:70vh;position:relative;border:1px solid #e5e5e5;border-radius:8px">
       <table style="border-collapse:collapse;width:100%;min-width:${labelW+colW*12}px;table-layout:fixed">
         <colgroup>
           <col style="width:${labelW}px;min-width:${labelW}px">
           ${meses.map(()=>`<col style="width:${colW}px;min-width:${colW}px">`).join('')}
         </colgroup>
         <thead><tr style="background:#1A2F6E">
-          <th style="text-align:left;padding:6px 10px;font-size:11px;color:#fff;border-right:2px solid rgba(255,255,255,0.2)">UN / Departamento</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px;color:#fff;border-right:2px solid rgba(255,255,255,0.2);position:sticky;top:0;left:0;z-index:3;background:#1A2F6E">UN / Departamento</th>
           ${mesHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>

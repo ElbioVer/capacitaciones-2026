@@ -244,7 +244,9 @@ select.form-input{cursor:pointer}
   .content { padding: 0 !important; overflow: visible !important; height: auto !important; min-width: 0 !important; }
   .print-header { display: flex !important; align-items: center; justify-content: space-between; border-bottom: 2px solid #1A2F6E; padding-bottom: 6px; margin-bottom: 10px; }
   .plan-block { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; margin-bottom: 6mm !important; }
-  canvas { max-width: 100% !important; }
+  /* Imágenes de gráficos: mostrar con sus dimensiones capturadas */
+  .__print_img__ { display: block !important; max-width: 100% !important; height: auto !important; }
+  canvas { display: none !important; }
   button, .btn-prim, .btn-gray, .btn-green { display: none !important; }
   .print-only { display: block !important; }
   /* Print height scaling: set via --print-pages custom property */
@@ -5038,25 +5040,37 @@ function imprimirTab(tabName) {
     ''
   );
 
-  // Convertir charts a imágenes estáticas para que se impriman
-  const canvases = document.getElementById('content').querySelectorAll('canvas');
-  const snapshots = [];
-  canvases.forEach(c => {
+  // Convertir charts a imágenes estáticas para que se impriman correctamente
+  const wrappers = []; // { wrapper, originalHTML, img }
+  const content = document.getElementById('content');
+
+  content.querySelectorAll('canvas').forEach(canvas => {
     try {
-      const dataUrl = c.toDataURL('image/png');
-      snapshots.push({ canvas: c, dataUrl, origStyle: c.style.cssText });
-      // Reemplazar canvas con img temporalmente
+      const wrapper = canvas.parentNode;
+      // Capturar dimensiones reales del canvas renderizado
+      const w = canvas.offsetWidth || wrapper.offsetWidth || 400;
+      const h = canvas.offsetHeight || wrapper.offsetHeight || 260;
+      const dataUrl = canvas.toDataURL('image/png');
+
       const img = document.createElement('img');
       img.src = dataUrl;
-      img.style.cssText = 'width:100%;height:100%;object-fit:contain;position:absolute;inset:0';
       img.className = '__print_img__';
-      c.style.display = 'none';
-      c.parentNode.appendChild(img);
+      img.style.cssText = `display:block;width:${w}px;height:${h}px;max-width:100%;object-fit:contain`;
+
+      // Guardar HTML original del wrapper y reemplazar su contenido
+      const originalHTML = wrapper.innerHTML;
+      wrappers.push({ wrapper, originalHTML });
+
+      // Quitar position:relative/absolute para que el img fluya normalmente en print
+      const origWrapStyle = wrapper.style.cssText;
+      wrapper.dataset.__origStyle = origWrapStyle;
+      wrapper.style.cssText = `height:${h}px;width:100%;overflow:hidden`;
+      wrapper.innerHTML = '';
+      wrapper.appendChild(img);
     } catch(e) { console.warn('No se pudo capturar canvas:', e); }
   });
 
   // Agregar encabezado de impresión temporal
-  const content = document.getElementById('content');
   const logoEl = document.querySelector('.hdr-logo-img');
   const logoSrc = logoEl ? logoEl.src : '';
   const now = new Date();
@@ -5085,7 +5099,6 @@ function imprimirTab(tabName) {
   const nPags = parseInt(paginas);
   if (!isNaN(nPags) && nPags >= 1) {
     const contentH = content.scrollHeight;
-    // A4 landscape: 277mm alto de contenido aprox → 1050px a 96dpi
     const pageHeightPx = nPags * 1050;
     const scale = Math.min(1, pageHeightPx / contentH);
     styleOverride = document.createElement('style');
@@ -5101,14 +5114,34 @@ function imprimirTab(tabName) {
 
   // Restaurar todo después de imprimir
   setTimeout(() => {
-    // Quitar imgs temporales y mostrar canvas
-    document.querySelectorAll('.__print_img__').forEach(img => img.remove());
-    canvases.forEach(c => { c.style.display = ''; });
+    // Restaurar wrappers con su contenido original (incluyendo los canvas con Chart.js)
+    wrappers.forEach(({ wrapper, originalHTML }) => {
+      const origStyle = wrapper.dataset.__origStyle || '';
+      wrapper.style.cssText = origStyle;
+      delete wrapper.dataset.__origStyle;
+      wrapper.innerHTML = originalHTML;
+    });
     // Quitar encabezado
     const h = document.getElementById('__print_hdr__');
     if (h) h.remove();
     // Quitar override de escala
     if (styleOverride) styleOverride.remove();
+    // Re-renderizar los charts porque el innerHTML fue restaurado (canvas vacíos)
+    if (currentTab === 'indicadores') {
+      try {
+        const gEl = document.getElementById('ind-data-general');
+        const rEl = document.getElementById('ind-data-remo');
+        const cEl = document.getElementById('ind-data-cuatri');
+        if (gEl && rEl && cEl) {
+          const _d = JSON.parse(gEl.textContent);
+          const _r = JSON.parse(rEl.textContent);
+          const _c = JSON.parse(cEl.textContent);
+          waitForChart(() => renderIndicadoresCharts(_d, _r, _c));
+        }
+      } catch(e) { console.warn('Re-render charts error:', e); }
+    } else if (currentTab === 'resumen') {
+      waitForChart(renderCharts);
+    }
   }, 1500);
 }
 

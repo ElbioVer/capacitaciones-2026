@@ -138,11 +138,6 @@ select.form-input{cursor:pointer}
 .legajo-table th{text-align:left;padding:5px 7px;background:#f4f4f2;color:#888;font-weight:600;font-size:10px;border-bottom:1px solid #eee}
 .legajo-table td{padding:5px 7px;border-bottom:1px solid #f0f0ec;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .legajo-table tr:last-child td{border-bottom:none}
-/* Columnas ordenables */
-.th-sortable{cursor:pointer;user-select:none;white-space:nowrap}
-.th-sortable:hover{background:#e8e8e4;color:#333}
-.th-sortable.sort-asc::after{content:' ▲';font-size:8px;color:#1D9E75}
-.th-sortable.sort-desc::after{content:' ▼';font-size:8px;color:#1D9E75}
 /* Mobile: tabla de asistentes */
 @media(max-width:640px){
   .col-cuil{display:none !important}
@@ -175,10 +170,6 @@ select.form-input{cursor:pointer}
 .opcion-label.correct{border-color:#1D9E75;background:#E1F5EE}
 .opcion-label.wrong{border-color:#E24B4A;background:#FCEBEB}
 .opcion-radio{width:14px;height:14px;accent-color:#1D9E75;flex-shrink:0}
-.opcion-check{width:14px;height:14px;accent-color:#1D9E75;flex-shrink:0;border-radius:3px}
-.multi-hint{font-size:10px;color:#185FA5;background:#EEF4FF;border:1px solid #C5D8F8;border-radius:5px;padding:2px 7px;margin-bottom:6px;display:inline-block}
-.peso-badge{font-size:10px;background:#F0F0FF;color:#3730A3;border:1px solid #C7D2FE;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:600}
-.modo-badge{font-size:10px;background:#FFF7ED;color:#854F0B;border:1px solid #FDE68A;border-radius:4px;padding:1px 6px;margin-left:4px}
 /* PLAN BLOCKS */
 .plan-block{background:#fff;border-radius:12px;border:1px solid #e5e5e0;padding:12px;margin-bottom:8px}
 .plan-block-title{font-size:13px;font-weight:600;color:#111;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
@@ -237,8 +228,17 @@ select.form-input{cursor:pointer}
 @media(max-width:640px){
   [style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"],[style*="grid-template-columns:minmax(0,auto) minmax(0,1fr)"]{grid-template-columns:1fr !important}
 }
-
-/* ── PRINT STYLES ─────────────────────────────────────── */
+/* ── SORTABLE HEADERS ── */
+.th-sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.th-sortable:hover{background:#e8e8e4;color:#333}
+.th-sortable.sort-asc::after{content:' ▲';font-size:8px;color:#1D9E75}
+.th-sortable.sort-desc::after{content:' ▼';font-size:8px;color:#1D9E75}
+/* ── EVAL MULTI-RESPUESTA ── */
+.opcion-check{width:14px;height:14px;accent-color:#1D9E75;border-radius:3px;flex-shrink:0}
+.multi-hint{font-size:10px;color:#185FA5;background:#EEF4FF;border:1px solid #C5D8F8;border-radius:5px;padding:2px 7px;margin-bottom:6px;display:inline-block}
+.peso-badge{font-size:10px;background:#F0F0FF;color:#3730A3;border:1px solid #C7D2FE;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:600}
+.modo-badge{font-size:10px;background:#FFF7ED;color:#854F0B;border:1px solid #FDE68A;border-radius:4px;padding:1px 6px;margin-left:4px}
+/* ── PRINT ── */
 @media print {
   @page { size: A4 landscape; margin: 10mm 12mm; }
   html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
@@ -248,13 +248,10 @@ select.form-input{cursor:pointer}
   .content { padding: 0 !important; overflow: visible !important; height: auto !important; min-width: 0 !important; }
   .print-header { display: flex !important; align-items: center; justify-content: space-between; border-bottom: 2px solid #1A2F6E; padding-bottom: 6px; margin-bottom: 10px; }
   .plan-block { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; margin-bottom: 6mm !important; }
-  /* Imágenes de gráficos: mostrar con sus dimensiones capturadas */
   .__print_img__ { display: block !important; max-width: 100% !important; height: auto !important; }
   canvas { display: none !important; }
   button, .btn-prim, .btn-gray, .btn-green { display: none !important; }
   .print-only { display: block !important; }
-  /* Print height scaling: set via --print-pages custom property */
-  .print-content-wrap { height: auto !important; }
 }
 .print-header { display: none; }
 .print-only { display: none; }
@@ -658,24 +655,6 @@ function metricas(cap){
 function getMat(capId){return materiales.filter(m=>m.capacitacion_id===capId);}
 function getEval(capId){return evaluaciones.find(e=>e.capacitacion_id===capId);}
 function getTipo(codigo){return tipos.find(t=>t.codigo===codigo)||{codigo:'OTRO',nombre:'Otro',tiene_evaluacion:false,tiene_repositorio:false};}
-
-// Calcula el estado automático de una capacitación:
-// 'Realizada' → cap.estado==='Realizada' (fuente de verdad desde BD)
-// 'Vencida'   → fecha_fin pasada y no realizada
-// 'Pendiente' → fecha inicio pasada pero fecha_fin futura
-// 'Programada'→ aún no comenzó
-function estadoCap(cap){
-  if(!cap) return 'Programada';
-  if(cap.estado==='Realizada') return 'Realizada';
-  const hoy=new Date(); hoy.setHours(0,0,0,0);
-  const ffin=cap.fecha_fin?new Date(cap.fecha_fin+'T00:00:00'):null;
-  if(ffin&&!isNaN(ffin.getTime())&&ffin<hoy) return 'Vencida';
-  const finicio=cap.fecha?new Date(cap.fecha+'T00:00:00'):null;
-  if(finicio&&!isNaN(finicio.getTime())&&finicio<=hoy) return 'Pendiente';
-  return 'Programada';
-}
-// Alias para compatibilidad con código que usa 'En curso' / 'En Curso'
-function fechaFinCap(cap){return cap&&cap.fecha_fin?cap.fecha_fin:null;}
 
 function getFiltered(){
   const q=_searchQuery.toLowerCase().trim();
@@ -1968,9 +1947,7 @@ ALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEF
       <strong>titulo_evaluacion</strong> — nombre de la evaluación (opcional, usa el título de la cap si se omite)<br>
       <strong>pregunta *</strong> — texto de la pregunta<br>
       <strong>opcion_a *</strong> · <strong>opcion_b *</strong> · <strong>opcion_c</strong> · <strong>opcion_d</strong> — opciones de respuesta<br>
-      <strong>correctas *</strong> — letra(s) correctas: <code>A</code> (única) o <code>A,B,D</code> (múltiple separadas por coma)<br>
-      <strong>peso</strong> — puntos que vale la pregunta (número, default 1). Permite ponderar preguntas<br>
-      <strong>modo</strong> — <code>todas</code> (todo o nada) · <code>parcial</code> (puntaje proporcional a correctas marcadas)<br>
+      <strong>correcta *</strong> — letra de la opción correcta: A, B, C o D<br>
       <span style="color:#0D47A1">💡 Podés cargar preguntas para múltiples capacitaciones en un mismo Excel, una fila por pregunta.</span>
     </div>
     ${renderEvalConfigList()}
@@ -2212,11 +2189,6 @@ function buildDetail(id){
     noenlista:filasFaltantesPadron.join(''),
     tableHead
   };
-  // Guardar arrays raw para reordenar sin perder datos
-  window[`_asisRaw_${id}`]={
-    lista:a.map(x=>({...x,_esFaltPadron:false})),
-    faltPadron:faltantesSolopadron.map(p=>({legajo:p.legajo,nombre:p.nombre,cuil:p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',departamento:p.departamento||p.datos_extra?.Departamento||'',un:p.un||'',sector:p.sector||'',completo:false,nota:null,fecha_evaluacion:null,_esFaltPadron:true}))
-  };
   window[`_asisSort_${id}`]={campo:'legajo',dir:'asc'};
 
   // Guardar legajos no en lista para cuando se abre agregar desde ese filtro
@@ -2302,7 +2274,6 @@ function buildDetail(id){
           respFiltradas.forEach(r=>{
             const respObj=r.respuestas||{};
             pqsLocal.forEach((p,i)=>{
-              // Soporta: legacy (int), nuevo array, o array guardado como JSON string
               let sel=respObj[p.id];
               if(sel==null) sel=[];
               else if(!Array.isArray(sel)) sel=[sel];
@@ -2473,53 +2444,13 @@ function buildDetail(id){
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
 }
 
-// ===== filtrarAsistentes =====
-function filtrarAsistentes(vista, capId){
-  const data=window[`_asisData_${capId}`];
-  if(!data) return;
-  const tbody=document.getElementById('tbody-asis-'+capId);
-  if(!tbody) return;
-  // Actualizar botones de filtro
-  ['todos','completaron','faltantes','noenlista'].forEach(v=>{
-    const btn=document.getElementById('fab-'+v+'-'+capId);
-    if(!btn) return;
-    const isActive=v===vista;
-    if(v==='todos'||v==='completaron'){
-      btn.style.background=isActive?'#1D9E75':'#fff';
-      btn.style.color=isActive?'#fff':'#1D9E75';
-    } else if(v==='faltantes'){
-      btn.style.background=isActive?'#EF9F27':'#fff';
-      btn.style.color=isActive?'#fff':'#854F0B';
-    } else {
-      btn.style.background=isActive?'#555':'#fff';
-      btn.style.color=isActive?'#fff':'#555';
-    }
-  });
-  const rowsHtml=data[vista]||data.todos;
-  tbody.innerHTML=rowsHtml;
-  // Actualizar título de la sección según vista activa
-  const titleEl=document.querySelector(`[data-capid-title="${capId}"]`);
-  if(titleEl){
-    let newTitle='Asistentes';
-    if(vista==='completaron') newTitle='✓ Completaron';
-    else if(vista==='faltantes') newTitle='⚠ Faltantes';
-    else if(vista==='noenlista') newTitle='📋 No en lista';
-    else newTitle='Todos';
-    titleEl.textContent=newTitle;
-  }
-  // Re-aplicar orden vigente
-  const sortState=window[`_asisSort_${capId}`];
-  if(sortState) _aplicarOrdenTbody(capId, sortState.campo, sortState.dir, false);
-}
-
-// ===== ordenarAsistentes =====
+// ===== ORDENAR ASISTENTES =====
 function ordenarAsistentes(campo, capId){
   const state=window[`_asisSort_${capId}`]||{campo:'legajo',dir:'asc'};
   const dir=(state.campo===campo&&state.dir==='asc')?'desc':'asc';
   window[`_asisSort_${capId}`]={campo,dir};
   _aplicarOrdenTbody(capId, campo, dir, true);
 }
-
 function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
   const tbody=document.getElementById('tbody-asis-'+capId);
   if(!tbody) return;
@@ -2544,6 +2475,74 @@ function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
       if(c===campo) th.classList.add(dir==='asc'?'sort-asc':'sort-desc');
     });
   }
+}
+
+// ===== IMPRESIÓN =====
+function injectPrintBtn(container, tabName){
+  const label=tabName==='resumen'?'🖨 Imprimir Resumen':'🖨 Imprimir Indicadores';
+  const btn=document.createElement('button');
+  btn.className='print-btn';btn.textContent=label;
+  btn.onclick=()=>imprimirTab(tabName);
+  container.insertBefore(btn, container.firstChild);
+}
+function imprimirTab(tabName){
+  const paginas=prompt('¿Cuántas páginas de alto querés que ocupe el contenido?\n(Ingresá un número: 1, 2, 3…)\nDejá vacío para impresión automática.','');
+  const wrappers=[];
+  const content=document.getElementById('content');
+  content.querySelectorAll('canvas').forEach(canvas=>{
+    try{
+      const wrapper=canvas.parentNode;
+      const w=canvas.offsetWidth||wrapper.offsetWidth||400;
+      const h=canvas.offsetHeight||wrapper.offsetHeight||260;
+      const dataUrl=canvas.toDataURL('image/png');
+      const img=document.createElement('img');
+      img.src=dataUrl;img.className='__print_img__';
+      img.style.cssText=`display:block;width:${w}px;height:${h}px;max-width:100%;object-fit:contain`;
+      const originalHTML=wrapper.innerHTML;
+      wrappers.push({wrapper,originalHTML});
+      const origWrapStyle=wrapper.style.cssText;
+      wrapper.dataset.__origStyle=origWrapStyle;
+      wrapper.style.cssText=`height:${h}px;width:100%;overflow:hidden`;
+      wrapper.innerHTML='';wrapper.appendChild(img);
+    }catch(e){console.warn('No se pudo capturar canvas:',e);}
+  });
+  const logoEl=document.querySelector('.hdr-logo-img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const now=new Date();
+  const fechaStr=now.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  const tabLabel=tabName==='resumen'?'Resumen del Plan de Capacitación':'Indicadores de Capacitación';
+  const hdr=document.createElement('div');
+  hdr.className='print-header';hdr.id='__print_hdr__';
+  hdr.innerHTML=`<div style="display:flex;align-items:center;gap:10px">${logoSrc?`<img src="${logoSrc}" style="height:36px;width:auto">`:''}
+    <div><div style="font-size:14px;font-weight:700;color:#1A2F6E">${tabLabel}</div>
+    <div style="font-size:10px;color:#777">Plan de Capacitación 2026 — EMA Servicios</div></div></div>
+    <div style="text-align:right;font-size:10px;color:#777">Impreso: ${fechaStr}</div>`;
+  content.insertBefore(hdr, content.firstChild);
+  let styleOverride=null;
+  const nPags=parseInt(paginas);
+  if(!isNaN(nPags)&&nPags>=1){
+    const scale=Math.min(1,(nPags*1050)/content.scrollHeight);
+    styleOverride=document.createElement('style');
+    styleOverride.id='__print_scale__';
+    styleOverride.textContent=`@media print{#content{transform:scale(${scale.toFixed(4)});transform-origin:top left;width:${(100/scale).toFixed(2)}%;}}`;
+    document.head.appendChild(styleOverride);
+  }
+  window.print();
+  setTimeout(()=>{
+    wrappers.forEach(({wrapper,originalHTML})=>{
+      wrapper.style.cssText=wrapper.dataset.__origStyle||'';
+      delete wrapper.dataset.__origStyle;
+      wrapper.innerHTML=originalHTML;
+    });
+    const h=document.getElementById('__print_hdr__');if(h)h.remove();
+    if(styleOverride)styleOverride.remove();
+    if(currentTab==='indicadores'){
+      try{
+        const gEl=document.getElementById('ind-data-general'),rEl=document.getElementById('ind-data-remo'),cEl=document.getElementById('ind-data-cuatri');
+        if(gEl&&rEl&&cEl) waitForChart(()=>renderIndicadoresCharts(JSON.parse(gEl.textContent),JSON.parse(rEl.textContent),JSON.parse(cEl.textContent)));
+      }catch(e){}
+    } else if(currentTab==='resumen') waitForChart(renderCharts);
+  },1500);
 }
 
 // MATERIALES
@@ -2605,82 +2604,138 @@ async function saveNewEval(capId){
   }catch(e){toast('Error al crear');}
 }
 
+// ===== HELPERS EVALUACIÓN =====
+function getPqCorrectas(p){
+  if(Array.isArray(p.correctas)&&p.correctas.length) return p.correctas.map(Number);
+  if(p.correcta!=null) return [Number(p.correcta)];
+  return [0];
+}
+function pqEsMultiple(p){ return Array.isArray(p.correctas)&&p.correctas.length>1; }
+function getPqPeso(p){ return (p.peso!=null&&!isNaN(Number(p.peso)))?Number(p.peso):1; }
+function getPqModo(p){ return p.modo_puntuacion==='parcial'?'parcial':'todas'; }
+function calcPuntosPregunta(p, seleccionados){
+  const correctas=getPqCorrectas(p),peso=getPqPeso(p),modo=getPqModo(p);
+  const sel=seleccionados.map(Number);
+  const marcadasBien=sel.filter(s=>correctas.includes(s)).length;
+  const marcadasMal=sel.filter(s=>!correctas.includes(s)).length;
+  if(modo==='parcial'){return peso*(Math.max(0,marcadasBien-marcadasMal)/correctas.length);}
+  return (marcadasBien===correctas.length&&marcadasMal===0)?peso:0;
+}
+function calcPuntajeFinal(pqs, respuestasMap){
+  const pesoTotal=pqs.reduce((s,p)=>s+getPqPeso(p),0)||1;
+  const pts=pqs.reduce((s,p)=>{
+    const sel=respuestasMap[p.id]||[];
+    return s+calcPuntosPregunta(p,Array.isArray(sel)?sel:[sel]);
+  },0);
+  return Math.round(pts/pesoTotal*10*10)/10;
+}
+function buildPreguntaPublicaHtml(p, i, total){
+  const opts=p.opciones||[];
+  const letras=['A','B','C','D'];
+  const esMulti=pqEsMultiple(p);
+  const peso=getPqPeso(p);
+  const pesoBadge=peso!==1?'<span class="peso-badge" style="margin-left:6px">Peso '+peso+'</span>':'';
+  const optsHtml=opts.map((o,j)=>{
+    if(esMulti){
+      return '<label class="opcion-label" id="opt-'+p.id+'-'+j+'">'
+        +'<input class="opcion-check" type="checkbox" name="pq-'+p.id+'" value="'+j+'" onchange="toggleCheckOpcion('+p.id+','+j+')">'
+        +'<span><strong>'+letras[j]+'.</strong> '+esc(o)+'</span></label>';
+    }
+    return '<label class="opcion-label" id="opt-'+p.id+'-'+j+'">'
+      +'<input class="opcion-radio" type="radio" name="pq-'+p.id+'" value="'+j+'" onchange="selectOpcion('+p.id+','+j+','+opts.length+')">'
+      +'<span><strong>'+letras[j]+'.</strong> '+esc(o)+'</span></label>';
+  }).join('');
+  return '<div class="pregunta-item">'
+    +'<div class="pregunta-num">Pregunta '+(i+1)+' de '+total+pesoBadge+'</div>'
+    +(esMulti?'<div class="multi-hint">☑ Seleccioná todas las respuestas correctas</div>':'')
+    +'<div class="pregunta-texto">'+esc(p.pregunta)+'</div>'+optsHtml+'</div>';
+}
+function recogerRespuestasPublicas(pqs){
+  const respuestasMap={};
+  for(const p of pqs){
+    if(pqEsMultiple(p)){
+      const chks=[...document.querySelectorAll('input[name="pq-'+p.id+'"]:checked')];
+      if(!chks.length){alert('Respondé todas las preguntas antes de enviar');return null;}
+      respuestasMap[p.id]=chks.map(c=>parseInt(c.value));
+    } else {
+      const sel=document.querySelector('input[name="pq-'+p.id+'"]:checked');
+      if(!sel){alert('Respondé todas las preguntas antes de enviar');return null;}
+      respuestasMap[p.id]=[parseInt(sel.value)];
+    }
+  }
+  return respuestasMap;
+}
+function toggleCheckOpcion(pqId,val){
+  const el=document.getElementById('opt-'+pqId+'-'+val);
+  if(el){const chk=el.querySelector('input[type=checkbox]');el.classList.toggle('selected',chk?chk.checked:false);}
+}
+function _buildIncorrectasHtml(pqs, respuestasMap, aprobado){
+  const incorrectas=pqs.filter(p=>{
+    const sel=respuestasMap[p.id]||[];
+    return calcPuntosPregunta(p,Array.isArray(sel)?sel:[sel])<getPqPeso(p);
+  });
+  if(!incorrectas.length) return '';
+  const filas=incorrectas.map((p,i)=>{
+    const opts=Array.isArray(p.opciones)?p.opciones:[];
+    const sel=respuestasMap[p.id]||[];
+    const selArr=Array.isArray(sel)?sel:[sel];
+    const correctas=getPqCorrectas(p);
+    return '<div style="background:'+(aprobado?'#FFFBEB':'#FFF5F5')+';border:1px solid '+(aprobado?'#FAC775':'#FFD0D0')+';border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">'+(i+1)+'. '+esc(p.pregunta||'')+'</div>'
+      +'<div style="font-size:11px;color:#CC0000;margin-bottom:3px">✗ Tu respuesta: <strong>'+esc(selArr.map(s=>opts[s]||'—').join(', '))+'</strong></div>'
+      +'<div style="font-size:11px;color:#1D9E75">✓ Correcta: <strong>'+esc(correctas.map(c=>opts[c]||'—').join(', '))+'</strong></div>'
+    +'</div>';
+  }).join('');
+  return '<div style="margin-top:16px;text-align:left;border-top:1px solid #e5e5e0;padding-top:14px">'
+    +'<div style="font-size:13px;font-weight:700;color:'+(aprobado?'#854F0B':'#CC0000')+';margin-bottom:10px">'+(aprobado?'📝 Preguntas con error ('+incorrectas.length+')':'❌ Respuestas incorrectas ('+incorrectas.length+')')+'</div>'
+    +(aprobado?'<div style="font-size:12px;color:#777;margin-bottom:10px">Aprobaste, pero revisá estas respuestas:</div>':'')
+    +filas+'</div>';
+}
+
 function openEditEval(evalId,capId){
   const ev=evaluaciones.find(e=>e.id===evalId);if(!ev)return;
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   const letras=['A','B','C','D'];
-
   let pqsHtml=pqs.map((p,i)=>{
     const opts=p.opciones||[];
     const corrs=getPqCorrectas(p);
     const esMulti=pqEsMultiple(p);
     const peso=getPqPeso(p);
     const modo=getPqModo(p);
-
-    // Vista (solo lectura)
     const viewOpts=opts.map((o,j)=>{
       const esCorr=corrs.includes(j);
-      return '<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;'
-        +'background:'+(esCorr?'#E1F5EE':'#f4f4f2')+';color:'+(esCorr?'#085041':'#555')+'">'
-        +(esCorr?'✓ ':'')+esc(o)+'</div>';
+      return '<div style="font-size:11px;padding:3px 6px;border-radius:5px;margin-bottom:3px;background:'+(esCorr?'#E1F5EE':'#f4f4f2')+';color:'+(esCorr?'#085041':'#555')+'">'+(esCorr?'✓ ':'')+esc(o)+'</div>';
     }).join('');
     const pesoBadge=peso!==1?'<span class="peso-badge">Peso '+peso+'</span>':'';
     const modoBadge=esMulti?'<span class="modo-badge">'+(modo==='parcial'?'Ponderada':'Todas o nada')+'</span>':'';
     const multiBadge=esMulti?'<span style="font-size:10px;background:#E8EAF6;color:#1A2F6E;border:1px solid #9FA8DA;border-radius:4px;padding:1px 6px;margin-left:4px">Múltiple</span>':'';
-
-    // Formulario edición inline
-    const optInputs=opts.map((o,j)=>'<div class="form-group" style="margin-bottom:5px">'
-      +'<label class="form-label" style="font-size:11px">Opción '+letras[j]+'</label>'
-      +'<input class="form-input" id="pq-edit-opt-'+p.id+'-'+j+'" value="'+esc(o)+'" style="font-size:12px"></div>').join('');
-
-    const corrChecks=opts.map((_,j)=>'<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:12px;cursor:pointer">'
-      +'<input type="checkbox" id="pq-edit-corr-'+p.id+'-'+j+'" value="'+j+'" '+(corrs.includes(j)?'checked':'')
-      +' style="accent-color:#1D9E75;width:13px;height:13px"> '+letras[j]+'</label>').join('');
-
+    const optInputs=opts.map((o,j)=>'<div class="form-group" style="margin-bottom:5px"><label class="form-label" style="font-size:11px">Opción '+letras[j]+'</label><input class="form-input" id="pq-edit-opt-'+p.id+'-'+j+'" value="'+esc(o)+'" style="font-size:12px"></div>').join('');
+    const corrChecks=opts.map((_,j)=>'<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:12px;cursor:pointer"><input type="checkbox" id="pq-edit-corr-'+p.id+'-'+j+'" value="'+j+'" '+(corrs.includes(j)?'checked':'')+' style="accent-color:#1D9E75;width:13px;height:13px"> '+letras[j]+'</label>').join('');
     return '<div class="pregunta-item" id="pq-item-'+p.id+'" data-pqid="'+p.id+'">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'
         +'<div class="pregunta-num">Pregunta '+(i+1)+multiBadge+pesoBadge+modoBadge+'</div>'
         +'<div style="display:flex;gap:4px">'
           +'<button class="btn-sm blue" style="padding:2px 7px;font-size:11px" onclick="toggleEditPregunta('+p.id+','+evalId+','+capId+')">✎</button>'
           +'<button class="btn-sm red" style="padding:2px 7px;font-size:11px" onclick="delPregunta('+p.id+','+evalId+','+capId+')">×</button>'
-        +'</div>'
-      +'</div>'
-      +'<div id="pq-view-'+p.id+'">'
-        +'<div class="pregunta-texto">'+esc(p.pregunta)+'</div>'
-        +viewOpts
-      +'</div>'
+        +'</div></div>'
+      +'<div id="pq-view-'+p.id+'"><div class="pregunta-texto">'+esc(p.pregunta)+'</div>'+viewOpts+'</div>'
       +'<div id="pq-edit-'+p.id+'" style="display:none;background:#f9f9f7;border-radius:8px;padding:8px;margin-top:4px">'
-        +'<div class="form-group" style="margin-bottom:5px"><label class="form-label" style="font-size:11px">Pregunta</label>'
-          +'<input class="form-input" id="pq-edit-texto-'+p.id+'" value="'+esc(p.pregunta)+'" style="font-size:12px"></div>'
+        +'<div class="form-group" style="margin-bottom:5px"><label class="form-label" style="font-size:11px">Pregunta</label><input class="form-input" id="pq-edit-texto-'+p.id+'" value="'+esc(p.pregunta)+'" style="font-size:12px"></div>'
         +optInputs
-        +'<div class="form-group" style="margin-bottom:5px"><label class="form-label" style="font-size:11px">Respuesta(s) correcta(s) — marcá una o más</label>'
-          +'<div style="padding:6px 0">'+corrChecks+'</div></div>'
+        +'<div class="form-group" style="margin-bottom:5px"><label class="form-label" style="font-size:11px">Respuesta(s) correcta(s)</label><div style="padding:6px 0">'+corrChecks+'</div></div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-          +'<div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:11px">Peso (puntos)</label>'
-            +'<input class="form-input" type="number" min="0.5" max="10" step="0.5" id="pq-edit-peso-'+p.id+'" value="'+peso+'" style="font-size:12px"></div>'
-          +'<div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:11px">Modo (múltiples)</label>'
-            +'<select class="form-input" id="pq-edit-modo-'+p.id+'" style="font-size:12px">'
-              +'<option value="todas" '+(modo==='todas'?'selected':'')+'>Todas o nada</option>'
-              +'<option value="parcial" '+(modo==='parcial'?'selected':'')+'>Ponderada</option>'
-            +'</select></div>'
+          +'<div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:11px">Peso (puntos)</label><input class="form-input" type="number" min="0.5" max="10" step="0.5" id="pq-edit-peso-'+p.id+'" value="'+peso+'" style="font-size:12px"></div>'
+          +'<div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:11px">Modo</label><select class="form-input" id="pq-edit-modo-'+p.id+'" style="font-size:12px"><option value="todas" '+(modo==='todas'?'selected':'')+'>Todas o nada</option><option value="parcial" '+(modo==='parcial'?'selected':'')+'>Ponderada</option></select></div>'
         +'</div>'
-        +'<div style="display:flex;gap:6px">'
-          +'<button class="btn-prim" style="flex:1;font-size:12px" onclick="guardarEdicionPregunta('+p.id+','+evalId+','+capId+')">💾 Guardar</button>'
-          +'<button class="btn-sec" style="font-size:12px" onclick="toggleEditPregunta('+p.id+','+evalId+','+capId+')">Cancelar</button>'
-        +'</div>'
-      +'</div>'
-    +'</div>';
+        +'<div style="display:flex;gap:6px"><button class="btn-prim" style="flex:1;font-size:12px" onclick="guardarEdicionPregunta('+p.id+','+evalId+','+capId+')">💾 Guardar</button><button class="btn-sec" style="font-size:12px" onclick="toggleEditPregunta('+p.id+','+evalId+','+capId+')">Cancelar</button></div>'
+      +'</div></div>';
   }).join('');
-
   showModal('<div class="modal-handle"></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
       +'<div style="font-size:14px;font-weight:600;color:#111">'+esc(ev.titulo)+'</div>'
-      +'<div style="display:flex;gap:6px">'
-        +'<button class="btn-sm red" style="font-size:11px" onclick="deleteEval('+evalId+','+capId+')">🗑 Eliminar evaluación</button>'
-        +'<button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail('+capId+')">← Volver</button>'
-      +'</div>'
+      +'<div style="display:flex;gap:6px"><button class="btn-sm red" style="font-size:11px" onclick="deleteEval('+evalId+','+capId+')">🗑 Eliminar evaluación</button><button class="btn-sec" style="padding:6px 10px;font-size:12px" onclick="buildDetail('+capId+')">← Volver</button></div>'
     +'</div>'
-    +'<div id="pq-counter" style="font-size:11px;color:#888;margin-bottom:8px">'+pqs.length+' preguntas · '+(pqs.length<5?'<span style="color:#BA7517">Mínimo 5 preguntas recomendadas</span>':'Ok')+'</div>'
+    +'<div id="pq-counter" style="font-size:11px;color:#888;margin-bottom:8px">'+pqs.length+' preguntas · '+(pqs.length<5?'<span style="color:#BA7517">Mínimo 5 recomendadas</span>':'Ok')+'</div>'
     +'<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
       +'<button class="btn-sm blue" onclick="importEvalExcel('+evalId+','+capId+')">📂 Importar Excel</button>'
       +'<button class="btn-sm green" onclick="exportPlantillaEval()">📥 Plantilla</button>'
@@ -2702,13 +2757,8 @@ function openEditEval(evalId,capId){
           +'<label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" id="pq-corr-3" value="3" style="accent-color:#1D9E75"> D</label>'
         +'</div></div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-        +'<div class="form-group" style="margin-bottom:0"><label class="form-label">Peso (puntos)</label>'
-          +'<input class="form-input" type="number" min="0.5" max="10" step="0.5" id="pq-peso" value="1" placeholder="1"></div>'
-        +'<div class="form-group" style="margin-bottom:0"><label class="form-label">Modo (múltiples)</label>'
-          +'<select class="form-input" id="pq-modo">'
-            +'<option value="todas">Todas o nada</option>'
-            +'<option value="parcial">Ponderada</option>'
-          +'</select></div>'
+        +'<div class="form-group" style="margin-bottom:0"><label class="form-label">Peso (puntos)</label><input class="form-input" type="number" min="0.5" max="10" step="0.5" id="pq-peso" value="1"></div>'
+        +'<div class="form-group" style="margin-bottom:0"><label class="form-label">Modo</label><select class="form-input" id="pq-modo"><option value="todas">Todas o nada</option><option value="parcial">Ponderada</option></select></div>'
       +'</div>'
       +'<button class="btn-prim" onclick="addPregunta('+evalId+','+capId+')">+ Agregar pregunta</button>'
     +'</div>'
@@ -2724,9 +2774,7 @@ async function addPregunta(evalId,capId){
   const correctas=[0,1,2,3].filter(j=>{const el=document.getElementById('pq-corr-'+j);return el&&el.checked;});
   if(!texto||!a||!b){alert('La pregunta y al menos dos opciones son obligatorias');return;}
   if(!correctas.length){alert('Marcá al menos una respuesta correcta');return;}
-  const opciones=[a,b];
-  if(c)opciones.push(c);if(d)opciones.push(d);
-  // Validar que las correctas no excedan las opciones disponibles
+  const opciones=[a,b];if(c)opciones.push(c);if(d)opciones.push(d);
   const corrsValidas=correctas.filter(j=>j<opciones.length);
   if(!corrsValidas.length){alert('La respuesta correcta debe corresponder a una opción con texto');return;}
   const peso=parseFloat(document.getElementById('pq-peso').value)||1;
@@ -2782,89 +2830,6 @@ async function checkYaAprobado(evalId, legajo){
   }catch(e){ console.warn('No se pudo verificar aprobación previa',e); }
 }
 
-// ===== HELPERS EVALUACIÓN — retrocompatibilidad y scoring =====
-function getPqCorrectas(p){
-  if(Array.isArray(p.correctas)&&p.correctas.length) return p.correctas.map(Number);
-  if(p.correcta!=null) return [Number(p.correcta)];
-  return [0];
-}
-function pqEsMultiple(p){ return Array.isArray(p.correctas)&&p.correctas.length>1; }
-function getPqPeso(p){ return (p.peso!=null&&!isNaN(Number(p.peso)))?Number(p.peso):1; }
-function getPqModo(p){ return p.modo_puntuacion==='parcial'?'parcial':'todas'; }
-
-function calcPuntosPregunta(p, seleccionados){
-  const correctas=getPqCorrectas(p);
-  const peso=getPqPeso(p);
-  const modo=getPqModo(p);
-  const sel=seleccionados.map(Number);
-  const marcadasBien=sel.filter(s=>correctas.includes(s)).length;
-  const marcadasMal=sel.filter(s=>!correctas.includes(s)).length;
-  if(modo==='parcial'){
-    const bruto=Math.max(0,marcadasBien-marcadasMal);
-    return peso*(bruto/correctas.length);
-  } else {
-    return (marcadasBien===correctas.length&&marcadasMal===0)?peso:0;
-  }
-}
-
-function calcPuntajeFinal(pqs, respuestasMap){
-  const pesoTotal=pqs.reduce((s,p)=>s+getPqPeso(p),0)||1;
-  const puntosObtenidos=pqs.reduce((s,p)=>{
-    const sel=respuestasMap[p.id]||[];
-    return s+calcPuntosPregunta(p,Array.isArray(sel)?sel:[sel]);
-  },0);
-  return Math.round(puntosObtenidos/pesoTotal*10*10)/10;
-}
-
-// ===== buildPreguntaPublicaHtml — genera HTML de una pregunta para el formulario público =====
-function buildPreguntaPublicaHtml(p, i, total){
-  const opts=p.opciones||[];
-  const letras=['A','B','C','D'];
-  const esMulti=pqEsMultiple(p);
-  const peso=getPqPeso(p);
-  const pesoBadge=peso!==1?'<span class="peso-badge" style="margin-left:6px">Peso '+peso+'</span>':'';
-
-  const optsHtml=opts.map((o,j)=>{
-    if(esMulti){
-      return '<label class="opcion-label" id="opt-'+p.id+'-'+j+'">'
-        +'<input class="opcion-check" type="checkbox" name="pq-'+p.id+'" value="'+j+'" onchange="toggleCheckOpcion('+p.id+','+j+')">'
-        +'<span><strong>'+letras[j]+'.</strong> '+esc(o)+'</span>'
-      +'</label>';
-    } else {
-      return '<label class="opcion-label" id="opt-'+p.id+'-'+j+'">'
-        +'<input class="opcion-radio" type="radio" name="pq-'+p.id+'" value="'+j+'" onchange="selectOpcion('+p.id+','+j+','+opts.length+')">'
-        +'<span><strong>'+letras[j]+'.</strong> '+esc(o)+'</span>'
-      +'</label>';
-    }
-  }).join('');
-
-  return '<div class="pregunta-item">'
-    +'<div class="pregunta-num">Pregunta '+(i+1)+' de '+total+pesoBadge+'</div>'
-    +(esMulti?'<div class="multi-hint">☑ Seleccioná todas las respuestas correctas</div>':'')
-    +'<div class="pregunta-texto">'+esc(p.pregunta)+'</div>'
-    +optsHtml
-  +'</div>';
-}
-
-// ===== recogerRespuestasPublicas — lee los inputs del form público =====
-// Devuelve {pqId: [indices]} o null si falta alguna respuesta
-function recogerRespuestasPublicas(pqs){
-  const respuestasMap={};
-  for(const p of pqs){
-    const esMulti=pqEsMultiple(p);
-    if(esMulti){
-      const chks=[...document.querySelectorAll('input[name="pq-'+p.id+'"]:checked')];
-      if(!chks.length){alert('Respondé todas las preguntas antes de enviar');return null;}
-      respuestasMap[p.id]=chks.map(c=>parseInt(c.value));
-    } else {
-      const sel=document.querySelector('input[name="pq-'+p.id+'"]:checked');
-      if(!sel){alert('Respondé todas las preguntas antes de enviar');return null;}
-      respuestasMap[p.id]=[parseInt(sel.value)];
-    }
-  }
-  return respuestasMap;
-}
-
 function renderEvalPublica(evalId){
   const ev=evaluaciones.find(e=>e.id===evalId);
   if(!ev){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Evaluación no encontrada.</p></div></div>';return;}
@@ -2873,41 +2838,27 @@ function renderEvalPublica(evalId){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   if(!pqs.length){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Esta evaluación aún no tiene preguntas.</p></div></div>';return;}
   const pqsHtml=pqs.map((p,i)=>buildPreguntaPublicaHtml(p,i,pqs.length)).join('');
-  document.body.innerHTML='<div class="eval-public-wrap">'
-    +'<div class="eval-public-card">'
-      +'<div style="margin-bottom:16px">'
-        +(cap?tipoBadge(cap.tipo_codigo):'')
-        +'<div style="font-size:16px;font-weight:600;color:#111;margin:6px 0">'+esc(ev.titulo)+'</div>'
-        +(cap?'<div style="font-size:12px;color:#777">'+esc(cap.titulo)+'</div>':'')
-        +(ev.descripcion?'<div style="font-size:12px;color:#555;margin-top:6px;padding:8px;background:#f4f4f2;border-radius:7px">'+esc(ev.descripcion)+'</div>':'')
-      +'</div>'
-      +'<div style="background:#FAEEDA;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#854F0B">'
-        +'<strong>Datos del participante</strong>'
-        +'<div style="margin-top:8px">'
-          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-            +'<div><label class="form-label">Legajo *</label>'
-              +'<input class="form-input" id="pub-legajo" placeholder="Nº de legajo" inputmode="numeric" onkeydown="if(event.key===\'Enter\')validarLegajoPadron(document.getElementById(\'pub-legajo\').value,'+evalId+')"></div>'
-            +'<div><label class="form-label">Últimos 4 dígitos DNI *</label>'
-              +'<input class="form-input" id="pub-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric" onkeydown="if(event.key===\'Enter\')validarLegajoPadron(document.getElementById(\'pub-legajo\').value,'+evalId+')"></div>'
-          +'</div>'
-          +'<button onclick="validarLegajoPadron(document.getElementById(\'pub-legajo\').value,'+evalId+')" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;width:100%">🔍 Validar identidad</button>'
-          +'<div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>'
-          +'<div id="padron-datos" style="display:none">'
-            +'<div style="margin-top:8px"><label class="form-label">Nombre completo</label>'
-              +'<input class="form-input" id="pub-nombre" placeholder="Se completa automáticamente" readonly style="background:#f9f9f7"></div>'
-            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">'
-              +'<div><label class="form-label">CUIL</label><input class="form-input" id="pub-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>'
-              +'<div><label class="form-label">Departamento</label><input class="form-input" id="pub-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>'
-              +'<div><label class="form-label">UN</label><input class="form-input" id="pub-un" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>'
-              +'<div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:11px"></div>'
-            +'</div>'
-          +'</div>'
-        +'</div>'
-      +'</div>'
-      +pqsHtml
-      +'<button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEval('+evalId+','+pqs.length+')">Enviar respuestas</button>'
-    +'</div>'
-  +'</div>';
+  document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card">'
+    +'<div style="margin-bottom:16px">'+(cap?tipoBadge(cap.tipo_codigo):'')+
+    '<div style="font-size:16px;font-weight:600;color:#111;margin:6px 0">'+esc(ev.titulo)+'</div>'
+    +(cap?'<div style="font-size:12px;color:#777">'+esc(cap.titulo)+'</div>':'')
+    +(ev.descripcion?'<div style="font-size:12px;color:#555;margin-top:6px;padding:8px;background:#f4f4f2;border-radius:7px">'+esc(ev.descripcion)+'</div>':'')+'</div>'
+    +'<div style="background:#FAEEDA;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#854F0B"><strong>Datos del participante</strong>'
+    +'<div style="margin-top:8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    +'<div><label class="form-label">Legajo *</label><input class="form-input" id="pub-legajo" placeholder="Nº de legajo" inputmode="numeric" onkeydown="if(event.key===\'Enter\')validarLegajoPadron(document.getElementById(\'pub-legajo\').value,'+evalId+')"></div>'
+    +'<div><label class="form-label">Últimos 4 dígitos DNI *</label><input class="form-input" id="pub-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric"></div>'
+    +'</div><button onclick="validarLegajoPadron(document.getElementById(\'pub-legajo\').value,'+evalId+')" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;width:100%">🔍 Validar identidad</button>'
+    +'<div id="padron-lookup" style="margin-top:6px;font-size:11px;display:none"></div>'
+    +'<div id="padron-datos" style="display:none"><div style="margin-top:8px"><label class="form-label">Nombre completo</label><input class="form-input" id="pub-nombre" readonly style="background:#f9f9f7"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">'
+    +'<div><label class="form-label">CUIL</label><input class="form-input" id="pub-cuil" readonly style="background:#f9f9f7;font-size:11px"></div>'
+    +'<div><label class="form-label">Departamento</label><input class="form-input" id="pub-depto" readonly style="background:#f9f9f7;font-size:11px"></div>'
+    +'<div><label class="form-label">UN</label><input class="form-input" id="pub-un" readonly style="background:#f9f9f7;font-size:11px"></div>'
+    +'<div><label class="form-label">Sector</label><input class="form-input" id="pub-sector" readonly style="background:#f9f9f7;font-size:11px"></div>'
+    +'</div></div></div></div>'
+    +pqsHtml
+    +'<button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEval('+evalId+','+pqs.length+')">Enviar respuestas</button>'
+    +'</div></div>';
 }
 
 function validarLegajoPadron(legajo,evalId){
@@ -2990,18 +2941,9 @@ function validarLegajoPadron(legajo,evalId){
 }
 
 function selectOpcion(pqId,val,total){
-  // For radio (single answer) — toggle selected class
   for(let i=0;i<total;i++){
     const el=document.getElementById('opt-'+pqId+'-'+i);
     if(el) el.classList.toggle('selected',i===val);
-  }
-}
-function toggleCheckOpcion(pqId,val){
-  // For checkbox (multiple answers) — toggle selected class on label
-  const el=document.getElementById('opt-'+pqId+'-'+val);
-  if(el){
-    const chk=el.querySelector('input[type=checkbox]');
-    el.classList.toggle('selected',chk?chk.checked:false);
   }
 }
 
@@ -3010,114 +2952,1953 @@ async function submitEval(evalId,totalPqs){
   const nombre=document.getElementById('pub-nombre').value.trim();
   if(!legajo){alert('Ingresá tu legajo para continuar');return;}
   if(!nombre){alert('No se pudo validar el legajo. Verificá que sea correcto.');return;}
-  if(padron.length>0){
-    const emp=getPadronEmpleado(legajo);
-    if(emp&&emp.estado&&emp.estado!=='Vigente'){alert('Tu legajo figura con estado "'+emp.estado+'". Contactá a RRHH.');return;}
-  }
   const pubUN=document.getElementById('pub-un')?document.getElementById('pub-un').value.trim():'';
   const pubSec=document.getElementById('pub-sector')?document.getElementById('pub-sector').value.trim():'';
   const pubCuil=document.getElementById('pub-cuil')?document.getElementById('pub-cuil').value.trim():'';
   const pubDepto=document.getElementById('pub-depto')?document.getElementById('pub-depto').value.trim():'';
   const fechaEval=new Date().toISOString().slice(0,10);
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
-
-  // Recoger respuestas (soporta radio y checkbox)
   const respuestasMap=recogerRespuestasPublicas(pqs);
   if(!respuestasMap) return;
-
   const puntaje=calcPuntajeFinal(pqs,respuestasMap);
-  // Para respuestas_evaluacion guardamos formato legacy + nuevo
   const respuestasLegacy={};
-  for(const p of pqs){
-    const sel=respuestasMap[p.id]||[];
-    respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;
-  }
-
+  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
   const ev=evaluaciones.find(e=>e.id===evalId);
   const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
   const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
   const aprobado=puntaje>=nota_aprobacion;
-
-  try{ await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas:respuestasLegacy,puntaje},''); }catch(e){ console.warn('Error registrando respuesta',e); }
-
+  try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn('Error registrando respuesta',e);}
   const intentoKey='eval_intento_'+evalId+'_'+legajo;
   const esSegundoIntento=sessionStorage.getItem(intentoKey)==='1';
   if(!aprobado&&!esSegundoIntento){
     sessionStorage.setItem(intentoKey,'1');
-    sessionStorage.setItem(intentoKey+'_nota',String(puntaje));
     document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
       +'<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'
       +'<div class="result-score fail">'+puntaje+'/10</div>'
-      +'<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">&#10007; Desaprobado</div>'
+      +'<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">✗ Desaprobado</div>'
       +'<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'
-        +'<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">&#9888;&#65039; No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
-        +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.<br>Revisá el material de lectura antes de volver a intentarlo.</div>'
+        +'<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
+        +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.</div>'
       +'</div>'
-      +'<button onclick="location.reload()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">&#128260; Volver a intentar</button>'
+      +'<button onclick="location.reload()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
     +'</div></div></div>';
     return;
   }
   sessionStorage.removeItem(intentoKey);
-  const notaPrimerIntento=sessionStorage.getItem(intentoKey+'_nota');
-  sessionStorage.removeItem(intentoKey+'_nota');
-
-  // Preguntas con error (para mostrar al final)
-  const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
-
   if(cap){
     try{
       const existing=await fetch(SUPA_URL+'/rest/v1/asistentes?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo),{headers:H});
       const existingData=await existing.json();
       const campos={completo:aprobado,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval};
-      if(!aprobado&&notaPrimerIntento){
-        campos.observaciones='1er intento: '+notaPrimerIntento+' | 2do intento: '+puntaje+' | Resultado: Desaprobado';
-      }
       if(!existingData||!existingData.length){
         await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,un:pubUN||'',sector:pubSec||'',en_meta:false,...campos},'');
       }else{
         await api('PATCH','asistentes',campos,'?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo));
       }
-    }catch(regErr){console.warn('No se pudo registrar asistencia automática',regErr);}
+    }catch(regErr){console.warn('No se pudo registrar asistencia',regErr);}
   }
-
+  const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
     +'<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'
     +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'
-    +'<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'&#10003; Aprobado':'&#10007; Desaprobado')+'</div>'
-    +(aprobado
-      ?'<div style="font-size:13px;color:#777;margin-bottom:8px">Tu resultado fue registrado correctamente.</div>'
-      :'<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:12px 14px;margin:8px 0 12px;text-align:left">'
-        +'<div style="font-size:14px;font-weight:700;color:#A32D2D;margin-bottom:4px">&#10007; No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
-        +'<div style="font-size:12px;color:#666">No se registraron más intentos disponibles.</div>'
-      +'</div>')
+    +'<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'✓ Aprobado':'✗ Desaprobado')+'</div>'
+    +(aprobado?'<div style="font-size:13px;color:#777;margin-bottom:8px">Tu resultado fue registrado correctamente.</div>':'')
     +incorrectasHtml
   +'</div></div></div>';
 }
 
-// Genera HTML de preguntas incorrectas para mostrar al finalizar
-function _buildIncorrectasHtml(pqs, respuestasMap, aprobado){
-  const incorrectas=pqs.filter(p=>{
-    const sel=respuestasMap[p.id]||[];
-    return calcPuntosPregunta(p,Array.isArray(sel)?sel:[sel])<getPqPeso(p);
+// CRUD CAPS
+
+async function toggleCompleto(asistId, capId, nuevoEstado){
+  if(!canManageParticipants()) return;
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','asistentes',{completo:nuevoEstado},`?id=eq.${asistId}`);
+    const i=asistentes.findIndex(a=>a.id===asistId);
+    if(i>=0) asistentes[i].completo=nuevoEstado;
+    setSyncStatus('ok');
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al actualizar');}
+}
+
+async function limpiarParticipantes(capId, total){
+  if(!canManageParticipants()) return;
+  const c=caps.find(x=>x.id===capId);
+  if(!c) return;
+
+  // Detectar si la vista activa es "faltantes" → borrar solo los que no completaron
+  const vistaActiva=window[`_asisVista_${capId}`]||'todos';
+  const esInd=c.tipo_codigo==='INDUCCION';
+
+  if(vistaActiva==='faltantes'){
+    // Borrar solo los que están en la lista (asistentes en BD) y NO completaron
+    const aLista=getA(capId);
+    const faltantesEnLista=aLista.filter(x=>!(x.completo&&(!esInd||x.nota!=null)));
+    if(!faltantesEnLista.length){toast('No hay faltantes en la lista para eliminar');return;}
+    const ok=confirm(`⚠️ Se eliminarán ${faltantesEnLista.length} participante${faltantesEnLista.length!==1?'s':''} que NO completaron de:\n\n"${c.titulo}"\n\nLos que sí completaron se mantienen.\n\n¿Continuar?`);
+    if(!ok) return;
+    try{
+      setSyncStatus('syncing');
+      for(const x of faltantesEnLista){
+        await api('DELETE','asistentes','',`?id=eq.${x.id}`);
+        asistentes=asistentes.filter(a=>a.id!==x.id);
+      }
+      // Para no-INDUCCION actualizar participantes_esperados al nuevo total
+      if(c.tipo_codigo!=='INDUCCION'){
+        const nuevoTotal=getA(capId).length;
+        await api('PATCH','capacitaciones',{participantes_esperados:nuevoTotal},`?id=eq.${capId}`);
+        const cIdx=caps.findIndex(x=>x.id===capId);
+        if(cIdx>=0) caps[cIdx].participantes_esperados=nuevoTotal;
+      }
+      setSyncStatus('ok');
+      toast(`${faltantesEnLista.length} faltante${faltantesEnLista.length!==1?'s':''} eliminado${faltantesEnLista.length!==1?'s':''} — los completados se conservan`);
+      buildDetail(capId);
+      renderContent();
+    }catch(e){setSyncStatus('error');toast('Error al eliminar: '+e.message);}
+    return;
+  }
+
+  // Vista todos o completaron → confirmar eliminación total (comportamiento original)
+  const ok1=confirm(`⚠️ ADVERTENCIA\n\nEstás por eliminar los ${total} participante${total!==1?'s':''} de:\n\n"${c.titulo}"\n\nEsta acción NO se puede deshacer.\n\n¿Querés continuar?`);
+  if(!ok1) return;
+  const ok2=confirm(`🚨 CONFIRMACIÓN FINAL\n\nSe eliminarán TODOS los registros de asistencia de esta capacitación.\n\n¿Estás completamente seguro?`);
+  if(!ok2) return;
+  try{
+    setSyncStatus('syncing');
+    await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
+    asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
+    // Resetear participantes_esperados a 0
+    await api('PATCH','capacitaciones',{participantes_esperados:0},`?id=eq.${capId}`);
+    const cIdx=caps.findIndex(x=>x.id===capId);
+    if(cIdx>=0) caps[cIdx].participantes_esperados=0;
+    setSyncStatus('ok');
+    toast(`${total} participante${total!==1?'s':''} eliminado${total!==1?'s':''}`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    toast('Error al eliminar: '+e.message);
+  }
+}
+
+function filtrarAsistentes(vista, capId){
+  const data=window[`_asisData_${capId}`];
+  if(!data) return;
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  if(!tbody) return;
+  // Guardar vista activa para que limpiarParticipantes pueda leer el contexto
+  window[`_asisVista_${capId}`]=vista;
+  // Actualizar botones activos
+  ['todos','comp','falt','noenlista'].forEach(k=>{
+    const btn=document.getElementById(`fab-${k}-${capId}`);
+    if(!btn) return;
+    const activo=(k==='todos'&&vista==='todos')||(k==='comp'&&vista==='completaron')||(k==='falt'&&vista==='faltantes')||(k==='noenlista'&&vista==='noenlista');
+    if(activo){
+      btn.style.background=(k==='falt'?'#EF9F27':k==='noenlista'?'#888':'#1D9E75');
+      btn.style.color='#fff';
+    } else {
+      btn.style.background='#fff';
+      btn.style.color=(k==='falt'?'#854F0B':k==='noenlista'?'#888':'#1D9E75');
+    }
   });
-  if(!incorrectas.length) return '';
-  const filas=incorrectas.map((p,i)=>{
-    const opts=Array.isArray(p.opciones)?p.opciones:(typeof p.opciones==='string'?JSON.parse(p.opciones):[]);
-    const sel=respuestasMap[p.id]||[];
-    const selArr=Array.isArray(sel)?sel:[sel];
-    const correctas=getPqCorrectas(p);
-    const respondidaTxt=selArr.map(s=>opts[s]||'—').join(', ');
-    const correctaTxt=correctas.map(c=>opts[c]||'—').join(', ');
-    return '<div style="background:'+(aprobado?'#FFFBEB':'#FFF5F5')+';border:1px solid '+(aprobado?'#FAC775':'#FFD0D0')+';border-radius:8px;padding:10px 12px;margin-bottom:8px">'
-      +'<div style="font-size:12px;font-weight:600;color:#333;margin-bottom:6px">'+(i+1)+'. '+esc(p.enunciado||p.pregunta||'')+'</div>'
-      +'<div style="font-size:11px;color:#CC0000;margin-bottom:3px">&#10007; Tu respuesta: <strong>'+esc(respondidaTxt)+'</strong></div>'
-      +'<div style="font-size:11px;color:#1D9E75">&#10003; Correcta: <strong>'+esc(correctaTxt)+'</strong></div>'
-    +'</div>';
-  }).join('');
-  return '<div style="margin-top:16px;text-align:left;border-top:1px solid #e5e5e0;padding-top:14px">'
-    +'<div style="font-size:13px;font-weight:700;color:'+(aprobado?'#854F0B':'#CC0000')+';margin-bottom:10px">'+(aprobado?'&#128221; Preguntas con error ('+incorrectas.length+')':'&#10060; Respuestas incorrectas ('+incorrectas.length+')')+'</div>'
-    +(aprobado?'<div style="font-size:12px;color:#777;margin-bottom:10px">Aprobaste, pero revisá estas respuestas para reforzar el aprendizaje:</div>':'')
-    +filas+'</div>';
+  // Actualizar texto del botón Limpiar según la vista
+  const limpBtn=document.getElementById(`btn-limpiar-${capId}`);
+  if(limpBtn){
+    if(vista==='noenlista'){
+      limpBtn.textContent='🗑 Eliminar no-seleccionados';
+      limpBtn.onclick=()=>limpiarNoEnLista(capId);
+    } else if(vista==='faltantes'){
+      limpBtn.textContent='🗑 Limpiar faltantes';
+      limpBtn.title='Eliminar solo los participantes que no completaron (mantiene los que sí completaron)';
+    } else {
+      limpBtn.textContent='🗑 Limpiar lista';
+      limpBtn.title='Eliminar todos los participantes';
+    }
+  }
+  // Mostrar filas de la vista
+  const rowsHtml=data[vista]||data.todos;
+  tbody.innerHTML=rowsHtml;
+  
+  // Actualizar título de la sección según vista activa
+  const titleEl=document.querySelector(`[data-capid-title="${capId}"]`);
+  if(titleEl){
+    let newTitle='Asistentes';
+    if(vista==='completaron') newTitle='✓ Completaron';
+    else if(vista==='faltantes') newTitle='⚠ Faltantes';
+    else if(vista==='noenlista') newTitle='📋 No en lista';
+    else newTitle='Todos';
+    titleEl.textContent=newTitle;
+  }
+}
+
+async function deleteA(aid,capId){
+  if(!canManageParticipants()||!confirm('¿Eliminar este participante?'))return;
+  try{await api('DELETE','asistentes','',`?id=eq.${aid}`);asistentes=asistentes.filter(a=>a.id!==aid);toast('Eliminado');buildDetail(capId);renderContent();}catch(e){toast('Error');}
+}
+
+function exportPlantillaAsistentes(capId){
+  // Sin capId: plantilla genérica desde Configurar
+  if(!capId){
+    const rows=[{
+      '#Redmine':'#35167','legajo':'9696','nombre':'GARCIA, JUAN CARLOS',
+      'cuil':'20-12345678-9','un':'Dist y Logistica','departamento':'DIME y Morosidad',
+      'sector':'SST - Planta','completo':'SI','nota':'','fecha_evaluacion':'DD/MM/AAAA',
+      'Capacitación':'Nombre de la capacitación','Tipo':'REMO','Bimestre':'1° Bimestre (Ene-Feb)'
+    }];
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:16},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:22}];
+    XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
+    XLSX.writeFile(wb,'plantilla_asistentes.xlsx');
+    toast('Plantilla descargada');
+    return;
+  }
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const aExist=getA(capId);
+  let rows;
+  if(aExist.length){
+    rows=aExist.map(x=>({
+      '#Redmine':c.codigo_redmine||'','legajo':x.legajo,'nombre':x.nombre,'cuil':x.cuil||'',
+      'un':x.un||'','departamento':x.departamento||x.sector||'','sector':x.sector||'',
+      'completo':x.completo?'SI':'NO','nota':x.nota!=null?x.nota:'',
+      'fecha_evaluacion':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
+      'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
+    }));
+  } else {
+    const padronFilt=c.un?padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(p.un!==c.un) return false;
+      if(c.departamento){const d=p.departamento||p.datos_extra?.Departamento||'';if(d!==c.departamento) return false;}
+      return true;
+    }):[];
+    if(padronFilt.length){
+      rows=padronFilt.map(p=>({
+        '#Redmine':c.codigo_redmine||'','legajo':p.legajo,'nombre':p.nombre,
+        'cuil':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+        'un':p.un||'','departamento':p.departamento||p.datos_extra?.Departamento||'','sector':p.sector||'',
+        'completo':'','nota':'','fecha_evaluacion':'',
+        'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''
+      }));
+    } else {
+      rows=[{'#Redmine':c.codigo_redmine||'','legajo':'','nombre':'','cuil':'','un':c.un||'',
+        'departamento':c.departamento||'','sector':'','completo':'SI o NO','nota':'',
+        'fecha_evaluacion':'DD/MM/AAAA','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Bimestre':c.bimestre||''}];
+    }
+  }
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws,'Asistentes');
+  XLSX.writeFile(wb,`plantilla_asistentes_${(c.titulo||'cap').replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
+  toast('Plantilla descargada');
+}
+
+function exportFalt(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const aList=getA(capId);
+  // Legajos que ya completaron
+  const completaron=new Set(aList.filter(a=>a.completo).map(a=>String(a.legajo)));
+
+  // Estrategia: si la cap tiene UN/Depto y hay padrón, los faltantes son
+  // todos los activos del padrón de esa UN/Depto que no completaron.
+  // Si no hay padrón o no tiene UN, usamos la lista de asistentes no completados.
+  let falt=[];
+  // Mismo criterio que buildDetail: esGlobal, filtro por UN/Depto, o INDUCCION por mes/año
+  const _esGlobalExp=padron.length&&!c.un&&!c.departamento&&c.tipo_codigo!=='INDUCCION';
+  const _tieneFiltroExp=padron.length&&(c.un||c.departamento)&&c.tipo_codigo!=='INDUCCION';
+  const _esInduccionExp=c.tipo_codigo==='INDUCCION'&&c.fecha&&padron.length;
+  if(_esGlobalExp||_tieneFiltroExp||_esInduccionExp){
+    let activosPadron=[];
+    if(_esInduccionExp){
+      const [yy,mm]=c.fecha.split('-');
+      const mesRef=parseInt(mm);const anioRef=parseInt(yy);
+      activosPadron=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!p.fecha_calculo_antiguedad) return false;
+        const parts=p.fecha_calculo_antiguedad.split('-');
+        return parseInt(parts[0])===anioRef&&parseInt(parts[1])===mesRef;
+      });
+    } else {
+      activosPadron=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!_esGlobalExp){
+          if(c.un&&p.un!==c.un) return false;
+          if(c.departamento){
+            const d=p.departamento||p.datos_extra?.Departamento||'';
+            if(d!==c.departamento) return false;
+          }
+        }
+        return true;
+      });
+    }
+    // Faltante = activo en el padrón que no completó la capacitación
+    falt=activosPadron
+      .filter(p=>!completaron.has(String(p.legajo)))
+      .map(p=>{
+        // Buscar si tiene un registro parcial en la lista
+        const reg=aList.find(a=>String(a.legajo)===String(p.legajo));
+        return{
+          '#Redmine':c.codigo_redmine||'',
+          'Legajo':p.legajo,
+          'Nombre':p.nombre,
+          'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+          'UN':p.un||'',
+          'Departamento':p.departamento||p.datos_extra?.Departamento||'',
+          'Sector':p.sector||'',
+          'Estado Padrón':p.estado||'Vigente',
+          'Estado Capacitación':reg?'Pendiente':'Sin registrar',
+          'Capacitación':c.titulo,
+          'Tipo':c.tipo_codigo||'',
+          'Fecha':c.fecha?fmtF(c.fecha):'',
+          'Bimestre':c.bimestre||''
+        };
+      });
+  } else {
+    // Sin padrón: faltantes son los de la lista que no completaron
+    falt=aList.filter(a=>!a.completo).map(a=>({
+      '#Redmine':c.codigo_redmine||'',
+      'Legajo':a.legajo,'Nombre':a.nombre,
+      'CUIL':a.cuil||'','UN':a.un||'',
+      'Departamento':a.departamento||a.sector||'','Sector':a.sector||'',
+      'Estado Padrón':'','Estado Capacitación':'Pendiente',
+      'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'',
+      'Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''
+    }));
+  }
+
+  if(!falt.length){toast('No hay faltantes — todos completaron');return;}
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(falt);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:14},{wch:16},{wch:35},{wch:10},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws,'Faltantes');
+  XLSX.writeFile(wb,`faltantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
+  toast(`Excel con ${falt.length} faltantes descargado`);
+}
+
+function exportAll(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  if(!a.length){toast('No hay participantes');return;}
+  const rows=a.map(x=>({'#Redmine':c.codigo_redmine||'','Legajo':x.legajo,'Nombre':x.nombre,'CUIL':x.cuil||'','UN':x.un||'','Departamento':x.departamento||x.sector||'','Sector':x.sector||'','Completó':x.completo?'Sí':'No','Nota':x.nota!=null?x.nota:'','Fecha Evaluación':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'','Capacitación':c.titulo,'Tipo':c.tipo_codigo||'','Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''}));
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:10},{wch:6},{wch:14},{wch:35},{wch:10},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws,'Participantes');
+  XLSX.writeFile(wb,`participantes_${c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.xlsx`);
+  toast('Excel descargado');
+}
+
+function exportarTodosCompletados(modo){
+  // modo: 'todos' = completo:true de cualquier tipo | 'conNota' = completo:true y nota != null
+  if(!caps.length){toast('Sin capacitaciones');return;}
+  const rows=[];
+  caps.forEach(cap=>{
+    const c=cap;
+    const asis=getA(cap.id);
+    const esInd=cap.tipo_codigo==='INDUCCION';
+    asis.forEach(x=>{
+      const cumpleCompleto=x.completo&&(!esInd||x.nota!=null);
+      if(!cumpleCompleto) return;
+      if(modo==='conNota'&&x.nota==null) return;
+      rows.push({
+        '#Redmine':c.codigo_redmine||'',
+        'Legajo':x.legajo,
+        'Nombre':x.nombre,
+        'CUIL':x.cuil||'',
+        'UN':x.un||'',
+        'Departamento':x.departamento||x.sector||'',
+        'Sector':x.sector||'',
+        'Nota':x.nota!=null?x.nota:'',
+        'Aprobó':x.nota!=null?(x.nota>=(c.nota_aprobacion||6)?'Sí':'No'):'',
+        'Fecha Evaluación':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
+        'Capacitación':c.titulo,
+        'Tipo':c.tipo_codigo||'',
+        'Fecha Capacitación':c.fecha?fmtF(c.fecha):'',
+        'Bimestre':c.bimestre||'',
+        'Instructor':c.instructor||''
+      });
+    });
+  });
+  if(!rows.length){
+    toast(modo==='conNota'?'No hay completados con calificación':'No hay completados registrados');
+    return;
+  }
+  // Ordenar por Tipo → Bimestre → Capacitación → Nombre
+  rows.sort((a,b)=>
+    (a['Tipo']||'').localeCompare(b['Tipo']||'')||
+    (a['Bimestre']||'').localeCompare(b['Bimestre']||'')||
+    (a['Capacitación']||'').localeCompare(b['Capacitación']||'')||
+    (a['Nombre']||'').localeCompare(b['Nombre']||'')
+  );
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:8},{wch:28},{wch:16},{wch:18},{wch:20},{wch:16},{wch:6},{wch:7},{wch:14},{wch:35},{wch:12},{wch:14},{wch:22},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'Completados');
+  const fecha=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`completados_${modo==='conNota'?'con_nota_':''}${fecha}.xlsx`);
+  toast(`${rows.length} registros exportados`);
+}
+
+async function exportRespuestas(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const ev=getEval(capId);if(!ev){toast('Sin evaluación');return;}
+  const pqsLocal=preguntas.filter(p=>p.evaluacion_id===ev.id);
+  if(!pqsLocal.length){toast('Sin preguntas');return;}
+  toast('Generando reporte...',6000);
+  try{
+    const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=legajo,nombre,respuestas,puntaje');
+    if(!resp||!resp.length){toast('Sin respuestas registradas');return;}
+    const rows=[];
+    resp.forEach(r=>{
+      const respObj=r.respuestas||{};
+      pqsLocal.forEach((p,i)=>{
+        const opciones=[p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d].filter(Boolean);
+        const idxRespuesta=respObj[p.id];
+        const idxCorrecta=p.correcta;
+        const respuestaDada=idxRespuesta!=null&&opciones[idxRespuesta]!=null?opciones[idxRespuesta]:'—';
+        const respuestaCorrecta=idxCorrecta!=null&&opciones[idxCorrecta]!=null?opciones[idxCorrecta]:'—';
+        const esCorrecta=idxRespuesta===idxCorrecta;
+        rows.push({
+          'Capacitación':c.titulo,
+          'Evaluación':ev.titulo,
+          'Legajo':r.legajo,
+          'Nombre':r.nombre,
+          'N° Pregunta':i+1,
+          'Pregunta':p.pregunta||'',
+          'Respuesta dada':respuestaDada,
+          'Respuesta correcta':respuestaCorrecta,
+          '¿Correcta?':esCorrecta?'Sí':'No',
+          'Puntaje':r.puntaje!=null?r.puntaje:''
+        });
+      });
+    });
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:32},{wch:28},{wch:8},{wch:28},{wch:12},{wch:60},{wch:35},{wch:35},{wch:10},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,ws,'Respuestas');
+    XLSX.writeFile(wb,'respuestas_eval_'+c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()+'.xlsx');
+    toast('Excel descargado');
+  }catch(e){toast('Error al generar reporte');console.error(e);}
+}
+
+async function importExcel(event,capId){
+  if(!canManageParticipants()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      const nuevos=rows.map(r=>({
+        capacitacion_id:capId,
+        legajo:String(r.legajo||r.Legajo||r.LEGAJO||'').trim(),
+        nombre:String(r.nombre||r.Nombre||r.NOMBRE||'').trim(),
+        cuil:String(r.cuil||r.CUIL||r.Cuil||'').trim()||null,
+        un:String(r.un||r.UN||r['Unidad de Negocio']||'').trim(),
+        sector:String(r.sector||r.Sector||r.SECTOR||'').trim(),
+        departamento:String(r.departamento||r.Departamento||r.DEPARTAMENTO||'').trim()||null,
+        completo:['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||r.COMPLETO||'').toLowerCase().trim()),
+        nota:parseFloat(r.nota||r.Nota||r.NOTA||'')||null,
+        fecha_evaluacion:(()=>{const fv=String(r.fecha_evaluacion||r['Fecha Evaluación']||r.fecha_eval||'').trim();if(!fv)return null;if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(fv))return fv;return null;})()
+      })).filter(r=>r.legajo);
+      if(!nuevos.length){alert('No se encontraron registros con columna "legajo".');return;}
+      setSyncStatus('syncing');toast('Importando...',10000);
+      await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
+      asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
+      const ins=await api('POST','asistentes',nuevos,'');
+      const capObj=caps.find(c=>c.id===capId);
+      const cIdx=caps.findIndex(x=>x.id===capId);
+      if(ins){
+        asistentes=[...asistentes,...(Array.isArray(ins)?ins:[ins])];
+        // INDUCCION: NO sobreescribir participantes_esperados — la meta viene del padrón dinámicamente.
+        // Otros tipos: actualizar participantes_esperados al total importado.
+        if(capObj&&capObj.tipo_codigo!=='INDUCCION'){
+          const totalAsis=getA(capId).length;
+          await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+          if(cIdx>=0) caps[cIdx].participantes_esperados=totalAsis;
+        }
+      }
+      for(const nombre of [...new Set(nuevos.map(a=>a.un).filter(Boolean))]){
+        if(!uns.find(u=>u.nombre===nombre)){const r=await api('POST','unidades_negocio',{nombre},'');if(r)uns.push(Array.isArray(r)?r[0]:r);}
+      }
+      const pairs=[...new Map(nuevos.filter(a=>a.sector&&a.un).map(a=>[`${a.sector}|${a.un}`,{nombre:a.sector,un:a.un}])).values()];
+      for(const s of pairs){if(!sectores.find(x=>x.nombre===s.nombre&&x.un===s.un)){const r=await api('POST','sectores',s,'');if(r)sectores.push(Array.isArray(r)?r[0]:r);}}
+      if(capObj&&capObj.estado!=='Realizada'){
+        const esInd=capObj.tipo_codigo==='INDUCCION';
+        const compCnt=nuevos.filter(a=>a.completo&&(!esInd||a.nota!=null)).length;
+        // Para INDUCCION la meta se calcula dinámicamente del padrón (ver calcularEspInduccion)
+        const espCnt=esInd?calcularPosiblesInduccion(capObj):(capObj.participantes_esperados||nuevos.length);
+        if(compCnt>0&&compCnt>=espCnt){
+          await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);capObj.estado='Realizada';
+        }
+      }
+      setSyncStatus('ok');populateFilters();renderContent();buildDetail(capId);
+      toast(`${nuevos.length} participantes importados`);
+    }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function openNewCap(){if(!canCapacitar()){toast('Sin permisos');return;}showForm(null);}
+function openEdit(id){if(!canEdit())return;showForm(caps.find(x=>x.id===id));}
+
+function showForm(c){
+  const tipoOpts=tipos.map(t=>`<option value="${t.codigo}"${c&&c.tipo_codigo===t.codigo?' selected':''}>${t.codigo} — ${t.nombre}</option>`).join('');
+  const bOpts=BIMESTRES.map(b=>`<option${c&&c.bimestre===b?' selected':''}>${b}</option>`).join('');
+  const eOpts=['Programada','Pendiente','Realizada','Vencida'].map(e=>`<option value="${e}"${c&&c.estado===e?' selected':''}>${e==='Pendiente'?'En Curso (Pendiente)':e}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">${c?'Editar capacitación':'Nueva capacitación'}</div>
+    <div class="form-group"><label class="form-label">Tipo de capacitación *</label><select class="form-input" id="f-tipo">${tipoOpts}</select></div>
+    <div class="form-group"><label class="form-label">Título *</label><input class="form-input" id="f-tit" value="${c?esc(c.titulo):''}" placeholder="Nombre de la capacitación"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Área / Tema</label><input class="form-input" id="f-area" value="${c?esc(c.area||''):''}" placeholder="Ej: Incendios"></div>
+      <div class="form-group"><label class="form-label">Estado</label><select class="form-input" id="f-est">${eOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Fecha</label><input class="form-input" id="f-fecha" type="date" value="${c?c.fecha:''}"></div>
+      <div class="form-group"><label class="form-label">Bimestre</label><select class="form-input" id="f-bim" onchange="onChangeBimestre(this.value)">${bOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Duración (hs)</label><input class="form-input" id="f-dur" type="number" min="0.5" step="0.5" value="${c?c.duracion:4}"></div>
+      <div class="form-group">
+      <label class="form-label">Participantes esperados</label>
+      <div id="par-wrapper" data-capid="${c?c.id:''}">
+        <input class="form-input" id="f-par" type="number" min="1" value="${c?Math.max(getA(c.id).length,c.participantes_esperados||0):10}" style="margin-bottom:5px">
+        <div style="font-size:10px;color:#888;margin-bottom:5px">${c&&getA(c.id).length?`Asistentes cargados: ${getA(c.id).length}`:''}</div>
+        <label id="lbl-tomar-padron" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:600;color:#185FA5">
+          <input type="checkbox" id="chk-tomar-padron" style="width:14px;height:14px;cursor:pointer" onchange="toggleParField()">
+          Usar cantidad del padrón como meta
+        </label>
+      </div>
+    </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
+      <div class="form-group"><label class="form-label">Nota mínima aprobación</label><input class="form-input" id="f-nota" type="number" min="1" max="10" step="0.5" value="${c?c.nota_aprobacion:6}"></div>
+    </div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">Fecha fin planificada</label><input class="form-input" id="f-fecha-fin" type="date" value="${c&&c.fecha_fin?c.fecha_fin:(c?fechaFinPorBimestre(c.bimestre):'')}" oninput="this._manual=true"><div style="font-size:10px;color:#888;margin-top:2px">Se completa automáticamente al elegir bimestre</div></div></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">UN</label><select class="form-input" id="f-un" onchange="onChangeFormUN(this.value)"><option value="">— Sin UN (global) —</option>${uns.map(u=>`<option value="${esc(u.nombre)}"${c&&c.un===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Departamento(s)</label>
+        <div id="f-sec-wrap" style="border:1px solid #ddd;border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;padding:4px 6px">
+          ${(()=>{
+            const allDeptos=[...new Set(padron.map(p=>p.departamento||p.datos_extra?.Departamento).filter(Boolean))].sort();
+            const selDeptos=c&&c.departamento?c.departamento.split('||'):[];
+            return allDeptos.map(d=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:12px;cursor:pointer">
+              <input type="checkbox" class="chk-depto-form" value="${esc(d)}" ${selDeptos.includes(d)?'checked':''} onchange="updatePadronPreview()">
+              ${esc(d)}</label>`).join('');
+          })()}
+          ${!padron.length?'<div style="font-size:11px;color:#aaa;padding:4px">Sin departamentos en padrón</div>':''}
+        </div>
+        <div style="margin-top:4px;display:flex;gap:6px">
+          <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptos(true)">Todos</button>
+          <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptos(false)">Ninguno</button>
+        </div>
+      </div>
+    </div>
+    <div id="padron-preview" style="font-size:11px;color:#1D9E75;padding:4px 0;display:none"></div>
+    <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="f-obs" rows="2">${c?esc(c.obs||''):''}</textarea></div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" id="btn-sv" onclick="saveCap(${c?c.id:'null'})">${c?'Guardar':'Agregar'}</button></div>`);
+  // Inicializar preview y fecha_fin al abrir
+  setTimeout(()=>{
+    const bimSel=document.getElementById('f-bim');
+    if(bimSel&&!document.getElementById('f-fecha-fin')?.value) onChangeBimestre(bimSel.value);
+    updatePadronPreview();
+  },50);
+}
+
+async function saveCap(id){
+  const isNew=String(id)==='null';
+  if(!isNew&&!canEdit()){toast('Sin permisos para editar');return;}
+  if(isNew&&!canCapacitar()){toast('Sin permisos');return;}
+  const tit=document.getElementById('f-tit').value.trim();
+  if(!tit){alert('El título es obligatorio');return;}
+  const unSel=document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null;
+  const depsSelArr=getFormDeptos();
+  const secSel=depsSelArr.length?depsSelArr.join('||'):null;
+  const _ffRaw=document.getElementById('f-fecha-fin')?document.getElementById('f-fecha-fin').value:'';
+  const _bimVal=document.getElementById('f-bim')?document.getElementById('f-bim').value:'';
+  const fechaFin=_ffRaw||fechaFinPorBimestre(_bimVal)||null;
+  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,fecha_fin:fechaFin,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:unSel,departamento:secSel};
+  const btn=document.getElementById('btn-sv');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  setSyncStatus('syncing');
+  try{
+    if(isNew){
+      const r=await api('POST','capacitaciones',obj,'');
+      const n=Array.isArray(r)?r[0]:r;
+      if(n){
+        caps.push(n);
+        // Respetar el checkbox del preview
+        const chk=document.getElementById('chk-cargar-padron');
+        if(chk===null||chk.checked){
+          await cargarParticipantesDesdePadron(n.id,n.un,n.departamento);
+        }
+      }
+      toast('Capacitación creada');
+      setSyncStatus('ok');updateSub();closeModal();renderContent();
+    } else {
+      await api('PATCH','capacitaciones',obj,`?id=eq.${id}`);
+      const idx=caps.findIndex(c=>c.id===Number(id));
+      // Leer capAnterior ANTES de sobreescribir para poder comparar
+      const capAnterior=idx>=0?{...caps[idx]}:{};
+      if(idx>=0)caps[idx]={...caps[idx],...obj};
+      const cambioUnDepto=(capAnterior.un!==obj.un||capAnterior.departamento!==obj.departamento);
+      if(cambioUnDepto){
+        // Mostrar modal de opciones en lugar de confirm nativo
+        await mostrarModalActualizarParticipantes(Number(id),obj.un,obj.departamento);
+      }
+      toast('Actualizada');
+      setSyncStatus('ok');updateSub();closeModal();renderContent();
+    }
+  }catch(e){setSyncStatus('error');toast('Error al guardar');if(btn){btn.disabled=false;btn.textContent=isNew?'Agregar':'Guardar';}}
+}
+
+// Modal de 3 opciones para actualizar participantes al editar
+async function mostrarModalActualizarParticipantes(capId, un, departamento){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    const card=document.createElement('div');
+    card.style.cssText='background:#fff;border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)';
+    // Contar activos nuevos y los que se podrían eliminar
+    const esGlobalModal=!un&&!departamento;
+    const _modalDeps=departamento?departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+    const activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!esGlobalModal){
+        if(un&&p.un!==un) return false;
+        if(_modalDeps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_modalDeps.includes(d)) return false;}
+      }
+      return true;
+    });
+    const aActuales=getA(capId);
+    const enMeta=aActuales.filter(a=>a.en_meta!==false);
+    // Protegidos: completo o con nota (no se eliminan nunca)
+    const protegidos=enMeta.filter(a=>a.completo||a.nota!=null||a.fecha_evaluacion);
+    // Eliminables: en meta, sin completar, sin nota (no participaron)
+    const eliminables=enMeta.filter(a=>!a.completo&&a.nota==null&&!a.fecha_evaluacion);
+    const legajosActivos=new Set(activosPadron.map(p=>String(p.legajo)));
+    const legajosActuales=new Set(aActuales.map(a=>String(a.legajo)));
+    const nuevosLegajos=activosPadron.filter(p=>!legajosActuales.has(String(p.legajo)));
+    card.innerHTML=`
+      <div style="font-size:15px;font-weight:700;color:#1A2F6E;margin-bottom:10px">&#9881;&#65039; Actualizar participantes</div>
+      <p style="font-size:12px;color:#555;margin-bottom:12px">La UN o Departamento cambió. ¿Cómo querés actualizar la lista de participantes?</p>
+      <div style="font-size:11px;color:#888;background:#f9f9f7;border-radius:8px;padding:8px 10px;margin-bottom:14px">
+        <div>&#128100; Nuevos activos del padrón: <strong>${activosPadron.length}</strong></div>
+        <div>&#128308; A agregar (no estaban): <strong>${nuevosLegajos.length}</strong></div>
+        <div style="color:#1D9E75">&#128737;&#65039; Protegidos (completaron/evaluados): <strong>${protegidos.length}</strong> — no se eliminan</div>
+        <div style="color:#CC0000">&#128465;&#65039; Eliminables (sin actividad): <strong>${eliminables.length}</strong></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="opt-agregar" style="background:#1D9E75;color:#fff;border:none;border-radius:9px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          &#10133; Solo agregar nuevos vigentes (${nuevosLegajos.length})
+          <div style="font-size:11px;font-weight:400;opacity:0.85">Agrega los que no estaban. No elimina nadie.</div>
+        </button>
+        <button id="opt-limpiar" style="background:#E24B4A;color:#fff;border:none;border-radius:9px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          &#9888;&#65039; Eliminar sin actividad + agregar nuevos
+          <div style="font-size:11px;font-weight:400;opacity:0.85">Borra los ${eliminables.length} que no hicieron nada. Los protegidos (${protegidos.length}) se conservan.</div>
+        </button>
+        <button id="opt-nada" style="background:#f4f4f2;color:#555;border:1px solid #ddd;border-radius:9px;padding:10px 14px;font-size:13px;cursor:pointer;text-align:left">
+          Mantener la lista actual sin cambios
+        </button>
+      </div>`;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    overlay.querySelector('#opt-agregar').onclick=async()=>{
+      document.body.removeChild(overlay);
+      await cargarParticipantesDesdePadron(capId,un,departamento);
+      resolve();
+    };
+    overlay.querySelector('#opt-limpiar').onclick=async()=>{
+      document.body.removeChild(overlay);
+      // Eliminar los eliminables
+      if(eliminables.length){
+        for(const a of eliminables){
+          try{
+            await api('DELETE','asistentes','',`?id=eq.${a.id}`);
+            asistentes=asistentes.filter(x=>x.id!==a.id);
+          }catch(e){console.warn('No se pudo eliminar asistente',a.id,e);}
+        }
+        toast(`${eliminables.length} participante${eliminables.length!==1?'s':''} sin actividad eliminado${eliminables.length!==1?'s':''}`);
+      }
+      // Agregar los nuevos del padrón
+      await cargarParticipantesDesdePadron(capId,un,departamento);
+      resolve();
+    };
+    overlay.querySelector('#opt-nada').onclick=()=>{
+      document.body.removeChild(overlay);
+      resolve();
+    };
+  });
+}
+
+
+
+
+
+
+// ── Helper: calcula cuántos empleados del padrón corresponden a una cap INDUCCION ──
+// Retorna el número de vigentes cuya fecha_calculo_antiguedad coincide con mes/año de la cap.
+// Si la cap no tiene fecha o no hay padrón, retorna 0.
+function calcularPosiblesInduccion(cap){
+  if(!cap||!cap.fecha||!padron.length) return 0;
+  const parts=cap.fecha.split('-');
+  if(parts.length<2) return 0;
+  const yr=parseInt(parts[0]), mo=parseInt(parts[1]);
+  return padron.filter(p=>{
+    if(p.estado&&p.estado!=='Vigente') return false;
+    if(!p.fecha_calculo_antiguedad) return false;
+    const fp=p.fecha_calculo_antiguedad.split('-');
+    return parseInt(fp[0])===yr&&parseInt(fp[1])===mo;
+  }).length;
+}
+
+// Normaliza estado para mostrar en UI: Pendiente→"En Curso", resto igual
+function estadoLabel(est){return est==='Pendiente'?'En Curso':est||'Programada';}
+// Clase CSS del badge (usa 'pendiente' para En Curso para mantener color naranja)
+function estadoClass(est){const e=est||'Programada';return e==='Pendiente'?'pendiente':e.toLowerCase().replace(/\s+/g,'');}
+
+function estadoCap(cap){return cap._estadoCalc||cap.estado||'Programada';}
+function fechaFinCap(cap){return cap.fecha_fin||cap._fechaFinCalc||'';}
+
+function aplicarEstadosEnMemoria(){
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  for(const cap of caps){
+    // Asignar fecha_fin en memoria si no tiene
+    if(!cap.fecha_fin&&cap.bimestre){
+      const ff=fechaFinPorBimestre(cap.bimestre);
+      if(ff) cap._fechaFinCalc=ff;
+    }
+    // Verificar si completaron >= esperados → Realizada automática (en memoria)
+    const _m=metricas(cap);
+    const compCount=_m.comp;
+    const espCount=_m.esperados;
+
+    // Estado en memoria: Realizada > En Curso > Vencida > Programada
+    if(cap.estado==='Realizada'){
+      cap._estadoCalc='Realizada';
+    } else if(espCount>0&&compCount>=espCount){
+      cap._estadoCalc='Realizada';
+    } else {
+      const finStr=cap.fecha_fin||cap._fechaFinCalc||cap.fecha;
+      const iniStr=cap.fecha;
+      if(finStr){
+        const fin=new Date(finStr+'T00:00:00');
+        if(fin<hoy){
+          cap._estadoCalc='Vencida';
+        } else if(iniStr){
+          const ini=new Date(iniStr+'T00:00:00');
+          cap._estadoCalc=(ini<=hoy)?'Pendiente':'Programada';
+        } else {
+          cap._estadoCalc='Programada';
+        }
+      }
+    }
+  }
+}
+
+async function sincronizarFechasYEstados(){
+  if(!isAdmin()&&!isCapacitador()) return;
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const actualizadas=[];
+  for(const cap of caps){
+    const cambios={};
+    // 1. Asignar fecha_fin si no tiene, basada en bimestre
+    if(!cap.fecha_fin&&cap.bimestre){
+      const ff=fechaFinPorBimestre(cap.bimestre);
+      if(ff){ cambios.fecha_fin=ff; cap.fecha_fin=ff; }
+    }
+    // 2. Calcular estado automático (solo si no está Realizada)
+    if(cap.estado!=='Realizada'){
+      const finStr=cap.fecha_fin||cap.fecha;
+      const iniStr=cap.fecha;
+      if(finStr){
+        const fin=new Date(finStr+'T00:00:00');
+        let nuevoEstado;
+        if(fin<hoy){
+          nuevoEstado='Vencida';
+        } else if(iniStr){
+          const ini=new Date(iniStr+'T00:00:00');
+          nuevoEstado=(ini<=hoy)?'Pendiente':'Programada';
+        } else {
+          nuevoEstado='Programada';
+        }
+        if(cap.estado!==nuevoEstado){
+          cambios.estado=nuevoEstado;
+          cap.estado=nuevoEstado;
+        }
+      }
+    }
+    if(Object.keys(cambios).length>0){
+      actualizadas.push({id:cap.id,cambios});
+    }
+  }
+  if(!actualizadas.length){toast('Todo sincronizado — sin cambios');return;}
+  setSyncStatus('syncing');
+  try{
+    for(const {id,cambios} of actualizadas){
+      await api('PATCH','capacitaciones',cambios,`?id=eq.${id}`);
+    }
+    setSyncStatus('ok');
+    toast(`${actualizadas.length} capacitaciones actualizadas (fecha fin + estado)`);
+    renderContent();
+    updateSub();
+  }catch(e){setSyncStatus('error');toast('Error al sincronizar');}
+}
+
+
+// ===== sincronizarInduccion =====
+async function sincronizarInduccion(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const capsInduccion=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&c.fecha);
+  if(!capsInduccion.length){toast('No hay capacitaciones INDUCCION con fecha registrada');return;}
+  if(!padron.length){toast('El padrón está vacío');return;}
+
+  const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // Armar resumen para mostrar al usuario antes de confirmar
+  const resumen=capsInduccion.map(c=>{
+    const [yy,mm]=c.fecha.split('-');
+    const mes=MESES_ES[parseInt(mm)-1];
+    const posibles=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!p.fecha_calculo_antiguedad) return false;
+      const parts=p.fecha_calculo_antiguedad.split('-');
+      return parseInt(parts[0])===parseInt(yy)&&parseInt(parts[1])===parseInt(mm);
+    });
+    return `• ${c.codigo_redmine||'#'+c.id} — ${c.titulo} (${mes} ${yy}): ${posibles.length} empleado(s)`;
+  }).join('\n');
+
+  if(!confirm(`Se agregarán como posibles/faltantes los empleados cuya "Fecha cálculo antigüedad" coincida con el mes/año de cada INDUCCION:\n\n${resumen}\n\n¿Continuar?`)) return;
+
+  setSyncStatus('syncing');
+  toast('Sincronizando INDUCCION...', 15000);
+  let totalAgregados=0, totalYaExistian=0, errores=0;
+
+  for(const c of capsInduccion){
+    if(c.lista_cerrada){totalYaExistian+=(asistentes.filter(a=>a.capacitacion_id===c.id).length);continue;}
+    const [yy,mm]=c.fecha.split('-');
+    const mesRef=parseInt(mm), anioRef=parseInt(yy);
+
+    // Legajos que ya son asistentes de esta cap
+    const yaEnCap=new Set(
+      asistentes.filter(a=>a.capacitacion_id===c.id).map(a=>String(a.legajo))
+    );
+
+    // Empleados del padrón que corresponden a este mes/año
+    const candidatos=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!p.fecha_calculo_antiguedad) return false;
+      const parts=p.fecha_calculo_antiguedad.split('-');
+      return parseInt(parts[0])===anioRef&&parseInt(parts[1])===mesRef;
+    });
+
+    // Solo los que NO están ya como asistentes
+    const nuevos=candidatos.filter(p=>!yaEnCap.has(String(p.legajo)));
+    totalYaExistian+=candidatos.length-nuevos.length;
+
+    if(!nuevos.length) continue;
+
+    // Insertar en lotes de 50
+    const CHUNK=50;
+    for(let i=0;i<nuevos.length;i+=CHUNK){
+      const lote=nuevos.slice(i,i+CHUNK).map(p=>({
+        capacitacion_id:c.id,
+        legajo:p.legajo,
+        nombre:p.nombre,
+        cuil:p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||p.datos_extra?.cuil||'',
+        un:p.un||'',
+        sector:p.sector||'',
+        departamento:p.departamento||p.datos_extra?.Departamento||'',
+        completo:false,
+        en_meta:true
+      }));
+      try{
+        await api('POST','asistentes',lote,'?on_conflict=capacitacion_id,legajo');
+        totalAgregados+=lote.length;
+      }catch(e){
+        errores+=lote.length;
+        console.warn('Error insertando asistentes INDUCCION cap',c.id,e);
+      }
+    }
+  }
+
+  await loadAll();
+  setSyncStatus('ok');
+  let msg=`Sincronización INDUCCION completada.\n• Agregados: ${totalAgregados}\n• Ya existían: ${totalYaExistian}`;
+  if(errores) msg+=`\n• Errores: ${errores}`;
+  alert(msg);
+}
+
+async function sincronizarEsperados(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  if(!confirm('¿Sincronizar participantes esperados de todas las capacitaciones con el total real de asistentes?')) return;
+  setSyncStatus('syncing');
+  let actualizadas=0;
+  try{
+    for(const cap of caps){
+      // INDUCCION: no sincronizar con asistentes, su meta viene del padrón
+      if(cap.tipo_codigo==='INDUCCION') continue;
+      if(cap.lista_cerrada) continue;
+      const total=getA(cap.id).length;
+      if(total>0 && (cap.participantes_esperados||0)<total){
+        await api('PATCH','capacitaciones',{participantes_esperados:total},`?id=eq.${cap.id}`);
+        cap.participantes_esperados=total;
+        actualizadas++;
+      }
+    }
+    setSyncStatus('ok');
+    toast(`Sincronización completa: ${actualizadas} capacitaciones actualizadas`);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error al sincronizar');}
+}
+
+async function resetearEsperadosInduccion(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const capsInd=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&(c.participantes_esperados||0)>0);
+  if(!capsInd.length){toast('Todas las INDUCCIÓN ya tienen esperados = 0');return;}
+  if(!confirm(`Se resetearán a 0 los "participantes esperados" de ${capsInd.length} capacitación${capsInd.length!==1?'es':''} de tipo INDUCCIÓN.\n\nEsto hace que la meta se calcule automáticamente desde el padrón (fecha de antigüedad).\n\n¿Continuar?`)) return;
+  setSyncStatus('syncing');
+  let ok=0;
+  try{
+    for(const cap of capsInd){
+      await api('PATCH','capacitaciones',{participantes_esperados:0},`?id=eq.${cap.id}`);
+      cap.participantes_esperados=0;
+      ok++;
+    }
+    aplicarEstadosEnMemoria();
+    setSyncStatus('ok');
+    toast(`${ok} INDUCCIÓN${ok!==1?'es':''} reseteadas — la meta ahora viene del padrón`);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+async function deleteCap(id){
+  if(!canEdit()||!confirm('¿Eliminar esta capacitación y todos sus datos?'))return;
+  try{await api('DELETE','capacitaciones','',`?id=eq.${id}`);caps=caps.filter(c=>c.id!==id);asistentes=asistentes.filter(a=>a.capacitacion_id!==id);materiales=materiales.filter(m=>m.capacitacion_id!==id);evaluaciones=evaluaciones.filter(e=>e.capacitacion_id!==id);toast('Eliminada');closeModal();updateSub();renderContent();}catch(e){toast('Error');}
+}
+
+async function addTipo(){
+  if(!isAdmin())return;
+  const codigo=prompt('Código del tipo (ej: LIDERAZGO):');if(!codigo||!codigo.trim())return;
+  const codigoU=codigo.trim().toUpperCase();
+  if(tipos.find(t=>t.codigo===codigoU)){toast('Ya existe ese tipo');return;}
+  const nombre=prompt('Nombre completo:');if(!nombre||!nombre.trim())return;
+  const tieneEval=confirm('¿Este tipo tiene evaluación con nota?');
+  const tieneRepo=confirm('¿Este tipo tiene repositorio de materiales?');
+  try{const r=await api('POST','tipos_capacitacion',{codigo:codigoU,nombre:nombre.trim(),tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)tipos.push(nv);populateFilters();renderContent();toast('Tipo agregado');}catch(e){toast('Error');}
+}
+
+function editTipo(codigo){
+  if(!isAdmin())return;
+  const t=tipos.find(x=>x.codigo===codigo);if(!t)return;
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:14px">Editar tipo de capacitación</div>
+    <div class="form-group"><label class="form-label">Código</label><input class="form-input" id="et-cod" value="${esc(t.codigo)}" style="background:#f4f4f2;color:#888" readonly></div>
+    <div class="form-group"><label class="form-label">Nombre completo *</label><input class="form-input" id="et-nom" value="${esc(t.nombre)}"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px;border:1px solid #e5e5e0;border-radius:8px">
+        <input type="checkbox" id="et-eval" ${t.tiene_evaluacion?'checked':''} style="width:16px;height:16px;accent-color:#1D9E75">
+        <div><div style="font-weight:500;color:#111">Tiene evaluación con nota</div><div style="font-size:11px;color:#888">Habilita la sección de evaluaciones y preguntas</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px;border:1px solid #e5e5e0;border-radius:8px">
+        <input type="checkbox" id="et-repo" ${t.tiene_repositorio?'checked':''} style="width:16px;height:16px;accent-color:#1D9E75">
+        <div><div style="font-weight:500;color:#111">Tiene repositorio de materiales</div><div style="font-size:11px;color:#888">Habilita la sección de materiales y links</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px;border:1px solid #e5e5e0;border-radius:8px">
+        <input type="checkbox" id="et-qr" ${t.tiene_qr_presencia!==false?'checked':''} style="width:16px;height:16px;accent-color:#1A2F6E">
+        <div><div style="font-weight:500;color:#111">QR de presencialidad activo</div><div style="font-size:11px;color:#888">Muestra el botón QR Presencia en el detalle de la capacitación</div></div>
+      </label>
+    </div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveTipo('${esc(t.codigo)}')">Guardar cambios</button></div>`);
+}
+
+async function saveTipo(codigo){
+  if(!isAdmin())return;
+  const nombre=document.getElementById('et-nom').value.trim();
+  if(!nombre){toast('El nombre no puede estar vacío');return;}
+  const tieneEval=document.getElementById('et-eval').checked;
+  const tieneRepo=document.getElementById('et-repo').checked;
+  const tieneQr=document.getElementById('et-qr').checked;
+  try{
+    await api('PATCH','tipos_capacitacion',{nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:tieneQr},`?codigo=eq.${encodeURIComponent(codigo)}`);
+    const idx=tipos.findIndex(x=>x.codigo===codigo);
+    if(idx>=0) tipos[idx]={...tipos[idx],nombre,tiene_evaluacion:tieneEval,tiene_repositorio:tieneRepo,tiene_qr_presencia:tieneQr};
+    closeModal();populateFilters();renderContent();toast('✓ Tipo actualizado');
+  }catch(e){toast('Error al guardar');}
+}
+
+async function addDepto(){
+  const nombre=prompt('Nombre del departamento:');
+  if(!nombre||!nombre.trim()) return;
+  const n=nombre.trim();
+  if(departamentos.includes(n)){toast('Ya existe ese departamento');return;}
+  departamentos=[...departamentos,n].sort();
+  renderContent();
+  toast('Departamento agregado');
+}
+function delDepto(nombre){
+  if(!confirm(`¿Eliminar el departamento "${nombre}"?`)) return;
+  departamentos=departamentos.filter(d=>d!==nombre);
+  renderContent();
+  toast('Departamento eliminado');
+}
+
+async function addUN(){if(!isAdmin())return;const n=prompt('Nombre de la nueva UN:');if(!n||!n.trim())return;if(uns.find(u=>u.nombre===n.trim())){toast('Ya existe');return;}try{const r=await api('POST','unidades_negocio',{nombre:n.trim()},'');const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);populateFilters();renderContent();toast('UN agregada');}catch(e){toast('Error');}}
+async function delUN(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar la UN "${nombre}"?`))return;try{await api('DELETE','unidades_negocio','',`?id=eq.${id}`);uns=uns.filter(u=>u.id!==id);populateFilters();renderContent();toast('UN eliminada');}catch(e){toast('Error');}}
+async function addSector(){if(!isAdmin())return;if(!uns.length){alert('Primero agregá una UN.');return;}const unN=prompt(`¿A qué UN pertenece?\nOpciones: ${uns.map(u=>u.nombre).join(', ')}`);if(!unN)return;const unReal=uns.find(u=>u.nombre.toLowerCase()===unN.trim().toLowerCase());if(!unReal){alert('UN no encontrada.');return;}const n=prompt('Nombre del sector:');if(!n||!n.trim())return;if(sectores.find(s=>s.nombre.toLowerCase()===n.trim().toLowerCase()&&s.un===unReal.nombre)){toast('Ya existe');return;}try{const r=await api('POST','sectores',{nombre:n.trim(),un:unReal.nombre},'');const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);populateFilters();renderContent();toast('Sector agregado');}catch(e){toast('Error');}}
+async function delSector(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar "${nombre}"?`))return;try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}}
+
+function openNewUsuario(){
+  const unOpts='<option value="">Sin restricción</option>'+uns.map(u=>`<option>${u.nombre}</option>`).join('');
+  const secOpts='<option value="">Sin restricción</option>'+sectores.map(s=>`<option>${s.nombre}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Nuevo usuario</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" placeholder="Juan Pérez"></div>
+    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" placeholder="juan@empresa.com"></div>
+    <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-input" id="u-pass" type="text" placeholder="Contraseña inicial"></div>
+    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor">Visor</option><option value="capacitador">Capacitador</option><option value="admin">Administrador</option></select></div>
+    <div id="rol-fields"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(null)">Crear</button></div>`);
+}
+
+function editUsuario(id){
+  const u=usuarios.find(x=>x.id===id);if(!u)return;
+  const unOpts='<option value="">Sin restricción</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
+  const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
+    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}"></div>
+    <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
+    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
+    <div id="rol-fields" style="${u.rol==='admin'?'display:none':''}"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(${id})">Guardar</button></div>`);
+}
+
+async function saveUsuario(id){
+  const nombre=document.getElementById('u-nombre').value.trim();
+  const email=document.getElementById('u-email').value.trim().toLowerCase();
+  const pass=document.getElementById('u-pass').value.trim();
+  const rol=document.getElementById('u-rol').value;
+  const un=(rol==='admin')?null:(document.getElementById('u-un').value||null);
+  const sector=(rol==='admin')?null:(document.getElementById('u-sec').value||null);
+  if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
+  const isNew=!id;if(isNew&&!pass){alert('La contraseña es obligatoria');return;}
+  const obj={nombre,email,rol,un,sector};if(pass)obj.password_hash=pass;
+  try{
+    if(isNew){const r=await api('POST','usuarios',{...obj,activo:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)usuarios.push(nv);toast('Usuario creado');}
+    else{await api('PATCH','usuarios',obj,`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i]={...usuarios[i],...obj};toast('Actualizado');}
+    closeModal();renderContent();
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function toggleUsuario(id,nuevoEstado){
+  try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
+}
+
+function renderCharts(){
+  const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
+  const textColor=isDark?'#aaa':'#888';
+
+  function destroyCanvas(id){
+    const c=document.getElementById(id);
+    if(!c) return null;
+    try{ const prev=Chart.getChart(c); if(prev) prev.destroy(); }catch(e){}
+    if(c._chartInst){ try{c._chartInst.destroy();}catch(e){} c._chartInst=null; }
+    return c;
+  }
+
+  // ── Gráfico de línea: Evolución mensual ──────────────────────────────
+  const canvasLinea=destroyCanvas('chart-linea');
+  if(canvasLinea){
+    // Obtener datos del span o recalcular
+    let dm=null;
+    try{
+      const sp=document.getElementById('chart-data-linea');
+      if(sp&&sp.textContent.trim()&&sp.textContent.trim()!=='[]') dm=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(!dm||!dm.length){
+      canvasLinea.parentElement.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;padding:8px">Sin datos para mostrar</p>';
+      canvasLinea.style.display='none';
+    } else {
+      const hayDatos=dm.some(d=>d.planificadas>0);
+      if(!hayDatos){
+        canvasLinea.parentElement.innerHTML+='<p style="font-size:11px;color:#bbb;text-align:center;padding:8px">Sin capacitaciones planificadas para este año</p>';
+        canvasLinea.style.display='none';
+      } else {
+        canvasLinea.style.display='';
+        canvasLinea._chartInst=new Chart(canvasLinea,{
+          type:'line',
+          data:{labels:dm.map(d=>d.m),datasets:[
+            {label:'Planificadas',data:dm.map(d=>d.planificadas),borderColor:'#85B7EB',backgroundColor:'rgba(133,183,235,0.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#85B7EB',tension:0.35,fill:true},
+            {label:'Realizadas',data:dm.map(d=>d.realizadas),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.15)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#1D9E75',tension:0.35,fill:true}
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{labels:{font:{size:11},color:textColor}}},
+            scales:{
+              y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor}},
+              x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}}
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // ── Gráfico de barras: Efectividad de evaluaciones ───────────────────
+  const canvasEval=destroyCanvas('chart-eval');
+  if(canvasEval){
+    let ed=null;
+    try{
+      const sp=document.getElementById('chart-data-eval');
+      if(sp&&sp.textContent.trim()&&sp.textContent.trim()!=='[]') ed=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(!ed||!ed.length){
+      canvasEval.style.display='none';
+    } else {
+      canvasEval.style.display='';
+      canvasEval._chartInst=new Chart(canvasEval,{
+        type:'bar',
+        data:{labels:ed.map(d=>d.titulo),datasets:[
+          {label:'Nota promedio /10',data:ed.map(d=>d.prom?Math.round(d.prom*10)/10:0),
+            backgroundColor:['rgba(29,158,117,0.8)','rgba(127,119,221,0.75)','rgba(133,183,235,0.8)','rgba(239,159,39,0.75)','rgba(226,75,74,0.7)'].slice(0,ed.length),
+            borderColor:['#1D9E75','#7F77DD','#85B7EB','#EF9F27','#E24B4A'].slice(0,ed.length),
+            borderWidth:1.5,borderRadius:5,yAxisID:'y'},
+          {label:'% Aprobados',data:ed.map(d=>d.apr||0),type:'line',
+            borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',
+            borderWidth:2,pointRadius:5,pointBackgroundColor:'#185FA5',tension:0.3,fill:true,yAxisID:'y1'}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{
+            legend:{labels:{font:{size:10},color:textColor}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.datasetIndex===0?ctx.parsed.y+'/10':ctx.parsed.y+'%')}}
+          },
+          scales:{
+            y:{beginAtZero:true,max:10,title:{display:true,text:'Nota /10',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}},
+            y1:{beginAtZero:true,max:100,position:'right',title:{display:true,text:'% Aprobados',font:{size:10},color:textColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
+          }
+        }
+      });
+    }
+  }
+
+  // ── Gráfico Resumen: Por tipo ──────────────────────────────────────────
+  const canvasTipo=destroyCanvas('chart-resumen-tipo');
+  if(canvasTipo){
+    let tipoData=null;
+    try{
+      const sp=document.getElementById('chart-data-resumen-tipo');
+      if(sp&&sp.textContent.trim()) tipoData=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(tipoData&&tipoData.length){
+      canvasTipo.style.display='';
+      canvasTipo._chartInst=new Chart(canvasTipo,{
+        type:'bar',
+        data:{
+          labels:tipoData.map(d=>d.nombre||d.tipo),
+          datasets:[
+            {label:'Realizadas',data:tipoData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
+            {label:'En Curso / Prog.',data:tipoData.map(d=>d.pendientes),backgroundColor:'rgba(239,159,39,0.5)',borderColor:'#EF9F27',borderWidth:1.5,borderRadius:4},
+            {label:'Vencidas',data:tipoData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
+          ]
+        },
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:12}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},
+          scales:{
+            x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
+            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor},
+               title:{display:true,text:'Capacitaciones',font:{size:10},color:textColor}}
+          }
+        }
+      });
+    }
+  }
+
+  // ── Gráfico Resumen: Por bimestre ─────────────────────────────────────
+  const canvasBim=destroyCanvas('chart-resumen-bim');
+  if(canvasBim){
+    let bimData=null;
+    try{
+      const sp=document.getElementById('chart-data-resumen-bim');
+      if(sp&&sp.textContent.trim()) bimData=JSON.parse(sp.textContent);
+    }catch(e){}
+    if(bimData&&bimData.length){
+      canvasBim.style.display='';
+      canvasBim._chartInst=new Chart(canvasBim,{
+        type:'bar',
+        data:{
+          labels:bimData.map(d=>d.bim),
+          datasets:[
+            {label:'Realizadas',data:bimData.map(d=>d.realizadas),backgroundColor:'rgba(29,158,117,0.8)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:4},
+            {label:'En Curso / Prog.',data:bimData.map(d=>d.pendientes),backgroundColor:'rgba(239,159,39,0.5)',borderColor:'#EF9F27',borderWidth:1.5,borderRadius:4},
+            {label:'Vencidas',data:bimData.map(d=>d.vencidas),backgroundColor:'rgba(226,75,74,0.7)',borderColor:'#E24B4A',borderWidth:1.5,borderRadius:4},
+          ]
+        },
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{position:'top',labels:{font:{size:11},color:textColor,boxWidth:12}},
+            tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y}}},
+          scales:{
+            x:{ticks:{color:textColor,font:{size:10}},grid:{color:gridColor}},
+            y:{beginAtZero:true,ticks:{stepSize:1,color:textColor,font:{size:10}},grid:{color:gridColor},
+               title:{display:true,text:'Capacitaciones',font:{size:10},color:textColor}}
+          }
+        }
+      });
+    }
+  }
+}
+
+// ── AGREGAR PARTICIPANTE DESIGNADO ──────────────────────────────────────────
+
+async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
+  if(!canManageParticipants()) return;
+  if(!confirm(`¿Quitar a ${nombre} del padrón para esta capacitación?\n\nEl empleado quedará registrado en la lista como "No completó" y podrá eliminarse luego con el botón ×.`)) return;
+  try{
+    setSyncStatus('syncing');
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+    if(existing&&existing.length){ toast('Este participante ya está en la lista'); setSyncStatus('ok'); return; }
+    const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    const totalNuevo=getA(capId).length;
+    const capObj=caps.find(x=>x.id===capId);
+    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+      capObj.participantes_esperados=totalNuevo;
+    }
+    setSyncStatus('ok');
+    toast(`${nombre} incorporado a la lista`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+// ── TOGGLE LISTA CERRADA ────────────────────────────────────────────────────
+async function toggleListaCerrada(capId, cerrar){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const msg=cerrar
+    ?`¿Cerrar la lista de participantes de "${c.titulo}"?
+
+Una vez cerrada:
+• No se agregarán participantes automáticamente
+• Los Posibles del padrón dejarán de mostrarse al pie
+• La sincronización automática quedará bloqueada
+• Podés volver a abrirla cuando quieras`
+    :`¿Abrir la lista de "${c.titulo}"?
+
+Volvés al modo normal: los Posibles del padrón se mostrarán de nuevo y se permite agregar participantes.`;
+  if(!confirm(msg)) return;
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','capacitaciones',{lista_cerrada:cerrar},`?id=eq.${capId}`);
+    const idx=caps.findIndex(x=>x.id===capId);
+    if(idx>=0) caps[idx].lista_cerrada=cerrar;
+    setSyncStatus('ok');
+    toast(cerrar?'🔒 Lista cerrada':'🔓 Lista abierta');
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+// ── ELIMINAR NO SELECCIONADOS (padrón no agregados a lista) ─────────────────
+async function limpiarNoEnLista(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  // Recalcular posibles del padrón
+  const _deps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+  const esGlob=!c.un&&!_deps.length;
+  const esInd=c.tipo_codigo==='INDUCCION';
+  let padronRef=[];
+  if(esInd&&c.fecha){
+    const [yy,mm]=c.fecha.split('-');
+    padronRef=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!p.fecha_calculo_antiguedad) return false;
+      const parts=p.fecha_calculo_antiguedad.split('-');
+      return parseInt(parts[0])===parseInt(yy)&&parseInt(parts[1])===parseInt(mm);
+    });
+  } else {
+    padronRef=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(!esGlob){
+        if(c.un&&p.un!==c.un) return false;
+        if(_deps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_deps.includes(d)) return false;}
+      }
+      return true;
+    });
+  }
+  const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  if(!noEnLista.length){toast('No hay participantes del padrón fuera de la lista');return;}
+  if(!confirm(`Se eliminarán ${noEnLista.length} persona${noEnLista.length!==1?'s':''} del padrón que NO están en la lista de "${c.titulo}".
+
+Esta acción solo oculta los "Posibles" no confirmados. ¿Continuar?`)) return;
+  // No hay nada que borrar de la BD — son solo registros del padrón en memoria
+  // Lo que hacemos es cerrar la lista automáticamente para que dejen de mostrarse
+  if(!c.lista_cerrada){
+    await api('PATCH','capacitaciones',{lista_cerrada:true},`?id=eq.${capId}`);
+    const idx=caps.findIndex(x=>x.id===capId);
+    if(idx>=0) caps[idx].lista_cerrada=true;
+    toast(`Lista cerrada — los ${noEnLista.length} no seleccionados ya no se muestran`);
+  } else {
+    toast(`Los ${noEnLista.length} del padrón ya no se muestran (lista cerrada)`);
+  }
+  buildDetail(capId);
+  renderContent();
+}
+
+function openAgregarParticipante(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+  let activosPadron=[];
+  const esGlobal=padron.length&&!c.un&&!c.departamento;
+  const _agDeps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+  const tienePadronFiltro=padron.length&&(c.un||_agDeps.length);
+  if(esGlobal){
+    activosPadron=padron.filter(p=>!p.estado||p.estado==='Vigente');
+  } else if(tienePadronFiltro){
+    activosPadron=padron.filter(p=>{
+      if(p.estado&&p.estado!=='Vigente') return false;
+      if(c.un&&p.un!==c.un) return false;
+      if(_agDeps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_agDeps.includes(d)) return false;}
+      return true;
+    });
+  }
+  // Si estamos en vista 'noenlista', filtrar a solo los del padrón no agregados
+  const vistaActiva=window[`_asisVista_${capId}`];
+  const noEnListaLegajos=window[`_noEnListaLegajos_${capId}`]||new Set();
+  let pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  if(vistaActiva==='noenlista'&&noEnListaLegajos.size>0){
+    pendientes=pendientes.filter(p=>noEnListaLegajos.has(String(p.legajo)));
+  }
+  const listaPadronHtml=pendientes.length
+    ?`<div style="max-height:240px;overflow-y:auto;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f4f4f2;position:sticky;top:0">
+            <th style="padding:6px 8px;text-align:left;width:28px"><input type="checkbox" id="chk-todos-padron" onchange="toggleTodosChk(this)" title="Seleccionar todos"></th>
+            <th style="padding:6px 8px;text-align:left">Nombre</th>
+            <th style="padding:6px 4px;text-align:left;color:#888">Depto</th>
+          </tr></thead>
+          <tbody>${pendientes.map(p=>{
+            const depto=p.departamento||p.datos_extra?.Departamento||'';
+            return`<tr style="border-top:1px solid #f0f0f0">
+              <td style="padding:5px 8px"><input type="checkbox" class="chk-padron-item" value="${esc(p.legajo)}" data-nombre="${esc(p.nombre)}" data-cuil="${esc(p.cuil||p.datos_extra?.CUIL||'')}" data-depto="${esc(depto)}" data-un="${esc(p.un||'')}" data-sector="${esc(p.sector||'')}"></td>
+              <td style="padding:5px 8px;white-space:normal;word-break:break-word">${esc(p.nombre)}</td>
+              <td style="padding:5px 4px;color:#888;font-size:10px">${esc(depto)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+      <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="confirmarAgregarSeleccionados(${capId})">✔ Agregar seleccionados del padrón</button>`
+    :(padron.length?`<div style="background:#f4f4f2;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#888;margin-bottom:14px">Todos los empleados del padrón ya están en la lista.</div>`:'');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px">+ Agregar participante</div>
+    <p style="font-size:12px;color:#777;margin-bottom:12px">Seleccioná del padrón o ingresá un legajo manualmente.</p>
+    ${listaPadronHtml}
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:8px">Agregar por legajo</div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Legajo *</label>
+        <input class="form-input" id="ap-legajo" placeholder="Ej: 10025" oninput="validarLegajoAgregar(this.value)">
+        <div id="ap-lookup" style="font-size:11px;margin-top:4px;min-height:16px"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Nombre completo *</label>
+        <input class="form-input" id="ap-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group"><label class="form-label">CUIL</label><input class="form-input" id="ap-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="ap-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+        <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="ap-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      </div>
+      <button class="btn-prim" style="width:100%" onclick="agregarParticipanteIndividual(${capId})">Agregar participante</button>
+    </div>
+    <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
+}
+
+function toggleTodosChk(masterChk){
+  document.querySelectorAll('.chk-padron-item').forEach(c=>c.checked=masterChk.checked);
+}
+
+function validarLegajoAgregar(legajo){
+  const lookup=document.getElementById('ap-lookup');
+  const nombreInput=document.getElementById('ap-nombre');
+  const unInput=document.getElementById('ap-un');
+  const deptoInput=document.getElementById('ap-depto');
+  const cuilInput=document.getElementById('ap-cuil');
+  if(!lookup) return;
+  if(!legajo||legajo.length<2){
+    lookup.innerHTML='';
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
+      if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+      if(cuilInput) cuilInput.value='';
+    } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)}</span>`;
+      if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
+      if(unInput) unInput.value=emp.un||'';
+      if(deptoInput) deptoInput.value=depto;
+      if(cuilInput) cuilInput.value=cuil;
+    }
+  } else if(padron.length>0){
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(cuilInput) cuilInput.value='';
+  } else {
+    lookup.innerHTML='';
+    if(nombreInput) nombreInput.readOnly=false;
+  }
+}
+
+async function agregarParticipanteIndividual(capId){
+  const legajo=document.getElementById('ap-legajo').value.trim();
+  const nombre=document.getElementById('ap-nombre').value.trim();
+  const un=document.getElementById('ap-un')?document.getElementById('ap-un').value.trim():'';
+  const depto=document.getElementById('ap-depto')?document.getElementById('ap-depto').value.trim():'';
+  const cuil=document.getElementById('ap-cuil')?document.getElementById('ap-cuil').value.trim():'';
+  if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){alert(`El empleado figura con estado "${emp.estado}". No se puede registrar.`);return;}
+  }
+  const a=getA(capId);
+  if(a.find(x=>String(x.legajo)===String(legajo))){alert('Este participante ya está en la lista de esta capacitación.');return;}
+  try{
+    setSyncStatus('syncing');
+    const esMeta=padron.length>0?!!getPadronEmpleado(legajo):true;
+    const capObjA=caps.find(x=>x.id===capId);
+  const esCerradaA=!!(capObjA&&capObjA.lista_cerrada);
+  const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector:'',departamento:depto,cuil,completo:false,en_meta:esMeta,agregado_post_cierre:esCerradaA||null},'');
+    const nv=Array.isArray(r)?r[0]:r;
+    if(nv) asistentes.push(nv);
+    const capObj=caps.find(x=>x.id===capId);
+    // Esperados ahora = lista de asistentes — no actualizamos participantes_esperados
+    setSyncStatus('ok');
+    toast(`${nombre} agregado`);
+    openAgregarParticipante(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+async function confirmarAgregarSeleccionados(capId){
+  const checks=[...document.querySelectorAll('.chk-padron-item:checked')];
+  if(!checks.length){alert('Seleccioná al menos un participante');return;}
+  if(!confirm(`¿Agregar ${checks.length} participante${checks.length!==1?'s':''} a esta capacitación?`)) return;
+  try{
+    setSyncStatus('syncing');
+    const _capC=caps.find(x=>x.id===capId);
+    const _esCerC=!!(_capC&&_capC.lista_cerrada);
+    // Siempre consultar BD fresca para evitar duplicados — no confiar en memoria
+    const yaEnBD=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&select=legajo,id`);
+    const legajosBD=new Set((yaEnBD||[]).map(x=>String(x.legajo)));
+    // Filtrar solo los que NO están en BD
+    const payload=checks
+      .filter(c=>!legajosBD.has(String(c.value)))
+      .map(c=>({
+        capacitacion_id:capId,
+        legajo:c.value,
+        nombre:c.dataset.nombre,
+        un:c.dataset.un,
+        sector:c.dataset.sector,
+        departamento:c.dataset.depto,
+        cuil:c.dataset.cuil,
+        completo:false,
+        en_meta:true,
+        agregado_post_cierre:_esCerC||null
+      }));
+    if(!payload.length){
+      // Todos ya estaban — recargar y mostrar
+      const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
+      if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
+      setSyncStatus('ok');toast('Todos los seleccionados ya estaban en la lista');
+      buildDetail(capId);renderContent();return;
+    }
+    // Insertar de a UNO para detectar errores individuales sin cortar el lote
+    let insertados=0;
+    for(const p of payload){
+      try{
+        const r=await api('POST','asistentes',p,'');
+        const nv=Array.isArray(r)?r[0]:r;
+        if(nv){asistentes.push(nv);insertados++;}
+      }catch(err){
+        console.warn('No se pudo insertar legajo',p.legajo,err.message);
+      }
+    }
+    // Recargar desde servidor para estado real
+    const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
+    if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
+    setSyncStatus('ok');
+    toast(`${insertados} participante${insertados!==1?'s':''} agregado${insertados!==1?'s':''}`);
+    buildDetail(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+function openForzarCumplimiento(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const a=getA(capId);
+  const comp=a.filter(x=>x.completo).length;
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px">✍ Registro en papel</div>
+    <p style="font-size:12px;color:#777;margin-bottom:14px">Usá esto cuando los participantes firmaron en papel y no tenés el Excel. Podés registrar sus datos manualmente o actualizar el total de presentes.</p>
+    <div style="background:#E6F1FB;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#185FA5">
+      Actualmente: <strong>${comp} presentes registrados</strong> de ${c.participantes_esperados} esperados.
+    </div>
+    <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:10px">Opción 1 — Agregar participante individual</div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label class="form-label">Legajo *</label>
+      <input class="form-input" id="fp-legajo" placeholder="Ej: 10025" oninput="validarLegajoPapel(this.value)">
+      <div id="fp-lookup" style="font-size:11px;margin-top:4px;min-height:16px"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label class="form-label">Nombre completo *</label>
+      <input class="form-input" id="fp-nombre" placeholder="Se completa automáticamente del padrón" readonly style="background:#f9f9f7">
+    </div>
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group"><label class="form-label">CUIL</label><input class="form-input" id="fp-cuil" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      <div class="form-group"><label class="form-label">UN</label><input class="form-input" id="fp-un" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      <div class="form-group"><label class="form-label">Departamento</label><input class="form-input" id="fp-depto" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+      <div class="form-group"><label class="form-label">Sector</label><input class="form-input" id="fp-sector" placeholder="—" readonly style="background:#f9f9f7;font-size:12px"></div>
+    </div>
+    <button class="btn-prim" style="width:100%;margin-bottom:16px" onclick="agregarParticipantePapel(${capId})">Agregar participante</button>
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:6px">Opción 2 — Forzar actualización de estado</div>
+      <p style="font-size:11px;color:#777;margin-bottom:10px">Marca la capacitación como Realizada independientemente de los registros cargados.</p>
+      <button class="btn-prim" style="width:100%;background:#7F77DD" onclick="forzarRealizada(${capId})">Marcar como Realizada</button>
+    </div>
+    <button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail(${capId})">← Volver</button>`);
+}
+
+
+function validarLegajoPapel(legajo){
+  const lookup=document.getElementById('fp-lookup');
+  const nombreInput=document.getElementById('fp-nombre');
+  const unInput=document.getElementById('fp-un');
+  const deptoInput=document.getElementById('fp-depto');
+  const secInput=document.getElementById('fp-sector');
+  const cuilInput=document.getElementById('fp-cuil');
+  if(!lookup) return;
+  if(!legajo||legajo.length<2){
+    lookup.innerHTML='';
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(secInput) secInput.value='';
+    if(cuilInput) cuilInput.value='';
+    return;
+  }
+  const emp=getPadronEmpleado(legajo);
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.innerHTML=`<span style="color:#CC0000">⚠ Empleado con estado "${esc(emp.estado)}"</span>`;
+      if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+      if(cuilInput) cuilInput.value='';
+    } else {
+      const depto=emp.departamento||emp.datos_extra?.Departamento||'';
+      const cuil=emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||'';
+      lookup.innerHTML=`<span style="color:#0F6E56">✔ ${esc(emp.nombre)} — ${esc(emp.un||'')} / ${esc(depto)} / ${esc(emp.sector||'')}</span>`;
+      if(nombreInput){nombreInput.value=emp.nombre;nombreInput.readOnly=true;}
+      if(unInput) unInput.value=emp.un||'';
+      if(deptoInput) deptoInput.value=depto;
+      if(secInput) secInput.value=emp.sector||'';
+      if(cuilInput) cuilInput.value=cuil;
+    }
+  } else if(padron.length>0){
+    lookup.innerHTML=`<span style="color:#CC0000">✘ Legajo no encontrado en el padrón</span>`;
+    if(nombreInput){nombreInput.value='';nombreInput.readOnly=true;}
+    if(unInput) unInput.value='';
+    if(deptoInput) deptoInput.value='';
+    if(secInput) secInput.value='';
+    if(cuilInput) cuilInput.value='';
+  } else {
+    lookup.innerHTML='';
+    if(nombreInput) nombreInput.readOnly=false;
+  }
+}
+
+async function agregarParticipantePapel(capId){
+  const legajo=document.getElementById('fp-legajo').value.trim();
+  const nombre=document.getElementById('fp-nombre').value.trim();
+  const un=document.getElementById('fp-un').value.trim();
+  const depto=document.getElementById('fp-depto')?document.getElementById('fp-depto').value.trim():'';
+  const sector=document.getElementById('fp-sector').value.trim();
+  const cuil=document.getElementById('fp-cuil')?document.getElementById('fp-cuil').value.trim():'';
+  const fechaEval=new Date().toISOString().slice(0,10);
+  if(!legajo||!nombre){alert('Legajo y nombre son obligatorios');return;}
+  // Bloquear si el empleado no está vigente según el padrón
+  if(padron.length>0){
+    const emp=getPadronEmpleado(legajo);
+    if(emp&&emp.estado&&emp.estado!=='Vigente'){
+      alert(`El empleado figura con estado "${emp.estado}". No se puede registrar.`);return;
+    }
+  }
+  try{
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+    if(existing&&existing.length){
+      await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
+      const i=asistentes.findIndex(a=>a.capacitacion_id===capId&&a.legajo===legajo);
+      if(i>=0) asistentes[i]={...asistentes[i],completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval};
+      toast('Participante actualizado');
+    }else{
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:fechaEval,completo:true,en_meta:true},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)asistentes.push(nv);
+      // Si el nuevo total supera participantes_esperados, actualizar
+      const totalNuevo=getA(capId).length;
+      const capObj2=caps.find(x=>x.id===capId);
+      if(capObj2&&totalNuevo>(capObj2.participantes_esperados||0)){
+        await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
+        capObj2.participantes_esperados=totalNuevo;
+      }
+      toast('Participante agregado');
+    }
+    if(un&&!uns.find(u=>u.nombre===un)){
+      const r=await api('POST','unidades_negocio',{nombre:un},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);
+    }
+    if(sector&&un&&!sectores.find(s=>s.nombre===sector&&s.un===un)){
+      const r=await api('POST','sectores',{nombre:sector,un},'');
+      const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);
+    }
+    document.getElementById('fp-legajo').value='';
+    document.getElementById('fp-nombre').value='';
+    document.getElementById('fp-un').value='';
+    document.getElementById('fp-sector').value='';
+    renderContent();
+  }catch(e){toast('Error al guardar: '+e.message);}
+}
+
+async function forzarRealizada(capId){
+  if(!confirm('¿Marcar esta capacitación como Realizada?'))return;
+  try{
+    await api('PATCH','capacitaciones',{estado:'Realizada'},`?id=eq.${capId}`);
+    const i=caps.findIndex(c=>c.id===capId);if(i>=0)caps[i].estado='Realizada';
+    toast('Capacitación marcada como Realizada');
+    closeModal();renderContent();
+  }catch(e){toast('Error');}
+}
+
+function exportPlantillaCaps(){
+  const rows=[{codigo_redmine:'#35167',titulo:'Ejemplo capacitacion 1° Bimestre',tipo_codigo:'REMO',un:'Dist y Logistica',departamento:'DIME y Morosidad',area:'Operativos',fecha:'28/02/2026',fecha_fin:'28/02/2026',bimestre:1,participantes_esperados:150,duracion:1,instructor:'Responsable',estado:'Programada',nota_aprobacion:6,obs:''}];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Plan');
+  XLSX.writeFile(wb,'plantilla_plan_capacitacion.xlsx');
+  toast('Plantilla descargada');
+}
+
+function exportPlanActual(){
+  if(!caps.length){toast('No hay capacitaciones');return;}
+  const bimNum={'1° Bimestre (Ene-Feb)':1,'2° Bimestre (Mar-Abr)':2,'3° Bimestre (May-Jun)':3,'4° Bimestre (Jul-Ago)':4,'5° Bimestre (Sep-Oct)':5,'6° Bimestre (Nov-Dic)':6};
+  const rows=caps.map(c=>({codigo_redmine:c.codigo_redmine||'',titulo:c.titulo,tipo_codigo:c.tipo_codigo||'',un:c.un||'',departamento:c.departamento||'',area:c.area||'',fecha:c.fecha?fmtF(c.fecha):'',fecha_fin:c.fecha_fin?fmtF(c.fecha_fin):'',bimestre:bimNum[c.bimestre]||'',participantes_esperados:c.participantes_esperados||'',duracion:c.duracion||'',instructor:c.instructor||'',estado:c.estado||'',nota_aprobacion:c.nota_aprobacion||6,obs:c.obs||''}));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:45},{wch:14},{wch:22},{wch:18},{wch:14},{wch:8},{wch:22},{wch:8},{wch:22},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Plan');
+  XLSX.writeFile(wb,'plan_capacitacion_2026.xlsx');
+  toast('Plan exportado');
+}
+
+async function importarCaps(event){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const file=event.target.files[0];if(!file)return;
+  const bimMap={1:'1° Bimestre (Ene-Feb)',2:'2° Bimestre (Mar-Abr)',3:'3° Bimestre (May-Jun)',4:'4° Bimestre (Jul-Ago)',5:'5° Bimestre (Sep-Oct)',6:'6° Bimestre (Nov-Dic)'};
+  const reader=new FileReader();
+  reader.onload=async function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length){alert('El archivo está vacío');return;}
+      let creadas=0,actualizadas=0,errores=0;
+      setSyncStatus('syncing');
+      toast('Importando...',30000);
+      for(const r of rows){
+        const codigo=String(r.codigo_redmine||r.codigo||'').trim();
+        const titulo=String(r.titulo||'').trim();
+        if(!titulo){errores++;continue;}
+        let fecha='';
+        const fr=String(r.fecha||'').trim();
+        if(fr){
+          if(fr.includes('/')){const p=fr.split('/');if(p.length===3)fecha=((p[2].length===2)?'20'+p[2]:p[2])+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
+          else if(fr.includes('-'))fecha=fr;
+        }
+        const bimNum=parseInt(r.bimestre)||0;
+        const bimestre=bimMap[bimNum]||String(r.bimestre||'');
+        // Parsear fecha_fin desde Excel
+        let fecha_fin='';
+        const ffr=String(r.fecha_fin||'').trim();
+        if(ffr){
+          if(typeof r.fecha_fin==='number'){
+            const df=new Date(Math.round((r.fecha_fin-25569)*86400*1000));
+            fecha_fin=df.getUTCFullYear()+'-'+String(df.getUTCMonth()+1).padStart(2,'0')+'-'+String(df.getUTCDate()).padStart(2,'0');
+          } else if(ffr.includes('/')){
+            const p=ffr.split('/');if(p.length===3)fecha_fin=((p[2].length===2)?'20'+p[2]:p[2])+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+          } else if(ffr.includes('-')) fecha_fin=ffr;
+        }
+        // Auto fecha_fin por bimestre si no viene en el Excel
+        if(!fecha_fin){
+          const _bnum=bimNum?String(bimNum):(bimestre?String(BIMESTRES.indexOf(bimestre)+1):'');
+          if(_bnum) fecha_fin=fechaFinPorBimestre(_bnum);
+        }
+        if(!fecha_fin&&bimNum){
+          const bimFin={1:'2026-02-28',2:'2026-04-30',3:'2026-06-30',4:'2026-08-31',5:'2026-10-31',6:'2026-12-31'};
+          fecha_fin=bimFin[bimNum]||'';
+        }
+        const depto=String(r.departamento||r.Departamento||'').trim()||null;
+        const tipo_codeImp=String(r.tipo_codigo||'REMO').trim().toUpperCase();
+        // INDUCCION: la fecha de inicio siempre es el 1° del mes indicado en la columna fecha
+        if(tipo_codeImp==='INDUCCION'&&fecha){
+          const [yy,mm]=fecha.split('-');
+          fecha=`${yy}-${mm}-01`;
+        }
+        const obj={titulo,tipo_codigo:tipo_codeImp,un:String(r.un||'').trim()||null,departamento:depto,area:String(r.area||'').trim(),fecha,fecha_fin,bimestre,participantes_esperados:parseInt(r.participantes_esperados)||10,duracion:parseFloat(r.duracion)||1,instructor:String(r.instructor||'').trim(),estado:String(r.estado||'Programada').trim(),nota_aprobacion:parseFloat(r.nota_aprobacion)||6,obs:String(r.obs||'').trim(),codigo_redmine:codigo||null};
+        try{
+          let existente=null;
+          if(codigo){
+            const found=await api('GET','capacitaciones','','?codigo_redmine=eq.'+encodeURIComponent(codigo));
+            if(found&&found.length)existente=found[0];
+          }
+          if(existente){
+            await api('PATCH','capacitaciones',obj,'?id=eq.'+existente.id);
+            const i=caps.findIndex(c=>c.id===existente.id);
+            if(i>=0)caps[i]={...caps[i],...obj};else caps.push({...existente,...obj});
+            actualizadas++;
+          }else{
+            const nr=await api('POST','capacitaciones',obj,'');
+            const nv=Array.isArray(nr)?nr[0]:nr;if(nv)caps.push(nv);
+            creadas++;
+          }
+          if(obj.un&&!uns.find(u=>u.nombre===obj.un)){
+            const ur=await api('POST','unidades_negocio',{nombre:obj.un},'');
+            const unv=Array.isArray(ur)?ur[0]:ur;if(unv)uns.push(unv);
+          }
+        }catch(rowErr){errores++;console.warn('Error fila',titulo,rowErr);}
+      }
+      setSyncStatus('ok');populateFilters();renderContent();
+      alert('Importación: '+creadas+' creadas, '+actualizadas+' actualizadas'+(errores?', '+errores+' errores':''));
+    }catch(err){setSyncStatus('error');alert('Error: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-overlay').classList.add('open');}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
+function fmtF(f){if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// FORGOT PASSWORD
+function openForgot(){
+  const overlay=document.getElementById('forgot-overlay');
+  overlay.style.display='flex';
+  document.getElementById('forgot-email').value='';
+  document.getElementById('forgot-error').style.display='none';
+  document.getElementById('forgot-code-box').style.display='none';
+  document.getElementById('forgot-btn').style.display='inline-block';
+}
+function closeForgot(){
+  document.getElementById('forgot-overlay').style.display='none';
+}
+async function doForgot(){
+  const email=document.getElementById('forgot-email').value.trim().toLowerCase();
+  if(!email){alert('Ingresá tu email');return;}
+  document.getElementById('forgot-error').style.display='none';
+  document.getElementById('forgot-code-box').style.display='none';
+  try{
+    const res=await api('GET','usuarios','',`?email=eq.${encodeURIComponent(email)}&activo=eq.true`);
+    if(!res||!res.length){document.getElementById('forgot-error').style.display='block';return;}
+    const code=Math.random().toString(36).substring(2,8).toUpperCase();
+    document.getElementById('forgot-code').textContent=code;
+    document.getElementById('forgot-code-box').style.display='block';
+    document.getElementById('forgot-btn').style.display='none';
+  }catch(e){alert('Error de conexión');}
+}
+
+// INIT
+async function init(){
+  // verificar si es acceso a evaluacion publica
+  const params=new URLSearchParams(window.location.search);
+  const evalId=params.get('eval');
+  if(evalId){
+    // cargar datos minimos y mostrar evaluacion
+    try{
+      const [ev,pq,cap,pad]=await Promise.all([
+        api('GET','evaluaciones','',`?id=eq.${evalId}`),
+        api('GET','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}&order=orden.asc`),
+        api('GET','capacitaciones','','?order=id.asc'),
+        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc')
+      ]);
+      evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];padron=pad||[];
+      const tiposData=await api('GET','tipos_capacitacion','','?activo=eq.true');
+      tipos=tiposData||[];
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app-wrap').style.display='none';
+      renderEvalPublica(parseInt(evalId));
+    }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la evaluación.</p></div></div>';}
+    return;
+  }
+  // verificar si es registro de presencia
+  const presCapId=params.get('presencia');
+  if(presCapId){
+    try{
+      const [cap,pad,tiposData,evData,pqData]=await Promise.all([
+        api('GET','capacitaciones','',`?id=eq.${presCapId}`),
+        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc'),
+        api('GET','tipos_capacitacion','','?activo=eq.true'),
+        api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`),
+        api('GET','preguntas_evaluacion','',`?evaluacion_id=not.is.null&order=orden.asc`)
+      ]);
+      caps=cap||[];padron=pad||[];tipos=tiposData||[];
+      evaluaciones=evData||[];preguntas=pqData||[];
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app-wrap').style.display='none';
+      renderPresenciaPublica(parseInt(presCapId));
+    }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la capacitación.</p></div></div>';}
+    return;
+  }
+  // app normal
+  const savedUser=sessionStorage.getItem('capUser');
+  if(savedUser){try{currentUser=JSON.parse(savedUser);showApp();}catch(e){}}
+}
+
+
+
+// ===== renderPresenciaPublica =====
+function renderPresenciaPublica(capId){
+  const cap=caps.find(c=>c.id===capId);
+  if(!cap){
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;color:#888;padding:40px">Capacitación no encontrada.</p></div></div>';
+    return;
+  }
+  // Detectar si hay evaluación activa con preguntas
+  const evActiva=evaluaciones.find(e=>e.capacitacion_id===capId&&e.activa);
+  const tieneEval=!!(evActiva&&preguntas.filter(p=>p.evaluacion_id===evActiva.id).length>0);
+  const badgeTipo=cap.tipo_codigo?tipoBadge(cap.tipo_codigo):'';
+  const subtituloEval=tieneEval
+    ?'<div style="background:#FFF8E8;border:1px solid #EF9F27;border-radius:8px;padding:8px 12px;font-size:12px;color:#854F0B;margin-top:8px">⚠️ Esta capacitación requiere evaluación. Tu asistencia quedará pendiente hasta completarla.</div>'
+    :'';
+  document.body.innerHTML=`<div class="eval-public-wrap">
+    <div class="eval-public-card">
+      <div style="text-align:center;margin-bottom:18px">
+        ${badgeTipo}
+        <div style="font-size:16px;font-weight:700;color:#1A2F6E;margin-top:6px">${tieneEval?'📋 Registro de Asistencia y Evaluación':'✅ Registro de Asistencia'}</div>
+        <div style="font-size:13px;font-weight:600;color:#111;margin-top:8px">${esc(cap.titulo)}</div>
+        ${cap.fecha?`<div style="font-size:11px;color:#888;margin-top:2px">Fecha: ${fmtF(cap.fecha)}</div>`:''}
+        ${cap.un?`<div style="font-size:11px;color:#888">${esc(cap.un)}</div>`:''}
+        ${subtituloEval}
+      </div>
+      <div style="background:#EAF4FF;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:#1A2F6E;margin-bottom:10px">📋 Identificate para continuar</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Legajo *</label>
+            <input class="form-input" id="pres-legajo" placeholder="Nº de legajo" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId},${tieneEval?evActiva.id:'null'})">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">Últimos 4 dígitos DNI *</label>
+            <input class="form-input" id="pres-dni4" placeholder="Ej: 7893" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')validarPresencia(${capId},${tieneEval?evActiva.id:'null'})">
+          </div>
+        </div>
+        <button onclick="validarPresencia(${capId},${tieneEval?evActiva.id:'null'})" style="background:#1A2F6E;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;width:100%">${tieneEval?'✔ Confirmar y rendir evaluación':'✔ Confirmar asistencia'}</button>
+        <div id="pres-lookup" style="margin-top:10px;font-size:12px;display:none;text-align:center"></div>
+      </div>
+      <p style="font-size:10px;color:#aaa;text-align:center">Tus datos se usan exclusivamente para registrar tu asistencia a la capacitación.</p>
+    </div>
+  </div>`;
+}
+
+async function validarPresencia(capId, evalId){
+  const lookup=document.getElementById('pres-lookup');
+  const leg=String((document.getElementById('pres-legajo')||{}).value||'').trim();
+  const dni4=String((document.getElementById('pres-dni4')||{}).value||'').trim().replace(/[^0-9]/g,'');
+  if(!lookup) return;
+  if(!leg){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá tu legajo</span>';return;}
+  if(!dni4||dni4.length<4){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá los 4 últimos dígitos de tu DNI</span>';return;}
+  const emp=getPadronEmpleado(leg);
+  if(!emp&&padron.length>0){
+    lookup.style.display='block';
+    lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado. Verificá o contactá a RRHH.</span>`;
+    return;
+  }
+  if(emp){
+    if(emp.estado&&emp.estado!=='Vigente'){
+      lookup.style.display='block';
+      lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">⚠ Tu legajo figura con estado "${esc(emp.estado)}" — contactá a RRHH.</span>`;
+      return;
+    }
+    const docPadron=String(emp.documento||emp.datos_extra?.Documento||emp.datos_extra?.documento||'').replace(/[^0-9]/g,'');
+    if(docPadron&&docPadron.length>=4){
+      if(dni4!==docPadron.slice(-4)){
+        lookup.style.display='block';
+        lookup.innerHTML='<span style="color:#CC0000;font-weight:600">✘ Los datos no coinciden. Verificá tu legajo y los 4 últimos dígitos del DNI.</span>';
+        return;
+      }
+    }
+  }
+  const nombre=emp?emp.nombre:'';
+  const un=emp?emp.un||'':'';
+  const sector=emp?emp.sector||'':'';
+  const depto=emp?(emp.departamento||emp.datos_extra?.Departamento||''):'';
+  const cuil=emp?(emp.cuil||emp.datos_extra?.CUIL||emp.datos_extra?.Cuil||''):'';
+  lookup.style.display='block';
+  // === CASO CON EVALUACIÓN ===
+  if(evalId&&evalId!=='null'&&evalId!==null){
+    lookup.innerHTML='<span style="color:#888">Verificando datos...</span>';
+    try{
+      // Registrar presencia (completo=false) si no existe aún
+      const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+      if(!existing||!existing.length){
+        await api('POST','asistentes',{capacitacion_id:capId,legajo:leg,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+      } else if(existing[0].completo){
+        // Ya completó la cap (aprobó evaluación en otro momento)
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>🏆 Ya completaste esta capacitación</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+        return;
+      }
+      // Redirigir a la evaluación, pasando datos del empleado por sessionStorage
+      const datosParaEval={legajo:leg,nombre,un,sector,depto,cuil,capId};
+      sessionStorage.setItem('presencia_datos_'+evalId, JSON.stringify(datosParaEval));
+      lookup.innerHTML='<span style="color:#1D9E75;font-weight:600">✔ Presencia registrada. Cargando evaluación...</span>';
+      setTimeout(()=>{ renderEvalPublicaConPresencia(parseInt(evalId),datosParaEval); },800);
+    }catch(e){
+      lookup.innerHTML=`<span style="color:#CC0000">Error: ${esc(e.message||'Intenta de nuevo')}</span>`;
+    }
+    return;
+  }
+  // === CASO SIN EVALUACIÓN: marcar completo=true directamente ===
+  lookup.innerHTML='<span style="color:#888">Registrando asistencia...</span>';
+  try{
+    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+    if(existing&&existing.length>0){
+      if(existing[0].completo){
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✔ Tu asistencia ya estaba registrada</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+      } else {
+        await api('PATCH','asistentes',{completo:true,nombre,un,sector,departamento:depto,cuil,fecha_evaluacion:new Date().toISOString().slice(0,10)},`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(leg)}`);
+        lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✅ Asistencia confirmada</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+      }
+    } else {
+      await api('POST','asistentes',{capacitacion_id:capId,legajo:leg,nombre,un,sector,departamento:depto,cuil,completo:true,en_meta:true,fecha_evaluacion:new Date().toISOString().slice(0,10)},'');
+      lookup.innerHTML=`<div style="background:#D4EDDA;border-radius:8px;padding:12px;color:#155724"><strong>✅ Asistencia registrada exitosamente</strong><br><span style="font-size:11px">${esc(nombre||leg)}</span></div>`;
+    }
+    const btn=document.querySelector('button[onclick*="validarPresencia"]');
+    if(btn){btn.disabled=true;btn.style.opacity='0.5';btn.textContent='✔ Registrado';}
+  }catch(e){
+    lookup.innerHTML=`<span style="color:#CC0000">Error: ${esc(e.message||'Intenta de nuevo')}</span>`;
+  }
 }
 
 // ===== renderEvalPublicaConPresencia =====
@@ -3134,79 +4915,55 @@ function renderEvalPublicaConPresencia(evalId, datosEmp){
     return;
   }
   const pqsHtml=pqs.map((p,i)=>buildPreguntaPublicaHtml(p,i,pqs.length)).join('');
-  document.body.innerHTML='<div class="eval-public-wrap">'
-    +'<div class="eval-public-card">'
-      +'<div style="margin-bottom:16px">'
-        +(cap?tipoBadge(cap.tipo_codigo):'')
-        +'<div style="font-size:16px;font-weight:600;color:#111;margin:6px 0">'+esc(ev.titulo)+'</div>'
-        +(cap?'<div style="font-size:12px;color:#777">'+esc(cap.titulo)+'</div>':'')
-        +'<div style="background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#085041">✔ Asistencia registrada para <strong>'+esc(datosEmp.nombre||datosEmp.legajo)+'</strong>. Completá la evaluación para finalizar.</div>'
-      +'</div>'
-      +pqsHtml
-      +'<button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEvalConPresencia('+evalId+','+pqs.length+')">Enviar respuestas</button>'
+  document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card">'
+    +'<div style="margin-bottom:16px">'+(cap?tipoBadge(cap.tipo_codigo):'')+
+    '<div style="font-size:16px;font-weight:600;color:#111;margin:6px 0">'+esc(ev.titulo)+'</div>'
+    +(cap?'<div style="font-size:12px;color:#777">'+esc(cap.titulo)+'</div>':'')
+    +'<div style="background:#E1F5EE;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#085041">✔ Asistencia registrada para <strong>'+esc(datosEmp.nombre||datosEmp.legajo)+'</strong>. Completá la evaluación para finalizar.</div>'
     +'</div>'
-  +'</div>';
+    +pqsHtml
+    +'<button class="btn-prim" style="width:100%;margin-top:16px" onclick="submitEvalConPresencia('+evalId+','+pqs.length+')">Enviar respuestas</button>'
+    +'</div></div>';
 }
 
 async function submitEvalConPresencia(evalId, totalPqs){
   let datosEmp;
   try{datosEmp=JSON.parse(sessionStorage.getItem('presencia_datos_'+evalId)||'{}');}catch(e){datosEmp={};}
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
-
   const respuestasMap=recogerRespuestasPublicas(pqs);
   if(!respuestasMap) return;
-
   const puntaje=calcPuntajeFinal(pqs,respuestasMap);
   const respuestasLegacy={};
-  for(const p of pqs){
-    const sel=respuestasMap[p.id]||[];
-    respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;
-  }
-
+  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
   const ev=evaluaciones.find(e=>e.id===evalId);
   const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
   const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
   const aprobado=puntaje>=nota_aprobacion;
-
-  try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo:datosEmp.legajo,nombre:datosEmp.nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn('Error registrando respuesta',e);}
-
+  try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo:datosEmp.legajo,nombre:datosEmp.nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn(e);}
   const intentoKey='eval_intento_'+evalId+'_'+datosEmp.legajo;
   const esSegundoIntento=sessionStorage.getItem(intentoKey)==='1';
   if(!aprobado&&!esSegundoIntento){
     sessionStorage.setItem(intentoKey,'1');
-    sessionStorage.setItem(intentoKey+'_nota',String(puntaje));
     document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
-      +'<div style="font-size:14px;color:#777">Resultado de '+esc(datosEmp.nombre||datosEmp.legajo)+'</div>'
       +'<div class="result-score fail">'+puntaje+'/10</div>'
       +'<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">✗ Desaprobado</div>'
-      +'<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'
-        +'<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
-        +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.<br>Revisá el material de lectura antes de volver a intentarlo.</div>'
+      +'<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px;margin:0 0 16px;text-align:left">'
+        +'<div style="font-size:14px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
+        +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong>.</div>'
       +'</div>'
-      +'<button onclick="_reintentarEvalPresencia('+evalId+')" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
+      +'<button onclick="(()=>{let d={};try{d=JSON.parse(sessionStorage.getItem(\'presencia_datos_\'+'+evalId+')||\'{}\')}catch(e){}renderEvalPublicaConPresencia('+evalId+',d);})()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
     +'</div></div></div>';
     return;
   }
   await _marcarCompletoPresencia(datosEmp, aprobado, puntaje, cap);
-  const notaPrimerIntento=sessionStorage.getItem(intentoKey+'_nota');
-  sessionStorage.removeItem(intentoKey);sessionStorage.removeItem(intentoKey+'_nota');
-
+  sessionStorage.removeItem(intentoKey);
   const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
-
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
     +'<div style="font-size:14px;color:#777">Resultado de '+esc(datosEmp.nombre||datosEmp.legajo)+'</div>'
     +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'
     +'<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'✓ Aprobado':'✗ Desaprobado')+'</div>'
-    +(aprobado
-      ?'<div style="background:#E1F5EE;border:1px solid #5DCAA5;border-radius:10px;padding:12px 14px;font-size:13px;color:#085041;margin-bottom:8px">✅ Tu asistencia y evaluación quedaron registradas correctamente.</div>'
-        +incorrectasHtml
-      :'<div style="background:#FFF0F0;border:2px solid #E24B4A;border-radius:10px;padding:12px 14px;margin:8px 0 12px;text-align:left">'
-        +'<div style="font-size:14px;font-weight:700;color:#CC0000;margin-bottom:4px">😔 No pudiste aprobar</div>'
-        +'<div style="font-size:13px;color:#AA0000">Tu presencia fue registrada pero la capacitación no está completa.</div>'
-      +'</div>'
-      +(notaPrimerIntento?'<div style="font-size:11px;color:#aaa;margin-bottom:8px">1° intento: '+parseFloat(notaPrimerIntento)+'/10 · 2° intento: '+puntaje+'/10</div>':'')
-      +incorrectasHtml
-    )
+    +(aprobado?'<div style="background:#E1F5EE;border:1px solid #5DCAA5;border-radius:10px;padding:12px 14px;font-size:13px;color:#085041;margin-bottom:8px">✅ Tu asistencia y evaluación quedaron registradas correctamente.</div>':'')
+    +incorrectasHtml
   +'</div></div></div>';
 }
 
@@ -3270,130 +5027,6 @@ function mostrarQrPresencia(capId, titulo){
     } else { cargarQR(); }
   },250);
 }
-
-// ===== Inyectar botón de impresión en tabs Resumen / Indicadores =====
-function injectPrintBtn(container, tabName) {
-  const label = tabName === 'resumen' ? '🖨 Imprimir Resumen' : '🖨 Imprimir Indicadores';
-  const btn = document.createElement('button');
-  btn.className = 'print-btn';
-  btn.textContent = label;
-  btn.onclick = () => imprimirTab(tabName);
-  container.insertBefore(btn, container.firstChild);
-}
-
-// ===== IMPRESIÓN: Resumen / Indicadores =====
-function imprimirTab(tabName) {
-  // Mostrar selector de páginas
-  const paginas = prompt(
-    '¿Cuántas páginas de alto querés que ocupe el contenido?\n(Ingresá un número: 1, 2, 3…)\nDejá vacío para impresión automática.',
-    ''
-  );
-
-  // Convertir charts a imágenes estáticas para que se impriman correctamente
-  const wrappers = []; // { wrapper, originalHTML, img }
-  const content = document.getElementById('content');
-
-  content.querySelectorAll('canvas').forEach(canvas => {
-    try {
-      const wrapper = canvas.parentNode;
-      // Capturar dimensiones reales del canvas renderizado
-      const w = canvas.offsetWidth || wrapper.offsetWidth || 400;
-      const h = canvas.offsetHeight || wrapper.offsetHeight || 260;
-      const dataUrl = canvas.toDataURL('image/png');
-
-      const img = document.createElement('img');
-      img.src = dataUrl;
-      img.className = '__print_img__';
-      img.style.cssText = `display:block;width:${w}px;height:${h}px;max-width:100%;object-fit:contain`;
-
-      // Guardar HTML original del wrapper y reemplazar su contenido
-      const originalHTML = wrapper.innerHTML;
-      wrappers.push({ wrapper, originalHTML });
-
-      // Quitar position:relative/absolute para que el img fluya normalmente en print
-      const origWrapStyle = wrapper.style.cssText;
-      wrapper.dataset.__origStyle = origWrapStyle;
-      wrapper.style.cssText = `height:${h}px;width:100%;overflow:hidden`;
-      wrapper.innerHTML = '';
-      wrapper.appendChild(img);
-    } catch(e) { console.warn('No se pudo capturar canvas:', e); }
-  });
-
-  // Agregar encabezado de impresión temporal
-  const logoEl = document.querySelector('.hdr-logo-img');
-  const logoSrc = logoEl ? logoEl.src : '';
-  const now = new Date();
-  const fechaStr = now.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
-                   now.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
-  const tabLabel = tabName === 'resumen' ? 'Resumen del Plan de Capacitación' : 'Indicadores de Capacitación';
-
-  const hdr = document.createElement('div');
-  hdr.className = 'print-header';
-  hdr.id = '__print_hdr__';
-  hdr.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px">
-      ${logoSrc ? `<img src="${logoSrc}" style="height:36px;width:auto">` : ''}
-      <div>
-        <div style="font-size:14px;font-weight:700;color:#1A2F6E">${tabLabel}</div>
-        <div style="font-size:10px;color:#777">Plan de Capacitación 2026 — EMA Servicios</div>
-      </div>
-    </div>
-    <div style="text-align:right;font-size:10px;color:#777">
-      <div>Impreso: ${fechaStr}</div>
-    </div>`;
-  content.insertBefore(hdr, content.firstChild);
-
-  // Si el usuario especificó páginas, ajustar escala
-  let styleOverride = null;
-  const nPags = parseInt(paginas);
-  if (!isNaN(nPags) && nPags >= 1) {
-    const contentH = content.scrollHeight;
-    const pageHeightPx = nPags * 1050;
-    const scale = Math.min(1, pageHeightPx / contentH);
-    styleOverride = document.createElement('style');
-    styleOverride.id = '__print_scale__';
-    styleOverride.textContent = `
-      @media print {
-        #content { transform: scale(${scale.toFixed(4)}); transform-origin: top left; width: ${(100/scale).toFixed(2)}%; }
-      }`;
-    document.head.appendChild(styleOverride);
-  }
-
-  window.print();
-
-  // Restaurar todo después de imprimir
-  setTimeout(() => {
-    // Restaurar wrappers con su contenido original (incluyendo los canvas con Chart.js)
-    wrappers.forEach(({ wrapper, originalHTML }) => {
-      const origStyle = wrapper.dataset.__origStyle || '';
-      wrapper.style.cssText = origStyle;
-      delete wrapper.dataset.__origStyle;
-      wrapper.innerHTML = originalHTML;
-    });
-    // Quitar encabezado
-    const h = document.getElementById('__print_hdr__');
-    if (h) h.remove();
-    // Quitar override de escala
-    if (styleOverride) styleOverride.remove();
-    // Re-renderizar los charts porque el innerHTML fue restaurado (canvas vacíos)
-    if (currentTab === 'indicadores') {
-      try {
-        const gEl = document.getElementById('ind-data-general');
-        const rEl = document.getElementById('ind-data-remo');
-        const cEl = document.getElementById('ind-data-cuatri');
-        if (gEl && rEl && cEl) {
-          const _d = JSON.parse(gEl.textContent);
-          const _r = JSON.parse(rEl.textContent);
-          const _c = JSON.parse(cEl.textContent);
-          waitForChart(() => renderIndicadoresCharts(_d, _r, _c));
-        }
-      } catch(e) { console.warn('Re-render charts error:', e); }
-    } else if (currentTab === 'resumen') {
-      waitForChart(renderCharts);
-    }
-  }, 1500);
-}
-
 
 function imprimirQr(capId){
   const el=document.getElementById('qr-render-'+capId);
@@ -3828,31 +5461,26 @@ function toggleEditPregunta(pqId, evalId, capId){
 
 // ===== guardarEdicionPregunta =====
 async function guardarEdicionPregunta(pqId, evalId, capId){
-  const texto = document.getElementById('pq-edit-texto-'+pqId)?.value.trim();
+  const texto=document.getElementById('pq-edit-texto-'+pqId)?.value.trim();
   if(!texto){alert('El texto de la pregunta no puede estar vacío');return;}
-  const opciones = [];
-  for(let j=0; j<4; j++){
-    const inp = document.getElementById('pq-edit-opt-'+pqId+'-'+j);
-    if(inp && inp.value.trim()) opciones.push(inp.value.trim());
+  const opciones=[];
+  for(let j=0;j<4;j++){
+    const inp=document.getElementById('pq-edit-opt-'+pqId+'-'+j);
+    if(inp&&inp.value.trim()) opciones.push(inp.value.trim());
   }
-  if(opciones.length < 2){alert('Debe haber al menos 2 opciones');return;}
-  const correctas = [0,1,2,3].filter(j=>{
-    const el=document.getElementById('pq-edit-corr-'+pqId+'-'+j);
-    return el && el.checked;
-  });
+  if(opciones.length<2){alert('Debe haber al menos 2 opciones');return;}
+  const correctas=[0,1,2,3].filter(j=>{const el=document.getElementById('pq-edit-corr-'+pqId+'-'+j);return el&&el.checked;});
   if(!correctas.length){alert('Marcá al menos una respuesta correcta');return;}
-  const corrsValidas = correctas.filter(j=>j<opciones.length);
+  const corrsValidas=correctas.filter(j=>j<opciones.length);
   if(!corrsValidas.length){alert('La respuesta correcta debe corresponder a una opción con texto');return;}
-  const peso = parseFloat(document.getElementById('pq-edit-peso-'+pqId)?.value)||1;
-  const modo = document.getElementById('pq-edit-modo-'+pqId)?.value||'todas';
+  const peso=parseFloat(document.getElementById('pq-edit-peso-'+pqId)?.value)||1;
+  const modo=document.getElementById('pq-edit-modo-'+pqId)?.value||'todas';
   try{
     setSyncStatus('syncing');
     await api('PATCH','preguntas_evaluacion',{pregunta:texto,opciones,correctas:corrsValidas,correcta:corrsValidas[0],peso,modo_puntuacion:modo},`?id=eq.${pqId}`);
-    const idx = preguntas.findIndex(p=>p.id===pqId);
+    const idx=preguntas.findIndex(p=>p.id===pqId);
     if(idx>=0) preguntas[idx]={...preguntas[idx],pregunta:texto,opciones,correctas:corrsValidas,correcta:corrsValidas[0],peso,modo_puntuacion:modo};
-    setSyncStatus('ok');
-    toast('Pregunta actualizada');
-    openEditEval(evalId, capId);
+    setSyncStatus('ok');toast('Pregunta actualizada');openEditEval(evalId,capId);
   }catch(e){setSyncStatus('error');toast('Error al guardar');}
 }
 
@@ -3967,7 +5595,6 @@ async function importEvalExcel(evalId,capId){
         const d=String(row.opcion_d||row['Opción D']||row.opcionD||'').trim();
         if(!texto||!a||!b){errores++;continue;}
         const opciones=[a,b];if(c)opciones.push(c);if(d)opciones.push(d);
-        // Soporte múltiple: "A,B" o "A;B" en columna correcta(s)
         const corrRaw=String(row.correctas||row.correcta||row.Correcta||'A').trim().toUpperCase();
         const corrLetras=corrRaw.split(/[,;]/).map(s=>s.trim()).filter(Boolean);
         const corrsValidas=corrLetras.map(l=>corrMap[l]??-1).filter(j=>j>=0&&j<opciones.length);
@@ -3977,8 +5604,7 @@ async function importEvalExcel(evalId,capId){
         const orden=preguntas.filter(p=>p.evaluacion_id===evalId).length;
         try{
           const r=await api('POST','preguntas_evaluacion',{evaluacion_id:evalId,pregunta:texto,opciones,correctas:corrsValidas,correcta:corrsValidas[0],peso,modo_puntuacion:modo,orden},'');
-          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);
-          agregadas++;
+          const nv=Array.isArray(r)?r[0]:r;if(nv)preguntas.push(nv);agregadas++;
         }catch(e){errores++;}
       }
       toast(agregadas+' preguntas importadas'+(errores?' · '+errores+' errores':''));
@@ -3997,24 +5623,9 @@ function exportEvalExcel(evalId){
     const opts=p.opciones||[];
     const corrs=getPqCorrectas(p);
     const letrasCorrectas=corrs.map(j=>['A','B','C','D'][j]||'A').join(',');
-    return{
-      pregunta:p.pregunta,
-      opcion_a:opts[0]||'',opcion_b:opts[1]||'',opcion_c:opts[2]||'',opcion_d:opts[3]||'',
-      correctas:letrasCorrectas,
-      peso:getPqPeso(p),
-      modo:getPqModo(p)
-    };
+    return{pregunta:p.pregunta,opcion_a:opts[0]||'',opcion_b:opts[1]||'',opcion_c:opts[2]||'',opcion_d:opts[3]||'',correctas:letrasCorrectas,peso:getPqPeso(p),modo:getPqModo(p)};
   });
   const wb=XLSX.utils.book_new();
-  const infoRows=[
-    {campo:'Evaluación',valor:ev.titulo},
-    {campo:'Capacitación',valor:cap?cap.titulo:''},
-    {campo:'Código Redmine',valor:cap?cap.codigo_redmine||'':''},
-    {campo:'Total preguntas',valor:pqs.length},
-  ];
-  const wsInfo=XLSX.utils.json_to_sheet(infoRows);
-  wsInfo['!cols']=[{wch:20},{wch:50}];
-  XLSX.utils.book_append_sheet(wb,wsInfo,'Información');
   const ws=XLSX.utils.json_to_sheet(rows);
   ws['!cols']=[{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:14},{wch:8},{wch:10}];
   XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
@@ -4107,23 +5718,17 @@ async function importarMateriales(event){
 // ===== exportPlantillaEval =====
 function exportPlantillaEval(){
   const rows=[
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el procedimiento correcto ante un incendio?',opcion_a:'Activar alarma y evacuar',opcion_b:'Ignorarlo',opcion_c:'Llamar a un compañero',opcion_d:'Apagarlo solo',correctas:'A',peso:1,modo:'todas'},
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuáles son pasos correctos ante una emergencia? (múltiple)',opcion_a:'Activar alarma',opcion_b:'Evacuar el área',opcion_c:'Ignorarla',opcion_d:'Llamar a bomberos',correctas:'A,B,D',peso:2,modo:'todas'},
-    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST — Incendios',pregunta:'¿Cuál es el EPP obligatorio en planta?',opcion_a:'Solo guantes',opcion_b:'Casco, guantes y calzado',opcion_c:'Ninguno',opcion_d:'Solo casco',correctas:'B',peso:1,modo:'todas'},
+    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST',pregunta:'¿Cuál es el procedimiento correcto ante un incendio?',opcion_a:'Activar alarma y evacuar',opcion_b:'Ignorarlo',opcion_c:'Llamar a un compañero',opcion_d:'Apagarlo solo',correctas:'A',peso:1,modo:'todas'},
+    {codigo_redmine:'#35167',titulo_evaluacion:'Evaluación SST',pregunta:'¿Cuáles son pasos correctos ante una emergencia? (múltiple)',opcion_a:'Activar alarma',opcion_b:'Evacuar el área',opcion_c:'Ignorarla',opcion_d:'Llamar a bomberos',correctas:'A,B,D',peso:2,modo:'todas'},
     {codigo_redmine:'#35200',titulo_evaluacion:'Evaluación Medio Ambiente',pregunta:'¿Cómo se clasifican los residuos peligrosos?',opcion_a:'Por color de recipiente',opcion_b:'Por peso',opcion_c:'No se clasifican',opcion_d:'',correctas:'A',peso:1,modo:'todas'},
   ];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
   ws['!cols']=[{wch:14},{wch:35},{wch:60},{wch:30},{wch:30},{wch:30},{wch:30},{wch:16},{wch:8},{wch:10}];
-  XLSX.utils.sheet_add_aoa(ws,[
-    [''],
-    ['NOTA: Una fila por pregunta. Podés cargar varias evaluaciones en un mismo archivo.'],
-    ['CAMPOS: codigo_redmine* | titulo_evaluacion | pregunta* | opcion_a* | opcion_b* | opcion_c | opcion_d | correctas* (ej: A  o  A,B,D) | peso (número, default 1) | modo (todas / parcial)'],
-    ['MODO: "todas" = todas las correctas o 0 puntos | "parcial" = puntos proporcionales a correctas marcadas'],
-  ],{origin:'A'+(rows.length+2)});
+  XLSX.utils.sheet_add_aoa(ws,[[''],['NOTA: Una fila por pregunta. correctas: A o A,B,D · peso: número · modo: todas / parcial']],{origin:'A'+(rows.length+2)});
   XLSX.utils.book_append_sheet(wb,ws,'Preguntas');
   XLSX.writeFile(wb,'plantilla_evaluacion.xlsx');
-  toast('Plantilla de evaluación descargada');
+  toast('Plantilla descargada');
 }
 
 // ===== LIMPIAR PLAN =====
@@ -4443,53 +6048,6 @@ setInterval(()=>{
   if(typeof Chart==='undefined') errores.push('Chart.js');
   if(errores.length>0) console.warn('[EVDigital] CDN no disponibles:',errores.join(', '));
 })();
-
-
-async function init(){
-  // verificar si es acceso a evaluacion publica
-  const params=new URLSearchParams(window.location.search);
-  const evalId=params.get('eval');
-  if(evalId){
-    // cargar datos minimos y mostrar evaluacion
-    try{
-      const [ev,pq,cap,pad]=await Promise.all([
-        api('GET','evaluaciones','',`?id=eq.${evalId}`),
-        api('GET','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}&order=orden.asc`),
-        api('GET','capacitaciones','','?order=id.asc'),
-        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc')
-      ]);
-      evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];padron=pad||[];
-      const tiposData=await api('GET','tipos_capacitacion','','?activo=eq.true');
-      tipos=tiposData||[];
-      document.getElementById('login-wrap').style.display='none';
-      document.getElementById('app-wrap').style.display='none';
-      renderEvalPublica(parseInt(evalId));
-    }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la evaluación.</p></div></div>';}
-    return;
-  }
-  // verificar si es registro de presencia
-  const presCapId=params.get('presencia');
-  if(presCapId){
-    try{
-      const [cap,pad,tiposData,evData,pqData]=await Promise.all([
-        api('GET','capacitaciones','',`?id=eq.${presCapId}`),
-        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc'),
-        api('GET','tipos_capacitacion','','?activo=eq.true'),
-        api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`),
-        api('GET','preguntas_evaluacion','',`?evaluacion_id=not.is.null&order=orden.asc`)
-      ]);
-      caps=cap||[];padron=pad||[];tipos=tiposData||[];
-      evaluaciones=evData||[];preguntas=pqData||[];
-      document.getElementById('login-wrap').style.display='none';
-      document.getElementById('app-wrap').style.display='none';
-      renderPresenciaPublica(parseInt(presCapId));
-    }catch(e){document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><p style="text-align:center;padding:40px;color:#888">Error al cargar la capacitación.</p></div></div>';}
-    return;
-  }
-  // app normal
-  const savedUser=sessionStorage.getItem('capUser');
-  if(savedUser){try{currentUser=JSON.parse(savedUser);showApp();}catch(e){}}
-}
 
 init();
 </script>

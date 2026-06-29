@@ -659,6 +659,24 @@ function getMat(capId){return materiales.filter(m=>m.capacitacion_id===capId);}
 function getEval(capId){return evaluaciones.find(e=>e.capacitacion_id===capId);}
 function getTipo(codigo){return tipos.find(t=>t.codigo===codigo)||{codigo:'OTRO',nombre:'Otro',tiene_evaluacion:false,tiene_repositorio:false};}
 
+// Calcula el estado automático de una capacitación:
+// 'Realizada' → cap.estado==='Realizada' (fuente de verdad desde BD)
+// 'Vencida'   → fecha_fin pasada y no realizada
+// 'Pendiente' → fecha inicio pasada pero fecha_fin futura
+// 'Programada'→ aún no comenzó
+function estadoCap(cap){
+  if(!cap) return 'Programada';
+  if(cap.estado==='Realizada') return 'Realizada';
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const ffin=cap.fecha_fin?new Date(cap.fecha_fin+'T00:00:00'):null;
+  if(ffin&&!isNaN(ffin.getTime())&&ffin<hoy) return 'Vencida';
+  const finicio=cap.fecha?new Date(cap.fecha+'T00:00:00'):null;
+  if(finicio&&!isNaN(finicio.getTime())&&finicio<=hoy) return 'Pendiente';
+  return 'Programada';
+}
+// Alias para compatibilidad con código que usa 'En curso' / 'En Curso'
+function fechaFinCap(cap){return cap&&cap.fecha_fin?cap.fecha_fin:null;}
+
 function getFiltered(){
   const q=_searchQuery.toLowerCase().trim();
   return caps.filter(c=>{
@@ -2453,6 +2471,79 @@ function buildDetail(id){
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+}
+
+// ===== filtrarAsistentes =====
+function filtrarAsistentes(vista, capId){
+  const data=window[`_asisData_${capId}`];
+  if(!data) return;
+  const tbody=document.getElementById('tbody-asis-'+capId);
+  if(!tbody) return;
+  // Actualizar botones de filtro
+  ['todos','completaron','faltantes','noenlista'].forEach(v=>{
+    const btn=document.getElementById('fab-'+v+'-'+capId);
+    if(!btn) return;
+    const isActive=v===vista;
+    if(v==='todos'||v==='completaron'){
+      btn.style.background=isActive?'#1D9E75':'#fff';
+      btn.style.color=isActive?'#fff':'#1D9E75';
+    } else if(v==='faltantes'){
+      btn.style.background=isActive?'#EF9F27':'#fff';
+      btn.style.color=isActive?'#fff':'#854F0B';
+    } else {
+      btn.style.background=isActive?'#555':'#fff';
+      btn.style.color=isActive?'#fff':'#555';
+    }
+  });
+  const rowsHtml=data[vista]||data.todos;
+  tbody.innerHTML=rowsHtml;
+  // Actualizar título de la sección según vista activa
+  const titleEl=document.querySelector(`[data-capid-title="${capId}"]`);
+  if(titleEl){
+    let newTitle='Asistentes';
+    if(vista==='completaron') newTitle='✓ Completaron';
+    else if(vista==='faltantes') newTitle='⚠ Faltantes';
+    else if(vista==='noenlista') newTitle='📋 No en lista';
+    else newTitle='Todos';
+    titleEl.textContent=newTitle;
+  }
+  // Re-aplicar orden vigente
+  const sortState=window[`_asisSort_${capId}`];
+  if(sortState) _aplicarOrdenTbody(capId, sortState.campo, sortState.dir, false);
+}
+
+// ===== ordenarAsistentes =====
+function ordenarAsistentes(campo, capId){
+  const state=window[`_asisSort_${capId}`]||{campo:'legajo',dir:'asc'};
+  const dir=(state.campo===campo&&state.dir==='asc')?'desc':'asc';
+  window[`_asisSort_${capId}`]={campo,dir};
+  _aplicarOrdenTbody(capId, campo, dir, true);
+}
+
+function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
+  const tbody=document.getElementById('tbody-asis-'+capId);
+  if(!tbody) return;
+  const rows=[...tbody.querySelectorAll('tr')];
+  const colIdx={legajo:1, nombre:2, depto:4};
+  const idx=colIdx[campo]??1;
+  rows.sort((a,b)=>{
+    const ta=(a.cells[idx]?.textContent||'').trim().toLowerCase();
+    const tb=(b.cells[idx]?.textContent||'').trim().toLowerCase();
+    if(campo==='legajo'){
+      const na=parseInt(ta)||0, nb=parseInt(tb)||0;
+      return dir==='asc'?na-nb:nb-na;
+    }
+    return dir==='asc'?ta.localeCompare(tb,'es'):tb.localeCompare(ta,'es');
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+  if(updateIndicators){
+    ['legajo','nombre','depto'].forEach(c=>{
+      const th=document.getElementById('th-'+c+'-'+capId);
+      if(!th) return;
+      th.classList.remove('sort-asc','sort-desc');
+      if(c===campo) th.classList.add(dir==='asc'?'sort-asc':'sort-desc');
+    });
+  }
 }
 
 // MATERIALES

@@ -454,11 +454,14 @@ function compartirWA(nombre,url){window.open('https://wa.me/?text='+encodeURICom
 
 function isAdmin(){return currentUser&&currentUser.rol==='admin';}
 function isCapacitador(){return currentUser&&currentUser.rol==='capacitador';}
-function canEdit(){return isAdmin();}
+function isSupervisor(){return currentUser&&currentUser.rol==='supervisor';}
+function canEdit(){return isAdmin()||isCapacitador();}
 function canCapacitar(){return isAdmin()||isCapacitador();}
 function canManageParticipants(){return isAdmin()||isCapacitador();}
 function canManageEval(){return isAdmin()||isCapacitador();}
-function canExportParticipants(){return isAdmin()||isCapacitador();}
+function canExportParticipants(){return isAdmin()||isCapacitador()||isSupervisor();}
+function canVerQR(){return isAdmin()||isCapacitador()||isSupervisor();}
+function canVerDetalle(){return isAdmin()||isCapacitador()||isSupervisor();}
 
 async function api(method,table,body,query,extraHeaders){
   query=query||'';
@@ -505,10 +508,14 @@ function showApp(){
   document.getElementById('app-wrap').style.display='flex';
   const av=document.getElementById('user-avatar');
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
-  document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador())?'none':'block';
+  document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador()||isSupervisor())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-indicadores').style.display='';
-  if(document.getElementById('tab-gantt')) document.getElementById('tab-gantt').style.display='';
+  document.getElementById('tab-indicadores').style.display=(isAdmin()||isCapacitador())?'':'none';
+  if(document.getElementById('tab-gantt')) document.getElementById('tab-gantt').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-resumen').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-tipo').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-bim').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-un').style.display=(isAdmin()||isCapacitador())?'':'none';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
@@ -2050,10 +2057,10 @@ function renderUsuarios(){
     const av=(u.nombre||'?').charAt(0).toUpperCase();
     const meta=[u.email,u.un?`UN: ${u.un}`:'',u.sector?`Sector: ${u.sector}`:''].filter(Boolean).join(' · ');
     return`<div class="user-card">
-      <div class="user-avatar" style="${u.rol==='admin'?'background:#EEEDFE;color:#3C3489':u.rol==='capacitador'?'background:#E1F5EE;color:#085041':'background:#f4f4f2;color:#555'}">${av}</div>
+      <div class="user-avatar" style="${u.rol==='admin'?'background:#EEEDFE;color:#3C3489':u.rol==='capacitador'?'background:#E1F5EE;color:#085041':u.rol==='supervisor'?'background:#E8EAF6;color:#1A2F6E':'background:#f4f4f2;color:#555'}">${av}</div>
       <div class="user-card-info"><div class="user-card-name">${esc(u.nombre)} ${!u.activo?'<span style="color:#aaa;font-weight:400;font-size:10px">(inactivo)</span>':''}</div><div class="user-card-meta">${esc(meta)}</div></div>
       <div style="display:flex;gap:5px;flex-shrink:0">
-        <span class="badge ${u.rol==='admin'?'programada':u.rol==='capacitador'?'realizada':'pendiente'}">${u.rol==='admin'?'Admin':u.rol==='capacitador'?'Capacitador':'Visor'}</span>
+        <span class="badge ${u.rol==='admin'?'programada':u.rol==='capacitador'?'realizada':u.rol==='supervisor'?'pendiente':'pendiente'}">${u.rol==='admin'?'Admin':u.rol==='capacitador'?'Capacitador':u.rol==='supervisor'?'Supervisor':'Visor'}</span>
         <button class="btn-sm" onclick="editUsuario(${u.id})">✎</button>
         ${u.id!==currentUser.id?`<button class="btn-sm ${u.activo?'red':'green'}" onclick="toggleUsuario(${u.id},${!u.activo})">${u.activo?'🚫':'✓'}</button>`:''}
       </div>
@@ -2400,7 +2407,7 @@ function buildDetail(id){
 
   const adminBtns=canEdit()?`<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-del" onclick="deleteCap(${c.id})">🗑</button><button class="btn-green" onclick="openEdit(${c.id})">Editar</button></div>`:'';
   // QR Presencia: visible en todas las caps si el tipo tiene have_qr_presencia habilitado (true por defecto)
-  const qrPresBtn=t.tiene_qr_presencia!==false?`<button class="btn-sm" style="background:#1A2F6E;color:#fff;border-color:#1A2F6E;font-weight:600" onclick="mostrarQrPresencia(${id},'${esc(c.titulo).replace(/'/g,String.fromCharCode(39))}')">📷 QR Presencia</button>`:'';
+  const qrPresBtn=t.tiene_qr_presencia!==false&&canVerQR()?`<button class="btn-sm" style="background:#1A2F6E;color:#fff;border-color:#1A2F6E;font-weight:600" onclick="mostrarQrPresencia(${id},'${esc(c.titulo).replace(/'/g,String.fromCharCode(39))}')">📷 QR Presencia</button>`:'';
   const exportBtn=faltantesReal>0?`<button class="btn-export" onclick="exportFalt(${id})">📥 Faltantes (${faltantesReal})</button>`:'';
   const exportAllBtn=canExportParticipants()&&a.length?`<button class="btn-export" onclick="exportAll(${id})">📊 Exportar participantes</button>`:'';
   const exportRespBtn=canExportParticipants()&&hasNota&&getEval(id)?`<button class="btn-export" onclick="exportRespuestas(${id})">📋 Respuestas eval</button>`:'';
@@ -3134,7 +3141,15 @@ function filtrarAsistentes(vista, capId){
 
 async function deleteA(aid,capId){
   if(!canManageParticipants()||!confirm('¿Eliminar este participante?'))return;
-  try{await api('DELETE','asistentes','',`?id=eq.${aid}`);asistentes=asistentes.filter(a=>a.id!==aid);toast('Eliminado');buildDetail(capId);renderContent();}catch(e){toast('Error');}
+  try{
+    await api('DELETE','asistentes','',`?id=eq.${aid}`);
+    asistentes=asistentes.filter(a=>a.id!==aid);
+    toast('Eliminado');
+    // Suprimir auto-reload 8s para que el array local no sea pisado por loadAll
+    window._suppressReload=Date.now()+8000;
+    buildDetail(capId);
+    renderContent();
+  }catch(e){toast('Error');}
 }
 
 function exportPlantillaAsistentes(capId){
@@ -3970,7 +3985,7 @@ function editUsuario(id){
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}"></div>
     <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
-    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
+    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
     <div id="rol-fields" style="${u.rol==='admin'?'display:none':''}"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(${id})">Guardar</button></div>`);
 }
@@ -4178,28 +4193,63 @@ async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
 // ── TOGGLE LISTA CERRADA ────────────────────────────────────────────────────
 async function toggleListaCerrada(capId, cerrar){
   const c=caps.find(x=>x.id===capId);if(!c)return;
-  const msg=cerrar
-    ?`¿Cerrar la lista de participantes de "${c.titulo}"?
 
-Una vez cerrada:
-• No se agregarán participantes automáticamente
-• Los Posibles del padrón dejarán de mostrarse al pie
-• La sincronización automática quedará bloqueada
-• Podés volver a abrirla cuando quieras`
-    :`¿Abrir la lista de "${c.titulo}"?
-
-Volvés al modo normal: los Posibles del padrón se mostrarán de nuevo y se permite agregar participantes.`;
-  if(!confirm(msg)) return;
-  try{
-    setSyncStatus('syncing');
-    await api('PATCH','capacitaciones',{lista_cerrada:cerrar},`?id=eq.${capId}`);
-    const idx=caps.findIndex(x=>x.id===capId);
-    if(idx>=0) caps[idx].lista_cerrada=cerrar;
-    setSyncStatus('ok');
-    toast(cerrar?'🔒 Lista cerrada':'🔓 Lista abierta');
-    buildDetail(capId);
-    renderContent();
-  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+  if(cerrar){
+    // Calcular cuántos del padrón no están en la lista
+    const a=getA(capId);
+    const legajosEnLista=new Set(a.map(x=>String(x.legajo)));
+    const _deps=c.departamento?c.departamento.split('||').map(d=>d.trim()).filter(Boolean):[];
+    const esGlob=!c.un&&!_deps.length;
+    const esInd=c.tipo_codigo==='INDUCCION';
+    let padronRef=[];
+    if(esInd&&c.fecha){
+      const [yy,mm]=c.fecha.split('-');
+      padronRef=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!p.fecha_calculo_antiguedad) return false;
+        const parts=p.fecha_calculo_antiguedad.split('-');
+        return parseInt(parts[0])===parseInt(yy)&&parseInt(parts[1])===parseInt(mm);
+      });
+    } else {
+      padronRef=padron.filter(p=>{
+        if(p.estado&&p.estado!=='Vigente') return false;
+        if(!esGlob){
+          if(c.un&&p.un!==c.un) return false;
+          if(_deps.length){const d=p.departamento||p.datos_extra?.Departamento||'';if(!_deps.includes(d)) return false;}
+        }
+        return true;
+      });
+    }
+    const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+    const msg=`¿Cerrar la lista de participantes de "${c.titulo}"?\n\n`
+      +(noEnLista.length
+        ?`Se eliminarán ${noEnLista.length} persona${noEnLista.length!==1?'s':''} del padrón que NO están confirmadas en la lista.\nQuedarán solo los ${a.length} participantes verificados.\n\n`
+        :`No hay participantes del padrón pendientes de confirmar.\n\n`)
+      +`Una vez cerrada:\n• Solo quedan los participantes ya verificados\n• Los Posibles del padrón no se mostrarán\n• La sincronización automática queda bloqueada\n• Podés volver a abrirla cuando quieras`;
+    if(!confirm(msg)) return;
+    try{
+      setSyncStatus('syncing');
+      await api('PATCH','capacitaciones',{lista_cerrada:true},`?id=eq.${capId}`);
+      const idx=caps.findIndex(x=>x.id===capId);
+      if(idx>=0) caps[idx].lista_cerrada=true;
+      setSyncStatus('ok');
+      toast('🔒 Lista cerrada'+(noEnLista.length?` · ${noEnLista.length} posibles eliminados`:''));
+      buildDetail(capId);
+      renderContent();
+    }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+  } else {
+    if(!confirm(`¿Abrir la lista de "${c.titulo}"?\n\nVolvés al modo normal: los Posibles del padrón se mostrarán de nuevo y se permite agregar participantes.`)) return;
+    try{
+      setSyncStatus('syncing');
+      await api('PATCH','capacitaciones',{lista_cerrada:false},`?id=eq.${capId}`);
+      const idx=caps.findIndex(x=>x.id===capId);
+      if(idx>=0) caps[idx].lista_cerrada=false;
+      setSyncStatus('ok');
+      toast('🔓 Lista abierta');
+      buildDetail(capId);
+      renderContent();
+    }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+  }
 }
 
 // ── ELIMINAR NO SELECCIONADOS (padrón no agregados a lista) ─────────────────
@@ -6038,6 +6088,8 @@ setInterval(()=>{
   // No recargar si hay un modal abierto (evita perder contexto de trabajo)
   const modal=document.getElementById('modal-overlay');
   if(modal&&modal.classList.contains('open')) return;
+  // No recargar si se acaba de eliminar un participante
+  if(window._suppressReload&&Date.now()<window._suppressReload) return;
   loadAll();
 },30000);
 

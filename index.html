@@ -228,6 +228,27 @@ select.form-input{cursor:pointer}
 @media(max-width:640px){
   [style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"],[style*="grid-template-columns:minmax(0,auto) minmax(0,1fr)"]{grid-template-columns:1fr !important}
 }
+
+/* ── PRINT STYLES ─────────────────────────────────────── */
+@media print {
+  @page { size: A4 landscape; margin: 10mm 12mm; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .app { height: auto !important; overflow: visible !important; display: block !important; }
+  .header, .top-controls, .tabs, .modal-overlay, .toast, .print-btn { display: none !important; }
+  .app-body { display: block !important; overflow: visible !important; }
+  .content { padding: 0 !important; overflow: visible !important; height: auto !important; min-width: 0 !important; }
+  .print-header { display: flex !important; align-items: center; justify-content: space-between; border-bottom: 2px solid #1A2F6E; padding-bottom: 6px; margin-bottom: 10px; }
+  .plan-block { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; margin-bottom: 6mm !important; }
+  canvas { max-width: 100% !important; }
+  button, .btn-prim, .btn-gray, .btn-green { display: none !important; }
+  .print-only { display: block !important; }
+  /* Print height scaling: set via --print-pages custom property */
+  .print-content-wrap { height: auto !important; }
+}
+.print-header { display: none; }
+.print-only { display: none; }
+.print-btn { display: inline-flex; align-items: center; gap: 5px; background: #1A2F6E; color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+.print-btn:hover { background: #142555; }
 </style>
   <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBsYW4gZGUgQ2FwYWNpdGFjaW9uIEVNQSIsCiAgInNob3J0X25hbWUiOiAiQ2FwYWNpdGFjaW9uIiwKICAiZGVzY3JpcHRpb24iOiAiUGxhbiBkZSBDYXBhY2l0YWNpb24gMjAyNiAtIEVNQSBTZXJ2aWNpb3MiLAogICJzdGFydF91cmwiOiAiLi8iLAogICJzY29wZSI6ICIuLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImRpc3BsYXlfb3ZlcnJpZGUiOiBbInN0YW5kYWxvbmUiLCAibWluaW1hbC11aSIsICJicm93c2VyIl0sCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2Y0ZjRmMiIsCiAgInRoZW1lX2NvbG9yIjogIiMxRDlFNzUiLAogICJvcmllbnRhdGlvbiI6ICJwb3J0cmFpdC1wcmltYXJ5IiwKICAicHJlZmVyX3JlbGF0ZWRfYXBwbGljYXRpb25zIjogZmFsc2UsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDE5MiAxOTInPjxyZWN0IHdpZHRoPScxOTInIGhlaWdodD0nMTkyJyByeD0nMjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzE0MCcgeD0nOTYnIGZvbnQtc2l6ZT0nMTIwJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmaWxsPSd3aGl0ZSc+RTwvdGV4dD48L3N2Zz4iLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiLAogICAgICAicHVycG9zZSI6ICJhbnkgbWFza2FibGUiCiAgICB9LAogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDUxMiA1MTInPjxyZWN0IHdpZHRoPSc1MTInIGhlaWdodD0nNTEyJyByeD0nNjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzM4MCcgeD0nMjU2JyBmb250LXNpemU9JzMyMCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nd2hpdGUnPkU8L3RleHQ+PC9zdmc+IiwKICAgICAgInNpemVzIjogIjUxMng1MTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwKICAgICAgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIgogICAgfQogIF0sCiAgImNhdGVnb3JpZXMiOiBbImJ1c2luZXNzIiwgInByb2R1Y3Rpdml0eSJdLAogICJsYW5nIjogImVzIgp9">
   <meta name="mobile-web-app-capable" content="yes">
@@ -845,8 +866,8 @@ function renderContent(){
     else if(currentTab==='tipo') el.innerHTML=renderPorTipo();
     else if(currentTab==='bim') el.innerHTML=renderBim();
     else if(currentTab==='un') el.innerHTML=renderUN();
-    else if(currentTab==='resumen'){el.innerHTML=renderResumen();waitForChart(renderCharts);}
-    else if(currentTab==='indicadores'){const _indData=getIndicadoresData(),_remoData=getIndicadoresRemo(),_cuatriData=getCuatriData();el.innerHTML=renderIndicadores(_indData,_remoData,_cuatriData);waitForChart(()=>renderIndicadoresCharts(_indData,_remoData,_cuatriData));}
+    else if(currentTab==='resumen'){el.innerHTML=renderResumen();waitForChart(renderCharts);injectPrintBtn(el,'resumen');}
+    else if(currentTab==='indicadores'){const _indData=getIndicadoresData(),_remoData=getIndicadoresRemo(),_cuatriData=getCuatriData();el.innerHTML=renderIndicadores(_indData,_remoData,_cuatriData);waitForChart(()=>renderIndicadoresCharts(_indData,_remoData,_cuatriData));injectPrintBtn(el,'indicadores');}
     else if(currentTab==='gantt'){el.innerHTML=renderGantt();}
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
@@ -4947,6 +4968,99 @@ function mostrarQrPresencia(capId, titulo){
     } else { cargarQR(); }
   },250);
 }
+
+// ===== Inyectar botón de impresión en tabs Resumen / Indicadores =====
+function injectPrintBtn(container, tabName) {
+  const label = tabName === 'resumen' ? '🖨 Imprimir Resumen' : '🖨 Imprimir Indicadores';
+  const btn = document.createElement('button');
+  btn.className = 'print-btn';
+  btn.textContent = label;
+  btn.onclick = () => imprimirTab(tabName);
+  container.insertBefore(btn, container.firstChild);
+}
+
+// ===== IMPRESIÓN: Resumen / Indicadores =====
+function imprimirTab(tabName) {
+  // Mostrar selector de páginas
+  const paginas = prompt(
+    '¿Cuántas páginas de alto querés que ocupe el contenido?\n(Ingresá un número: 1, 2, 3…)\nDejá vacío para impresión automática.',
+    ''
+  );
+
+  // Convertir charts a imágenes estáticas para que se impriman
+  const canvases = document.getElementById('content').querySelectorAll('canvas');
+  const snapshots = [];
+  canvases.forEach(c => {
+    try {
+      const dataUrl = c.toDataURL('image/png');
+      snapshots.push({ canvas: c, dataUrl, origStyle: c.style.cssText });
+      // Reemplazar canvas con img temporalmente
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;position:absolute;inset:0';
+      img.className = '__print_img__';
+      c.style.display = 'none';
+      c.parentNode.appendChild(img);
+    } catch(e) { console.warn('No se pudo capturar canvas:', e); }
+  });
+
+  // Agregar encabezado de impresión temporal
+  const content = document.getElementById('content');
+  const logoEl = document.querySelector('.hdr-logo-img');
+  const logoSrc = logoEl ? logoEl.src : '';
+  const now = new Date();
+  const fechaStr = now.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
+                   now.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
+  const tabLabel = tabName === 'resumen' ? 'Resumen del Plan de Capacitación' : 'Indicadores de Capacitación';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'print-header';
+  hdr.id = '__print_hdr__';
+  hdr.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px">
+      ${logoSrc ? `<img src="${logoSrc}" style="height:36px;width:auto">` : ''}
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#1A2F6E">${tabLabel}</div>
+        <div style="font-size:10px;color:#777">Plan de Capacitación 2026 — EMA Servicios</div>
+      </div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:#777">
+      <div>Impreso: ${fechaStr}</div>
+    </div>`;
+  content.insertBefore(hdr, content.firstChild);
+
+  // Si el usuario especificó páginas, ajustar escala
+  let styleOverride = null;
+  const nPags = parseInt(paginas);
+  if (!isNaN(nPags) && nPags >= 1) {
+    const contentH = content.scrollHeight;
+    // A4 landscape: 277mm alto de contenido aprox → 1050px a 96dpi
+    const pageHeightPx = nPags * 1050;
+    const scale = Math.min(1, pageHeightPx / contentH);
+    styleOverride = document.createElement('style');
+    styleOverride.id = '__print_scale__';
+    styleOverride.textContent = `
+      @media print {
+        #content { transform: scale(${scale.toFixed(4)}); transform-origin: top left; width: ${(100/scale).toFixed(2)}%; }
+      }`;
+    document.head.appendChild(styleOverride);
+  }
+
+  window.print();
+
+  // Restaurar todo después de imprimir
+  setTimeout(() => {
+    // Quitar imgs temporales y mostrar canvas
+    document.querySelectorAll('.__print_img__').forEach(img => img.remove());
+    canvases.forEach(c => { c.style.display = ''; });
+    // Quitar encabezado
+    const h = document.getElementById('__print_hdr__');
+    if (h) h.remove();
+    // Quitar override de escala
+    if (styleOverride) styleOverride.remove();
+  }, 1500);
+}
+
 
 function imprimirQr(capId){
   const el=document.getElementById('qr-render-'+capId);

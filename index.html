@@ -5014,7 +5014,7 @@ function renderGantt(){
             const br=`border-radius:${iF?'4px':'0'} ${iL?'4px 4px':'0 0'} ${iF?'4px':'0'}`;
             // En la celda de cruce mostramos el % de cumplimiento (no el nombre)
             const labelInBar=iF?pctLabel:'';
-            return `<td style="${bdr};padding:2px 1px;background:${alt}"><div title="${esc(cap.titulo)} — ${esc(estado)} — ${pctLabel}" onclick="openDetail(${cap.id})" style="background:${color};${br};padding:2px 4px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:${colW-4}px;font-weight:700;line-height:1.4;text-align:center">${labelInBar}</div></td>`;
+            return `<td style="${bdr};padding:2px 1px;background:${alt}"><div title="${esc(cap.titulo)} — ${esc(estado)} — ${pctLabel}" onclick="openDetail(${cap.id})" style="background:${color};${br};padding:2px 4px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:${colW-4}px;font-weight:700;line-height:1.4;text-align:center;min-height:18px;display:flex;align-items:center;justify-content:center">${labelInBar}</div></td>`;
           }
           return `<td style="${bdr};background:${alt}"></td>`;
         }).join('');

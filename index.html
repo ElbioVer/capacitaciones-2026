@@ -4684,7 +4684,11 @@ async function importarCaps(event){
         let fecha='';
         const fr=String(r.fecha||'').trim();
         if(fr){
-          if(fr.includes('/')){const p=fr.split('/');if(p.length===3)fecha=((p[2].length===2)?'20'+p[2]:p[2])+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
+          if(typeof r.fecha==='number'){
+            // Excel serial date
+            const df=new Date(Math.round((r.fecha-25569)*86400*1000));
+            fecha=df.getUTCFullYear()+'-'+String(df.getUTCMonth()+1).padStart(2,'0')+'-'+String(df.getUTCDate()).padStart(2,'0');
+          } else if(fr.includes('/')){const p=fr.split('/');if(p.length===3)fecha=((p[2].length===2)?'20'+p[2]:p[2])+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
           else if(fr.includes('-'))fecha=fr;
         }
         const bimNum=parseInt(r.bimestre)||0;
@@ -4711,10 +4715,16 @@ async function importarCaps(event){
         }
         const depto=String(r.departamento||r.Departamento||'').trim()||null;
         const tipo_codeImp=String(r.tipo_codigo||'REMO').trim().toUpperCase();
-        // INDUCCION: la fecha de inicio siempre es el 1° del mes indicado en la columna fecha
+        // INDUCCION: fecha = 1° del mes indicado en el Excel, fecha_fin = último día de ese mismo mes
         if(tipo_codeImp==='INDUCCION'&&fecha){
           const [yy,mm]=fecha.split('-');
           fecha=`${yy}-${mm}-01`;
+          // Calcular último día del mes: día 0 del mes siguiente
+          const ultimoDia=new Date(parseInt(yy),parseInt(mm),0).getDate();
+          fecha_fin=`${yy}-${mm}-${String(ultimoDia).padStart(2,'0')}`;
+        } else if(!fecha_fin){
+          // Para otros tipos: fecha_fin por bimestre si no viene
+          // (ya calculada arriba, no pisar)
         }
         const obj={titulo,tipo_codigo:tipo_codeImp,un:String(r.un||'').trim()||null,departamento:depto,area:String(r.area||'').trim(),fecha,fecha_fin,bimestre,participantes_esperados:parseInt(r.participantes_esperados)||10,duracion:parseFloat(r.duracion)||1,instructor:String(r.instructor||'').trim(),estado:String(r.estado||'Programada').trim(),nota_aprobacion:parseFloat(r.nota_aprobacion)||6,obs:String(r.obs||'').trim(),codigo_redmine:codigo||null};
         try{

@@ -2180,6 +2180,9 @@ function buildDetail(id){
       ${!listaCerrada&&faltantesSolopadron.length?`<button class="btn-asis-filter" onclick="filtrarAsistentes('noenlista',${id})" id="fab-noenlista-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #aaa;background:#fff;color:#555;cursor:pointer;font-weight:600">
         📋 No en lista (${faltantesSolopadron.length})
       </button>`:''}
+      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-todos-${id}" onclick="pasarTodosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
+        ✓ Pasar todos a Lista (${faltantesSolopadron.length})
+      </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
       ${a.length||faltantesSolopadron.length
@@ -2200,6 +2203,8 @@ function buildDetail(id){
 
   // Guardar legajos no en lista para cuando se abre agregar desde ese filtro
   window[`_noEnListaLegajos_${id}`]=new Set(faltantesSolopadron.map(p=>String(p.legajo)));
+  // Guardar datos completos del padrón no en lista (para "Pasar todos a Lista")
+  window[`_noEnListaDatos_${id}`]=faltantesSolopadron;
 
   // repositorio
   let repoHtml='';
@@ -3123,6 +3128,9 @@ function filtrarAsistentes(vista, capId){
       limpBtn.title='Eliminar todos los participantes';
     }
   }
+  // Mostrar/ocultar botón "Pasar todos a Lista" solo en vista noenlista
+  const pasarBtn=document.getElementById(`btn-pasar-todos-${capId}`);
+  if(pasarBtn) pasarBtn.style.display=(vista==='noenlista')?'':'none';
   // Mostrar filas de la vista
   const rowsHtml=data[vista]||data.todos;
   tbody.innerHTML=rowsHtml;
@@ -4413,6 +4421,42 @@ function validarLegajoAgregar(legajo){
     lookup.innerHTML='';
     if(nombreInput) nombreInput.readOnly=false;
   }
+}
+
+// ── PASAR TODOS LOS "NO EN LISTA" A LA LISTA ─────────────────────────────────
+async function pasarTodosALista(capId){
+  if(!canManageParticipants()) return;
+  const datos=window[`_noEnListaDatos_${capId}`]||[];
+  if(!datos.length){toast('No hay participantes del padrón fuera de la lista');return;}
+  const capObj=caps.find(x=>x.id===capId);
+  if(!capObj){toast('Capacitación no encontrada');return;}
+  if(capObj.lista_cerrada){toast('La lista está cerrada, abrila primero para agregar participantes');return;}
+
+  if(!confirm(`Se agregarán ${datos.length} persona${datos.length!==1?'s':''} del padrón a la lista de "${capObj.titulo}".\n\n¿Continuar?`)) return;
+
+  toast('Agregando '+datos.length+' participantes...',8000);
+  const a=getA(capId);
+  const legajosExistentes=new Set(a.map(x=>String(x.legajo)));
+  let ok=0,err=0;
+
+  for(const p of datos){
+    const legajo=String(p.legajo);
+    if(legajosExistentes.has(legajo)) continue; // ya está, no duplicar
+    const nombre=p.nombre||'';
+    const un=p.un||'';
+    const sector=p.sector||'';
+    const depto=p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'';
+    const cuil=p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||p.datos_extra?.cuil||'';
+    try{
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+      const nv=Array.isArray(r)?r[0]:r;
+      if(nv){asistentes.push(nv);legajosExistentes.add(legajo);ok++;}
+    }catch(e){err++;console.warn('Error agregando',legajo,e);}
+  }
+
+  toast(`✓ ${ok} agregado${ok!==1?'s':''} a la lista`+(err?` · ${err} con error`:''));
+  buildDetail(capId);
+  renderContent();
 }
 
 async function agregarParticipanteIndividual(capId){

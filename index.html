@@ -2026,11 +2026,13 @@ ALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEF
     </div>
     <div style="background:#E6F1FB;border-radius:8px;padding:10px;font-size:11px;line-height:1.8;color:#185FA5">
       <strong>Estructura del Excel:</strong><br>
-      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación<br>
+      <strong>codigo_redmine *</strong> — ej: #35167 · identifica la capacitación (si varias capacitaciones comparten el mismo Redmine, usá un sufijo por evaluación, ej: #35167.1, #35167.2)<br>
       <strong>titulo_evaluacion</strong> — nombre de la evaluación (opcional, usa el título de la cap si se omite)<br>
       <strong>pregunta *</strong> — texto de la pregunta<br>
       <strong>opcion_a *</strong> · <strong>opcion_b *</strong> · <strong>opcion_c</strong> · <strong>opcion_d</strong> — opciones de respuesta<br>
-      <strong>correcta *</strong> — letra de la opción correcta: A, B, C o D<br>
+      <strong>correctas *</strong> — letra(s) de la(s) opción(es) correcta(s): A, B, C o D. Para varias correctas, separalas por coma (ej: A,C,D)<br>
+      <strong>peso</strong> — puntos que vale la pregunta (opcional, default 1)<br>
+      <strong>modo</strong> — <code>todas</code> (hay que marcar todas las correctas y ninguna incorrecta para sumar el peso) o <code>parcial</code> (suma proporcional según cuántas correctas marcó) — opcional, default <code>todas</code><br>
       <span style="color:#0D47A1">💡 Podés cargar preguntas para múltiples capacitaciones en un mismo Excel, una fila por pregunta.</span>
     </div>
     ${renderEvalConfigList()}
@@ -5798,7 +5800,7 @@ async function importEvalDesdeConfig(event){
     const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
     if(!rows.length){toast('El archivo está vacío');return;}
 
-    // Group rows by codigo_redmine
+    // Group rows by codigo_redmine (tal cual viene en el Excel, para mostrarlo en errores)
     const byRedmine={};
     for(const row of rows){
       const redmine=String(row.codigo_redmine||row.Codigo_redmine||row['codigo_redmine']||'').trim();
@@ -5819,11 +5821,19 @@ async function importEvalDesdeConfig(event){
       if(texto&&a&&b&&corrsValidas.length) byRedmine[redmine].preguntas.push({pregunta:texto,opciones,correctas:corrsValidas,correcta:corrsValidas[0],peso,modo_puntuacion:modo});
     }
 
+    // Normaliza un código Redmine para comparar tolerando "#", mayúsculas y espacios
+    const normRedmine=s=>String(s||'').trim().toUpperCase().replace(/^#+/,'').replace(/\s+/g,'');
+
     let capsOk=0,capsErr=0,pqsOk=0;
+    const codigosNoEncontrados=[];
     for(const [redmine,{titulo,preguntas:pqs}] of Object.entries(byRedmine)){
-      // Find cap by codigo_redmine
-      const cap=caps.find(c=>c.codigo_redmine&&c.codigo_redmine.trim()===redmine);
-      if(!cap){toast(`⚠ No se encontró capacitación con Redmine: ${redmine}`);capsErr++;continue;}
+      // Find cap by codigo_redmine: primero exacto, si no, normalizado (tolera falta de "#", may/min, espacios)
+      let cap=caps.find(c=>c.codigo_redmine&&c.codigo_redmine.trim()===redmine);
+      if(!cap){
+        const target=normRedmine(redmine);
+        cap=caps.find(c=>c.codigo_redmine&&normRedmine(c.codigo_redmine)===target);
+      }
+      if(!cap){codigosNoEncontrados.push(redmine);capsErr++;continue;}
 
       // Find or create evaluacion for this cap
       let ev=evaluaciones.find(e=>e.capacitacion_id===cap.id);
@@ -5854,6 +5864,13 @@ async function importEvalDesdeConfig(event){
       capsOk++;
     }
     toast(`✓ ${capsOk} evaluación/es cargadas · ${pqsOk} preguntas · ${capsErr} errores`);
+    if(codigosNoEncontrados.length){
+      const disponibles=[...new Set(caps.filter(c=>c.codigo_redmine).map(c=>c.codigo_redmine))].sort();
+      alert('No se encontró ninguna capacitación con estos códigos del Excel:\n\n'
+        +codigosNoEncontrados.join('\n')
+        +'\n\nCódigos Redmine que existen actualmente en el sistema (revisá que coincidan exactamente):\n'
+        +(disponibles.length?disponibles.join(', '):'(no hay ninguna capacitación con código Redmine cargado)'));
+    }
     renderContent();
   }catch(e){toast('Error al leer el archivo');}
 }

@@ -455,13 +455,63 @@ function compartirWA(nombre,url){window.open('https://wa.me/?text='+encodeURICom
 function isAdmin(){return currentUser&&currentUser.rol==='admin';}
 function isCapacitador(){return currentUser&&currentUser.rol==='capacitador';}
 function isSupervisor(){return currentUser&&currentUser.rol==='supervisor';}
+function isVisor(){return currentUser&&currentUser.rol==='visor';}
 function canEdit(){return isAdmin()||isCapacitador();}
 function canCapacitar(){return isAdmin()||isCapacitador();}
 function canManageParticipants(){return isAdmin()||isCapacitador();}
 function canManageEval(){return isAdmin()||isCapacitador();}
-function canExportParticipants(){return isAdmin()||isCapacitador()||isSupervisor();}
-function canVerQR(){return isAdmin()||isCapacitador()||isSupervisor();}
-function canVerDetalle(){return isAdmin()||isCapacitador()||isSupervisor();}
+function canExportParticipants(){return isAdmin()||isCapacitador()||isSupervisor()||isVisor();}
+function canVerQR(){return isAdmin()||isCapacitador()||isSupervisor()||isVisor();}
+function canVerDetalle(){return isAdmin()||isCapacitador()||isSupervisor()||isVisor();}
+function canVerResumen(){return isAdmin()||isCapacitador()||isSupervisor()||isVisor();}
+function canVerIndicadoresPlus(){return isAdmin()||isCapacitador()||isVisor();} // Gantt, Indicadores, Por tipo, Bimestres, UN/Depto
+
+// ── Restricciones multi-UN/Depto (Supervisor y Visor) ──────────────
+// currentUser.restricciones: [{un:'Norte',sector:'Ventas'}, {un:'Sur',sector:null}, ...]
+// sector===null/'' significa acceso a TODOS los deptos de esa UN.
+function getMisPares(){
+  if(!currentUser||!(isSupervisor()||isVisor())) return null;
+  const r=currentUser.restricciones;
+  if(!Array.isArray(r)||!r.length) return null;
+  return r;
+}
+function capMatchUnSec(c,un,sector){
+  if(!un&&!sector) return true;
+  if(un&&c.un){
+    if(c.un!==un) return false;
+    if(sector){
+      if(c.departamento&&c.departamento===sector) return true;
+      if(c.departamento&&c.departamento!==sector) return false;
+      const a=getA(c.id);
+      if(!a.length) return true;
+      return a.some(x=>{const d=x.departamento||x.sector||'';return d===sector&&x.un===un;});
+    }
+    return true;
+  }
+  const a=getA(c.id);
+  if(!a.length) return !un;
+  return a.some(x=>{
+    if(un&&x.un!==un) return false;
+    if(sector){const d=x.departamento||x.sector||'';if(d!==sector) return false;}
+    return true;
+  });
+}
+// Mapa UN→(Set de deptos permitidos | null=todos) para el usuario actual, o null si sin restricción
+function getPermisosUN(){
+  const pares=getMisPares();
+  if(!pares) return null;
+  const map={};
+  pares.forEach(p=>{
+    if(!p.un) return;
+    if(!p.sector){ map[p.un]=null; }
+    else{
+      if(map[p.un]===null) return;
+      if(!map[p.un]) map[p.un]=new Set();
+      map[p.un].add(p.sector);
+    }
+  });
+  return map;
+}
 
 async function api(method,table,body,query,extraHeaders){
   query=query||'';
@@ -510,17 +560,18 @@ function showApp(){
   av.textContent=(currentUser.nombre||'?').charAt(0).toUpperCase();
   document.getElementById('visor-banner').style.display=(isAdmin()||isCapacitador()||isSupervisor())?'none':'block';
   document.getElementById('tab-padron').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-indicadores').style.display=(isAdmin()||isCapacitador())?'':'none';
-  if(document.getElementById('tab-gantt')) document.getElementById('tab-gantt').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-resumen').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-tipo').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-bim').style.display=(isAdmin()||isCapacitador())?'':'none';
-  document.getElementById('tab-un').style.display=(isAdmin()||isCapacitador())?'':'none';
+  document.getElementById('tab-indicadores').style.display=canVerIndicadoresPlus()?'':'none';
+  if(document.getElementById('tab-gantt')) document.getElementById('tab-gantt').style.display=canVerIndicadoresPlus()?'':'none';
+  document.getElementById('tab-resumen').style.display=canVerResumen()?'':'none';
+  document.getElementById('tab-tipo').style.display=canVerIndicadoresPlus()?'':'none';
+  document.getElementById('tab-bim').style.display=canVerIndicadoresPlus()?'':'none';
+  document.getElementById('tab-un').style.display=canVerIndicadoresPlus()?'':'none';
   document.getElementById('tab-config').style.display=isAdmin()?'':'none';
   document.getElementById('tab-usuarios').style.display=isAdmin()?'':'none';
   document.getElementById('btn-nueva').style.display=canCapacitar()?'inline-block':'none';
-  if(!isAdmin()&&currentUser.un) fltUN=currentUser.un;
-  if(!isAdmin()&&currentUser.sector) fltSec=currentUser.sector;
+  const _pares0=getMisPares();
+  if(_pares0&&_pares0.length===1){ fltUN=_pares0[0].un||''; fltSec=_pares0[0].sector||''; }
+  else if(!_pares0&&!isAdmin()&&currentUser.un){ fltUN=currentUser.un; if(currentUser.sector) fltSec=currentUser.sector; }
   loadAll();
 }
 
@@ -665,6 +716,7 @@ function getTipo(codigo){return tipos.find(t=>t.codigo===codigo)||{codigo:'OTRO'
 
 function getFiltered(){
   const q=_searchQuery.toLowerCase().trim();
+  const _misPares=getMisPares();
   return caps.filter(c=>{
     const _e=estadoCap(c);
     if(fltTipo&&c.tipo_codigo!==fltTipo) return false;
@@ -673,30 +725,15 @@ function getFiltered(){
       const haystack=[c.titulo,c.un,c.departamento,c.codigo_redmine,c.tipo_codigo,c.area,c.instructor,c.bimestre].filter(Boolean).join(' ').toLowerCase();
       if(!haystack.includes(q)) return false;
     }
+    // Restricción base multi-UN/Depto (Supervisor/Visor): debe cumplir al menos uno de los pares asignados
+    if(_misPares&&!_misPares.some(p=>capMatchUnSec(c,p.un,p.sector))) return false;
     if(fltUN||fltSec){
-      if(fltUN&&c.un){
-        if(c.un!==fltUN) return false;
-        if(fltSec){
-          // Filtrar por departamento: primero por cap.departamento, luego por asistentes
-          if(c.departamento&&c.departamento===fltSec) return true;
-          if(c.departamento&&c.departamento!==fltSec) return false;
-          const a=getA(c.id);
-          if(!a.length) return true;
-          return a.some(x=>{const d=x.departamento||x.sector||'';return d===fltSec&&x.un===fltUN;});
-        }
-        return true;
-      }
-      const a=getA(c.id);
-      if(!a.length) return !fltUN;
-      return a.some(x=>{
-        if(fltUN&&x.un!==fltUN) return false;
-        if(fltSec){const d=x.departamento||x.sector||'';if(d!==fltSec) return false;}
-        return true;
-      });
+      if(!capMatchUnSec(c,fltUN,fltSec)) return false;
     }
     return true;
   });
 }
+
 
 function clearFilters(){
   fltTipo=''; fltBim=''; fltUN=''; fltSec=''; _searchQuery=''; sortOrder='redmine';
@@ -747,7 +784,38 @@ function populateFilters(){
   tipoEl.innerHTML='<option value="">Todos</option>'+tipos.map(t=>`<option value="${t.codigo}"${fltTipo===t.codigo?' selected':''}>${t.codigo} — ${t.nombre}</option>`).join('');
   const unEl=document.getElementById('flt-un');
   const secEl=document.getElementById('flt-sec');
-  if(!isAdmin()&&currentUser.un){
+  const _pares=getMisPares();
+  if(_pares){
+    // Usuario Supervisor/Visor con restricción multi UN/Depto
+    const unsPermitidas=[...new Set(_pares.map(p=>p.un).filter(Boolean))];
+    if(_pares.length===1){
+      unEl.innerHTML=`<option value="${esc(_pares[0].un)}">${esc(_pares[0].un)}</option>`;unEl.disabled=true;
+      if(_pares[0].sector){secEl.innerHTML=`<option value="${esc(_pares[0].sector)}">${esc(_pares[0].sector)}</option>`;secEl.disabled=true;}
+      else{secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===_pares[0].un).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');secEl.disabled=false;}
+    }else{
+      unEl.disabled=false;
+      unEl.innerHTML='<option value="">Todas mis UN</option>'+unsPermitidas.map(u=>`<option${fltUN===u?' selected':''}>${u}</option>`).join('');
+      if(fltUN){
+        const secsPermitidos=[...new Set(_pares.filter(p=>p.un===fltUN&&p.sector).map(p=>p.sector))];
+        const parConAccesoTotal=_pares.some(p=>p.un===fltUN&&!p.sector);
+        if(parConAccesoTotal){
+          secEl.disabled=false;
+          secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===fltUN).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');
+        }else if(secsPermitidos.length<=1){
+          const unico=secsPermitidos[0]||'';
+          secEl.innerHTML=unico?`<option value="${esc(unico)}">${esc(unico)}</option>`:'<option value="">Todos</option>';
+          secEl.disabled=!!unico; if(unico) fltSec=unico;
+        }else{
+          secEl.disabled=false;
+          secEl.innerHTML='<option value="">Todos mis deptos</option>'+secsPermitidos.map(s=>`<option${fltSec===s?' selected':''}>${s}</option>`).join('');
+        }
+      }else{
+        secEl.disabled=true;
+        secEl.innerHTML='<option value="">Todos</option>';
+        fltSec='';
+      }
+    }
+  }else if(!isAdmin()&&currentUser.un){
     unEl.innerHTML=`<option value="${esc(currentUser.un)}">${esc(currentUser.un)}</option>`;unEl.disabled=true;
     if(currentUser.sector){secEl.innerHTML=`<option value="${esc(currentUser.sector)}">${esc(currentUser.sector)}</option>`;secEl.disabled=true;}
     else{secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===currentUser.un).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');secEl.disabled=false;}
@@ -764,6 +832,7 @@ function populateFilters(){
   }
   document.getElementById('flt-bim').value=fltBim;
 }
+
 
 function renderStats(f){
   document.getElementById('st-tot').textContent=f.length;
@@ -941,12 +1010,18 @@ function renderBim(){
 
 function renderUN(){
   const f=getFiltered();
-  const unList=fltUN?uns.filter(u=>u.nombre===fltUN):uns;
+  const permisosUN=getPermisosUN();
+  const unList=fltUN?uns.filter(u=>u.nombre===fltUN):(permisosUN?uns.filter(u=>Object.prototype.hasOwnProperty.call(permisosUN,u.nombre)):uns);
   if(!unList.length)return'<div class="empty-state"><div class="empty-num">🏢</div><div class="empty-t">Sin unidades configuradas</div></div>';
 
   return unList.map(un=>{
+    // Deptos permitidos para esta UN según restricción del usuario (null = todos)
+    const deptosPermitidosUN=permisosUN&&Object.prototype.hasOwnProperty.call(permisosUN,un.nombre)?permisosUN[un.nombre]:null;
     // Empleados del padrón en esta UN
-    const empleadosUN=padron.filter(p=>p.un===un.nombre);
+    let empleadosUN=padron.filter(p=>p.un===un.nombre);
+    if(deptosPermitidosUN){
+      empleadosUN=empleadosUN.filter(p=>{const d=p.departamento||p.datos_extra?.Departamento||'';return deptosPermitidosUN.has(d);});
+    }
     const activosUN=empleadosUN.filter(p=>!p.estado||p.estado==='Vigente').length;
 
     // Caps de esta UN
@@ -955,9 +1030,10 @@ function renderUN(){
     const todasCapsUN=[...new Map([...capsDeUN,...capsViaAsis].map(cap=>[cap.id,cap])).values()];
 
     // Deptos únicos del padrón para esta UN
-    const deptosUN=[...new Set(
+    let deptosUN=[...new Set(
       empleadosUN.map(p=>p.departamento||p.datos_extra?.Departamento).filter(Boolean)
     )].sort();
+    if(deptosPermitidosUN) deptosUN=deptosUN.filter(dep=>deptosPermitidosUN.has(dep));
 
     // Filtro activo
     const depFiltro=fltSec||'';
@@ -2055,7 +2131,10 @@ function renderUsuarios(){
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button></div>`;
   return html+usuarios.map(u=>{
     const av=(u.nombre||'?').charAt(0).toUpperCase();
-    const meta=[u.email,u.un?`UN: ${u.un}`:'',u.sector?`Sector: ${u.sector}`:''].filter(Boolean).join(' · ');
+    const paresStr=Array.isArray(u.restricciones)&&u.restricciones.length
+      ?u.restricciones.map(p=>p.sector?`${p.un}/${p.sector}`:p.un).join(', ')
+      :'';
+    const meta=[u.email,u.un?`UN: ${u.un}`:'',u.sector?`Sector: ${u.sector}`:'',paresStr?`Asignado a: ${paresStr}`:''].filter(Boolean).join(' · ');
     return`<div class="user-card">
       <div class="user-avatar" style="${u.rol==='admin'?'background:#EEEDFE;color:#3C3489':u.rol==='capacitador'?'background:#E1F5EE;color:#085041':u.rol==='supervisor'?'background:#E8EAF6;color:#1A2F6E':'background:#f4f4f2;color:#555'}">${av}</div>
       <div class="user-card-info"><div class="user-card-name">${esc(u.nombre)} ${!u.activo?'<span style="color:#aaa;font-weight:400;font-size:10px">(inactivo)</span>':''}</div><div class="user-card-meta">${esc(meta)}</div></div>
@@ -3971,31 +4050,81 @@ async function delUN(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar la UN "${nom
 async function addSector(){if(!isAdmin())return;if(!uns.length){alert('Primero agregá una UN.');return;}const unN=prompt(`¿A qué UN pertenece?\nOpciones: ${uns.map(u=>u.nombre).join(', ')}`);if(!unN)return;const unReal=uns.find(u=>u.nombre.toLowerCase()===unN.trim().toLowerCase());if(!unReal){alert('UN no encontrada.');return;}const n=prompt('Nombre del sector:');if(!n||!n.trim())return;if(sectores.find(s=>s.nombre.toLowerCase()===n.trim().toLowerCase()&&s.un===unReal.nombre)){toast('Ya existe');return;}try{const r=await api('POST','sectores',{nombre:n.trim(),un:unReal.nombre},'');const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);populateFilters();renderContent();toast('Sector agregado');}catch(e){toast('Error');}}
 async function delSector(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar "${nombre}"?`))return;try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}}
 
+// ── Editor de pares UN/Depto (Supervisor / Visor) ──────────────────
+let _paresUsuarioTemp=[];
+function _parUNOpts(selectedUN){
+  return '<option value="">— Seleccionar UN —</option>'+uns.map(u=>`<option${selectedUN===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('');
+}
+function _parSecOpts(un,selectedSec){
+  const opts=un?sectores.filter(s=>s.un===un):[];
+  return '<option value="">Todos los deptos de esta UN</option>'+opts.map(s=>`<option${selectedSec===s.nombre?' selected':''}>${esc(s.nombre)}</option>`).join('');
+}
+function renderParesUsuarioUI(){
+  const cont=document.getElementById('pares-list');
+  if(!cont) return;
+  if(!_paresUsuarioTemp.length){
+    cont.innerHTML='<p style="font-size:11px;color:#aaa;margin:2px 0 8px">Sin restricción — verá todas las UN/Deptos</p>';
+    return;
+  }
+  cont.innerHTML=_paresUsuarioTemp.map((p,i)=>`
+    <div class="form-row" style="align-items:center;margin-bottom:6px">
+      <div class="form-group" style="margin-bottom:0"><select class="form-input" onchange="setParUN(${i},this.value)">${_parUNOpts(p.un)}</select></div>
+      <div class="form-group" style="margin-bottom:0"><select class="form-input" onchange="setParSector(${i},this.value)">${_parSecOpts(p.un,p.sector)}</select></div>
+      <button type="button" onclick="quitarParUsuario(${i})" style="border:none;background:none;color:#E05555;font-size:16px;cursor:pointer;padding:0 4px" title="Quitar">✕</button>
+    </div>`).join('');
+}
+function agregarParUsuario(){_paresUsuarioTemp.push({un:'',sector:''});renderParesUsuarioUI();}
+function quitarParUsuario(i){_paresUsuarioTemp.splice(i,1);renderParesUsuarioUI();}
+function setParUN(i,val){_paresUsuarioTemp[i].un=val;_paresUsuarioTemp[i].sector='';renderParesUsuarioUI();}
+function setParSector(i,val){_paresUsuarioTemp[i].sector=val;}
+function onChangeRolUsuario(){
+  const rol=document.getElementById('u-rol').value;
+  const single=document.getElementById('rol-fields-single');
+  const multi=document.getElementById('rol-fields-multi');
+  if(rol==='admin'){single.style.display='none';multi.style.display='none';}
+  else if(rol==='capacitador'){single.style.display='';multi.style.display='none';}
+  else{single.style.display='none';multi.style.display='';renderParesUsuarioUI();}
+}
+
 function openNewUsuario(){
   const unOpts='<option value="">Sin restricción</option>'+uns.map(u=>`<option>${u.nombre}</option>`).join('');
   const secOpts='<option value="">Sin restricción</option>'+sectores.map(s=>`<option>${s.nombre}</option>`).join('');
+  _paresUsuarioTemp=[];
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Nuevo usuario</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" placeholder="Juan Pérez"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" placeholder="juan@empresa.com"></div>
     <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-input" id="u-pass" type="text" placeholder="Contraseña inicial"></div>
-    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor">Visor</option><option value="capacitador">Capacitador</option><option value="admin">Administrador</option></select></div>
-    <div id="rol-fields"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor">Visor</option><option value="supervisor">Supervisor</option><option value="capacitador">Capacitador</option><option value="admin">Administrador</option></select></div>
+    <div id="rol-fields-single" style="display:none"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div id="rol-fields-multi" style="display:none">
+      <label class="form-label">UN / Depto asignados <span style="font-weight:400;color:#999">(uno o varios)</span></label>
+      <div id="pares-list"></div>
+      <button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px" onclick="agregarParUsuario()">+ Agregar UN / Depto</button>
+    </div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(null)">Crear</button></div>`);
+  onChangeRolUsuario();
 }
 
 function editUsuario(id){
   const u=usuarios.find(x=>x.id===id);if(!u)return;
   const unOpts='<option value="">Sin restricción</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
+  _paresUsuarioTemp=Array.isArray(u.restricciones)?u.restricciones.map(p=>({un:p.un||'',sector:p.sector||''})):[];
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}"></div>
     <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
-    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="this.value==='admin'?document.getElementById('rol-fields').style.display='none':document.getElementById('rol-fields').style.display=''"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
-    <div id="rol-fields" style="${u.rol==='admin'?'display:none':''}"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
+    <div id="rol-fields-single" style="display:none"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
+    <div id="rol-fields-multi" style="display:none">
+      <label class="form-label">UN / Depto asignados <span style="font-weight:400;color:#999">(uno o varios)</span></label>
+      <div id="pares-list"></div>
+      <button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px" onclick="agregarParUsuario()">+ Agregar UN / Depto</button>
+    </div>
     <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(${id})">Guardar</button></div>`);
+  onChangeRolUsuario();
 }
 
 async function saveUsuario(id){
@@ -4003,11 +4132,13 @@ async function saveUsuario(id){
   const email=document.getElementById('u-email').value.trim().toLowerCase();
   const pass=document.getElementById('u-pass').value.trim();
   const rol=document.getElementById('u-rol').value;
-  const un=(rol==='admin')?null:(document.getElementById('u-un').value||null);
-  const sector=(rol==='admin')?null:(document.getElementById('u-sec').value||null);
+  const esMulti=(rol==='supervisor'||rol==='visor');
+  const un=(rol==='admin'||esMulti)?null:(document.getElementById('u-un').value||null);
+  const sector=(rol==='admin'||esMulti)?null:(document.getElementById('u-sec').value||null);
+  const restricciones=esMulti?_paresUsuarioTemp.filter(p=>p.un).map(p=>({un:p.un,sector:p.sector||null})):[];
   if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
   const isNew=!id;if(isNew&&!pass){alert('La contraseña es obligatoria');return;}
-  const obj={nombre,email,rol,un,sector};if(pass)obj.password_hash=pass;
+  const obj={nombre,email,rol,un,sector,restricciones};if(pass)obj.password_hash=pass;
   try{
     if(isNew){const r=await api('POST','usuarios',{...obj,activo:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)usuarios.push(nv);toast('Usuario creado');}
     else{await api('PATCH','usuarios',obj,`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i]={...usuarios[i],...obj};toast('Actualizado');}
@@ -4018,6 +4149,7 @@ async function saveUsuario(id){
 async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
 }
+
 
 function renderCharts(){
   const isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;

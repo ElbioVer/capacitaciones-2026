@@ -899,7 +899,7 @@ function switchTab(t){
     // Mostrar buscador solo en tabs de listas de capacitaciones
     const sbWrap=document.getElementById('search-bar-wrap');
     if(sbWrap) sbWrap.style.display=['lista','tipo','bim','un'].includes(t)?'block':'none';
-    renderContent();
+    renderContent(true);
   }catch(err){
     console.error('switchTab error:',err);
   }
@@ -941,7 +941,11 @@ function waitForChart(cb, attempts){
   setTimeout(()=>waitForChart(cb,attempts+1),100);
 }
 
-function renderContent(){
+function renderContent(resetScroll){
+  const _scrollEl=document.getElementById('content');
+  const _prevY=resetScroll?0:window.scrollY;
+  const _prevX=resetScroll?0:window.scrollX;
+  const _prevInnerTop=resetScroll?0:(_scrollEl?_scrollEl.scrollTop:0);
   try{
     const f=getFiltered();renderStats(f);
     const el=document.getElementById('content');
@@ -961,6 +965,13 @@ function renderContent(){
     const el=document.getElementById('content');
     if(el) el.innerHTML='<div style="padding:20px;color:#CC0000;font-size:12px">⚠ Error al renderizar: '+err.message+'<br><small>Tab: '+currentTab+'</small></div>';
   }
+  // Restaurar la posición de scroll tras redibujar (o llevar arriba si se pidió explícitamente,
+  // ej. al cambiar de menú con switchTab). Evita que un refresco automático o un guardado
+  // mientras se está trabajando desplace la vista al principio de la pantalla.
+  requestAnimationFrame(()=>{
+    window.scrollTo(_prevX,_prevY);
+    if(_scrollEl) _scrollEl.scrollTop=_prevInnerTop;
+  });
 }
 
 function renderPorTipo(){
@@ -2150,15 +2161,17 @@ function renderUsuarios(){
 // DETALLE
 function openDetail(id){
   try{
-    buildDetail(Number(id));
+    buildDetail(Number(id),true);
   }catch(err){
     console.error('openDetail error:',err);
     alert('Error al abrir: '+err.message);
   }
 }
 
-function buildDetail(id){
+function buildDetail(id,resetScroll){
   const _id=Number(id);const c=caps.find(x=>x.id===_id);if(!c)return;
+  const _modalBox=document.getElementById('modal-box');
+  const _prevModalScroll=resetScroll?0:(_modalBox?_modalBox.scrollTop:0);
   const t=getTipo(c.tipo_codigo);
   const nota_aprobacion=c.nota_aprobacion||6;
   const esInduccion=c.tipo_codigo==='INDUCCION';
@@ -2533,6 +2546,7 @@ function buildDetail(id){
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+  requestAnimationFrame(()=>{ if(_modalBox) _modalBox.scrollTop=_prevModalScroll; });
 }
 
 // ===== ORDENAR ASISTENTES =====

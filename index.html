@@ -1696,8 +1696,7 @@ async function exportarPadron(){
 
 function filtrarPadron(filtro){
   window._padronFiltro=filtro;
-  const el=document.getElementById('content');
-  if(el) el.innerHTML=renderPadron(filtro);
+  renderContent();
 }
 
 async function limpiarPadron(){
@@ -1889,6 +1888,25 @@ async function importarPadron(event){
         toast(`${importados} registros importados al padrón ✓`);
       }
       renderContent();
+      // Aviso automático: ¿hay gente nueva del padrón que corresponde a alguna INDUCCION
+      // y todavía no está en la lista? (ej: ingresó en el mes actual). No se agrega sola —
+      // solo avisa para que se revise y apruebe desde "No en lista" → "Pasar todos a Lista".
+      try{
+        const capsInd=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&c.fecha);
+        if(capsInd.length){
+          const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+          const pendientesPorCap=capsInd.map(c=>({cap:c,pendientes:metricas(c).padronNoEnLista.length})).filter(x=>x.pendientes>0);
+          if(pendientesPorCap.length){
+            const totalPend=pendientesPorCap.reduce((s,x)=>s+x.pendientes,0);
+            const detalle=pendientesPorCap.map(x=>{
+              const [yy,mm]=x.cap.fecha.split('-');
+              const mes=MESES_ES[parseInt(mm)-1]||mm;
+              return `• ${x.cap.codigo_redmine||'#'+x.cap.id} — ${x.cap.titulo} (${mes} ${yy}): ${x.pendientes} persona(s) nueva(s)`;
+            }).join('\n');
+            alert(`📋 Se detectaron ${totalPend} persona(s) del padrón que corresponden a capacitaciones de INDUCCIÓN y todavía no están en la lista:\n\n${detalle}\n\nEntrá a cada capacitación → filtro "No en lista" para revisarlas y aprobarlas con "Pasar todos a Lista".`);
+          }
+        }
+      }catch(e){console.warn('Error al chequear pendientes de INDUCCION tras importar padrón:',e);}
     }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
@@ -1916,7 +1934,7 @@ function renderEvalConfigList(){
       </div>
       ${toggleSwitch}
       <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn-sm blue" style="padding:3px 7px;font-size:10px" onclick="openEditEval(${ev.id},${ev.capacitacion_id})">✎</button>
+        <button class="btn-sm blue" style="padding:3px 7px;font-size:10px" onclick="openEditEval(${ev.id},${ev.capacitacion_id},true)">✎</button>
         <button class="btn-sm green" style="padding:3px 7px;font-size:10px" onclick="exportEvalExcel(${ev.id})">📊</button>
       </div>
     </div>`;
@@ -2328,7 +2346,7 @@ function buildDetail(id,resetScroll){
       evalHtml=`<div class="modal-section">
         <div style="display:flex;align-items:center;justify-content:space-between" class="modal-section-title">
           <span>Evaluación de comprensión</span>
-          ${canManageEval()?`<div style="display:flex;gap:4px"><button class="btn-sm ${ev.activa?'red':'green'}" onclick="toggleEval(${ev.id},${!ev.activa},${id})">${ev.activa?'Desactivar':'Activar'}</button><button class="btn-sm blue" onclick="openEditEval(${ev.id},${id})">Editar</button></div>`:''}
+          ${canManageEval()?`<div style="display:flex;gap:4px"><button class="btn-sm ${ev.activa?'red':'green'}" onclick="toggleEval(${ev.id},${!ev.activa},${id})">${ev.activa?'Desactivar':'Activar'}</button><button class="btn-sm blue" onclick="openEditEval(${ev.id},${id},true)">Editar</button></div>`:''}
         </div>
         <div class="eval-card">
           <div class="eval-title">${esc(ev.titulo)}</div>
@@ -2705,7 +2723,7 @@ async function saveNewEval(capId){
   try{
     const r=await api('POST','evaluaciones',{capacitacion_id:capId,titulo,descripcion:desc,activa:false},'');
     const nv=Array.isArray(r)?r[0]:r;if(nv)evaluaciones.push(nv);
-    toast('Evaluación creada');openEditEval(nv.id,capId);
+    toast('Evaluación creada');openEditEval(nv.id,capId,true);
   }catch(e){toast('Error al crear');}
 }
 
@@ -2797,8 +2815,10 @@ function _buildIncorrectasHtml(pqs, respuestasMap, aprobado){
     +filas+'</div>';
 }
 
-function openEditEval(evalId,capId){
+function openEditEval(evalId,capId,resetScroll){
   const ev=evaluaciones.find(e=>e.id===evalId);if(!ev)return;
+  const _modalBoxEv=document.getElementById('modal-box');
+  const _prevScrollEv=resetScroll?0:(_modalBoxEv?_modalBoxEv.scrollTop:0);
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   const letras=['A','B','C','D'];
   let pqsHtml=pqs.map((p,i)=>{
@@ -2868,6 +2888,7 @@ function openEditEval(evalId,capId){
       +'<button class="btn-prim" onclick="addPregunta('+evalId+','+capId+')">+ Agregar pregunta</button>'
     +'</div>'
     +'<button class="btn-sec" style="width:100%;margin-top:10px" onclick="buildDetail('+capId+')">Listo</button>');
+  requestAnimationFrame(()=>{ if(_modalBoxEv) _modalBoxEv.scrollTop=_prevScrollEv; });
 }
 
 async function addPregunta(evalId,capId){

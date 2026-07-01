@@ -791,7 +791,7 @@ function populateFilters(){
     if(_pares.length===1){
       unEl.innerHTML=`<option value="${esc(_pares[0].un)}">${esc(_pares[0].un)}</option>`;unEl.disabled=true;
       if(_pares[0].sector){secEl.innerHTML=`<option value="${esc(_pares[0].sector)}">${esc(_pares[0].sector)}</option>`;secEl.disabled=true;}
-      else{secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===_pares[0].un).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');secEl.disabled=false;}
+      else{secEl.innerHTML='<option value="">Todos</option>'+_deptosDelPadronParaUN(_pares[0].un).map(d=>`<option${fltSec===d?' selected':''}>${d}</option>`).join('');secEl.disabled=false;}
     }else{
       unEl.disabled=false;
       unEl.innerHTML='<option value="">Todas mis UN</option>'+unsPermitidas.map(u=>`<option${fltUN===u?' selected':''}>${u}</option>`).join('');
@@ -800,7 +800,7 @@ function populateFilters(){
         const parConAccesoTotal=_pares.some(p=>p.un===fltUN&&!p.sector);
         if(parConAccesoTotal){
           secEl.disabled=false;
-          secEl.innerHTML='<option value="">Todos</option>'+sectores.filter(s=>s.un===fltUN).map(s=>`<option${fltSec===s.nombre?' selected':''}>${s.nombre}</option>`).join('');
+          secEl.innerHTML='<option value="">Todos</option>'+_deptosDelPadronParaUN(fltUN).map(d=>`<option${fltSec===d?' selected':''}>${d}</option>`).join('');
         }else if(secsPermitidos.length<=1){
           const unico=secsPermitidos[0]||'';
           secEl.innerHTML=unico?`<option value="${esc(unico)}">${esc(unico)}</option>`:'<option value="">Todos</option>';
@@ -2131,9 +2131,7 @@ function renderUsuarios(){
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button></div>`;
   return html+usuarios.map(u=>{
     const av=(u.nombre||'?').charAt(0).toUpperCase();
-    const paresStr=Array.isArray(u.restricciones)&&u.restricciones.length
-      ?u.restricciones.map(p=>p.sector?`${p.un}/${p.sector}`:p.un).join(', ')
-      :'';
+    const paresStr=resumenRestricciones(u.restricciones);
     const meta=[u.email,u.un?`UN: ${u.un}`:'',u.sector?`Sector: ${u.sector}`:'',paresStr?`Asignado a: ${paresStr}`:''].filter(Boolean).join(' · ');
     return`<div class="user-card">
       <div class="user-avatar" style="${u.rol==='admin'?'background:#EEEDFE;color:#3C3489':u.rol==='capacitador'?'background:#E1F5EE;color:#085041':u.rol==='supervisor'?'background:#E8EAF6;color:#1A2F6E':'background:#f4f4f2;color:#555'}">${av}</div>
@@ -4051,13 +4049,26 @@ async function addSector(){if(!isAdmin())return;if(!uns.length){alert('Primero a
 async function delSector(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar "${nombre}"?`))return;try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}}
 
 // ── Editor de pares UN/Depto (Supervisor / Visor) ──────────────────
+// Cada bloque: {un, deptos:[]}  → deptos vacío = todos los deptos de esa UN
 let _paresUsuarioTemp=[];
 function _parUNOpts(selectedUN){
   return '<option value="">— Seleccionar UN —</option>'+uns.map(u=>`<option${selectedUN===u.nombre?' selected':''}>${esc(u.nombre)}</option>`).join('');
 }
-function _parSecOpts(un,selectedSec){
-  const opts=un?sectores.filter(s=>s.un===un):[];
-  return '<option value="">Todos los deptos de esta UN</option>'+opts.map(s=>`<option${selectedSec===s.nombre?' selected':''}>${esc(s.nombre)}</option>`).join('');
+// Departamentos reales del padrón para una UN (igual criterio que el form de capacitación)
+function _deptosDelPadronParaUN(un){
+  return [...new Set(
+    padron.filter(p=>!un||p.un===un)
+      .map(p=>p.departamento||p.datos_extra?.Departamento)
+      .filter(Boolean)
+  )].sort();
+}
+function _parDeptosCheckboxHtml(i,un,selected){
+  if(!un) return '<div style="font-size:11px;color:#aaa;padding:4px">Elegí una UN primero</div>';
+  const deptos=_deptosDelPadronParaUN(un);
+  if(!deptos.length) return '<div style="font-size:11px;color:#aaa;padding:4px">Sin departamentos en el padrón para esta UN</div>';
+  return deptos.map(d=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:12px;cursor:pointer">
+    <input type="checkbox" class="chk-depto-par" value="${esc(d)}" ${selected.includes(d)?'checked':''} onchange="toggleDeptoPar(${i},this)">
+    ${esc(d)}</label>`).join('');
 }
 function renderParesUsuarioUI(){
   const cont=document.getElementById('pares-list');
@@ -4066,17 +4077,55 @@ function renderParesUsuarioUI(){
     cont.innerHTML='<p style="font-size:11px;color:#aaa;margin:2px 0 8px">Sin restricción — verá todas las UN/Deptos</p>';
     return;
   }
-  cont.innerHTML=_paresUsuarioTemp.map((p,i)=>`
-    <div class="form-row" style="align-items:center;margin-bottom:6px">
-      <div class="form-group" style="margin-bottom:0"><select class="form-input" onchange="setParUN(${i},this.value)">${_parUNOpts(p.un)}</select></div>
-      <div class="form-group" style="margin-bottom:0"><select class="form-input" onchange="setParSector(${i},this.value)">${_parSecOpts(p.un,p.sector)}</select></div>
-      <button type="button" onclick="quitarParUsuario(${i})" style="border:none;background:none;color:#E05555;font-size:16px;cursor:pointer;padding:0 4px" title="Quitar">✕</button>
+  cont.innerHTML=_paresUsuarioTemp.map((blk,i)=>`
+    <div style="border:1px solid #e5e5e0;border-radius:8px;padding:8px;margin-bottom:8px;position:relative">
+      <button type="button" onclick="quitarParUsuario(${i})" style="position:absolute;top:6px;right:6px;border:none;background:none;color:#E05555;font-size:15px;cursor:pointer;line-height:1" title="Quitar">✕</button>
+      <div class="form-group" style="margin-bottom:6px;max-width:calc(100% - 24px)"><label class="form-label">UN</label><select class="form-input" onchange="setParUNBlock(${i},this.value)">${_parUNOpts(blk.un)}</select></div>
+      <label class="form-label">Departamento(s) <span style="font-weight:400;color:#999">(ninguno tildado = todos)</span></label>
+      <div id="pares-deptos-${i}" style="border:1px solid #ddd;border-radius:8px;max-height:150px;overflow-y:auto;background:#fff;padding:4px 6px">
+        ${_parDeptosCheckboxHtml(i,blk.un,blk.deptos)}
+      </div>
+      <div style="margin-top:4px;display:flex;gap:6px">
+        <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptosPar(${i},true)">Todos</button>
+        <button type="button" class="btn-gray" style="font-size:10px;padding:3px 8px" onclick="toggleTodosDeptosPar(${i},false)">Ninguno</button>
+      </div>
     </div>`).join('');
 }
-function agregarParUsuario(){_paresUsuarioTemp.push({un:'',sector:''});renderParesUsuarioUI();}
+function agregarParUsuario(){_paresUsuarioTemp.push({un:'',deptos:[]});renderParesUsuarioUI();}
 function quitarParUsuario(i){_paresUsuarioTemp.splice(i,1);renderParesUsuarioUI();}
-function setParUN(i,val){_paresUsuarioTemp[i].un=val;_paresUsuarioTemp[i].sector='';renderParesUsuarioUI();}
-function setParSector(i,val){_paresUsuarioTemp[i].sector=val;}
+function setParUNBlock(i,val){_paresUsuarioTemp[i].un=val;_paresUsuarioTemp[i].deptos=[];renderParesUsuarioUI();}
+function toggleDeptoPar(i,el){
+  const blk=_paresUsuarioTemp[i];if(!blk)return;
+  const val=el.value;
+  if(el.checked){ if(!blk.deptos.includes(val)) blk.deptos.push(val); }
+  else{ blk.deptos=blk.deptos.filter(d=>d!==val); }
+}
+function toggleTodosDeptosPar(i,sel){
+  const blk=_paresUsuarioTemp[i];if(!blk)return;
+  const cont=document.getElementById(`pares-deptos-${i}`);
+  if(!cont) return;
+  const boxes=[...cont.querySelectorAll('.chk-depto-par')];
+  boxes.forEach(c=>c.checked=sel);
+  blk.deptos=sel?boxes.map(c=>c.value):[];
+}
+// Convierte pares planos {un,sector} (formato guardado) → bloques {un,deptos:[]} (formato del editor)
+function _paresToBloques(restricciones){
+  if(!Array.isArray(restricciones)||!restricciones.length) return [];
+  const map={};const order=[];
+  restricciones.forEach(p=>{
+    if(!p.un) return;
+    if(!(p.un in map)){map[p.un]={deptos:[],todos:false};order.push(p.un);}
+    if(!p.sector) map[p.un].todos=true;
+    else map[p.un].deptos.push(p.sector);
+  });
+  return order.map(un=>({un,deptos:map[un].todos?[]:map[un].deptos}));
+}
+// Resumen legible de restricciones para el listado de usuarios
+function resumenRestricciones(restricciones){
+  if(!Array.isArray(restricciones)||!restricciones.length) return '';
+  const bloques=_paresToBloques(restricciones);
+  return bloques.map(b=>b.deptos.length?`${b.un} (${b.deptos.join(', ')})`:b.un).join(' · ');
+}
 function onChangeRolUsuario(){
   const rol=document.getElementById('u-rol').value;
   const single=document.getElementById('rol-fields-single');
@@ -4110,7 +4159,7 @@ function editUsuario(id){
   const u=usuarios.find(x=>x.id===id);if(!u)return;
   const unOpts='<option value="">Sin restricción</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
-  _paresUsuarioTemp=Array.isArray(u.restricciones)?u.restricciones.map(p=>({un:p.un||'',sector:p.sector||''})):[];
+  _paresUsuarioTemp=_paresToBloques(u.restricciones);
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
@@ -4135,7 +4184,7 @@ async function saveUsuario(id){
   const esMulti=(rol==='supervisor'||rol==='visor');
   const un=(rol==='admin'||esMulti)?null:(document.getElementById('u-un').value||null);
   const sector=(rol==='admin'||esMulti)?null:(document.getElementById('u-sec').value||null);
-  const restricciones=esMulti?_paresUsuarioTemp.filter(p=>p.un).map(p=>({un:p.un,sector:p.sector||null})):[];
+  const restricciones=esMulti?_paresUsuarioTemp.filter(b=>b.un).flatMap(b=>b.deptos.length?b.deptos.map(d=>({un:b.un,sector:d})):[{un:b.un,sector:null}]):[];
   if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
   const isNew=!id;if(isNew&&!pass){alert('La contraseña es obligatoria');return;}
   const obj={nombre,email,rol,un,sector,restricciones};if(pass)obj.password_hash=pass;

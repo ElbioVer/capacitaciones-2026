@@ -1891,21 +1891,31 @@ async function importarPadron(event){
       // Aviso automático: ¿hay gente nueva del padrón que corresponde a alguna INDUCCION
       // y todavía no está en la lista? (ej: ingresó en el mes actual). No se agrega sola —
       // solo avisa para que se revise y apruebe desde "No en lista" → "Pasar todos a Lista".
+      // También avisa si hay INDUCCIONes sin "Fecha" configurada, ya que sin eso no se
+      // puede calcular nada (posibles queda en 0 silenciosamente).
       try{
-        const capsInd=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&c.fecha);
-        if(capsInd.length){
-          const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-          const pendientesPorCap=capsInd.map(c=>({cap:c,pendientes:metricas(c).padronNoEnLista.length})).filter(x=>x.pendientes>0);
-          if(pendientesPorCap.length){
-            const totalPend=pendientesPorCap.reduce((s,x)=>s+x.pendientes,0);
-            const detalle=pendientesPorCap.map(x=>{
-              const [yy,mm]=x.cap.fecha.split('-');
-              const mes=MESES_ES[parseInt(mm)-1]||mm;
-              return `• ${x.cap.codigo_redmine||'#'+x.cap.id} — ${x.cap.titulo} (${mes} ${yy}): ${x.pendientes} persona(s) nueva(s)`;
-            }).join('\n');
-            alert(`📋 Se detectaron ${totalPend} persona(s) del padrón que corresponden a capacitaciones de INDUCCIÓN y todavía no están en la lista:\n\n${detalle}\n\nEntrá a cada capacitación → filtro "No en lista" para revisarlas y aprobarlas con "Pasar todos a Lista".`);
-          }
+        const todasInd=caps.filter(c=>c.tipo_codigo==='INDUCCION');
+        const indSinFecha=todasInd.filter(c=>!c.fecha);
+        const capsInd=todasInd.filter(c=>c.fecha);
+        const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        const pendientesPorCap=capsInd.map(c=>({cap:c,pendientes:metricas(c).padronNoEnLista.length})).filter(x=>x.pendientes>0);
+        let msg='';
+        if(pendientesPorCap.length){
+          const totalPend=pendientesPorCap.reduce((s,x)=>s+x.pendientes,0);
+          const detalle=pendientesPorCap.map(x=>{
+            const [yy,mm]=x.cap.fecha.split('-');
+            const mes=MESES_ES[parseInt(mm)-1]||mm;
+            return `• ${x.cap.codigo_redmine||'#'+x.cap.id} — ${x.cap.titulo} (${mes} ${yy}): ${x.pendientes} persona(s) nueva(s)`;
+          }).join('\n');
+          msg+=`📋 Se detectaron ${totalPend} persona(s) del padrón que corresponden a capacitaciones de INDUCCIÓN y todavía no están en la lista:\n\n${detalle}\n\nEntrá a cada capacitación → filtro "No en lista" para revisarlas y aprobarlas con "Pasar todos a Lista".`;
         }
+        if(indSinFecha.length){
+          if(msg) msg+='\n\n';
+          msg+=`⚠ Estas capacitaciones de INDUCCIÓN NO tienen "Fecha" configurada, por lo que no se puede calcular quién corresponde a ese mes (van a quedar en 0 posibles silenciosamente):\n\n`
+            +indSinFecha.map(c=>`• ${c.codigo_redmine||'#'+c.id} — ${c.titulo}`).join('\n')
+            +`\n\nEditá cada una y completá la Fecha (ej: 01/07/2026 para julio).`;
+        }
+        if(msg) alert(msg);
       }catch(e){console.warn('Error al chequear pendientes de INDUCCION tras importar padrón:',e);}
     }catch(err){setSyncStatus('error');alert('Error al importar: '+err.message);}
   };
@@ -2214,6 +2224,7 @@ function buildDetail(id,resetScroll){
   // Label de mes para INDUCCION
   const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let induccionMesLabel='';
+  const induccionSinFecha=esInduccion&&!c.fecha;
   if(esInduccion&&c.fecha&&padron.length){
     const [yy,mm]=c.fecha.split('-');
     induccionMesLabel=`${MESES_ES[parseInt(mm)-1]} ${parseInt(yy)}`;
@@ -2547,7 +2558,7 @@ function buildDetail(id,resetScroll){
       <div class="detail-row"><span class="detail-key">Área</span><span class="detail-val">${esc(c.area||'')}</span></div>
       <div class="detail-row"><span class="detail-key">Fecha</span><span class="detail-val">${fmtF(c.fecha)}</span></div>
       <div class="detail-row"><span class="detail-key">Duración</span><span class="detail-val">${c.duracion} hs</span></div>
-      <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}${esInduccion&&induccionMesLabel?` <span style="font-size:10px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:4px;padding:1px 5px;margin-left:4px">Ingresos ${induccionMesLabel}</span>`:''}</span></div>
+      <div class="detail-row"><span class="detail-key">Posibles (padrón)</span><span class="detail-val">${posibles}${esInduccion&&induccionMesLabel?` <span style="font-size:10px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:4px;padding:1px 5px;margin-left:4px">Ingresos ${induccionMesLabel}</span>`:''}${induccionSinFecha?` <span style="font-size:10px;background:#FDE8E8;color:#B91C1C;border:1px solid #E88;border-radius:4px;padding:1px 5px;margin-left:4px">⚠ Sin Fecha — no se puede calcular</span>`:''}</span></div>
       <div class="detail-row"><span class="detail-key">En lista (esperados)</span><span class="detail-val">${a.length}${listaCerrada?' <span style="font-size:10px;background:#E1F5EE;color:#085041;border:1px solid #1D9E75;border-radius:4px;padding:1px 5px;margin-left:4px">🔒 Lista cerrada</span>':''}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
@@ -3649,6 +3660,12 @@ async function saveCap(id){
   if(isNew&&!canCapacitar()){toast('Sin permisos');return;}
   const tit=document.getElementById('f-tit').value.trim();
   if(!tit){alert('El título es obligatorio');return;}
+  const tipoSel=document.getElementById('f-tipo').value;
+  const fechaSel=document.getElementById('f-fecha').value;
+  if(tipoSel==='INDUCCION'&&!fechaSel){
+    alert('Las capacitaciones de tipo INDUCCION necesitan la "Fecha" para poder calcular automáticamente los "Posibles (padrón)" y "No en lista" según la Fecha cálculo antigüedad de cada empleado.\n\nCompletá la Fecha (ej: el 1° del mes correspondiente) antes de guardar.');
+    return;
+  }
   const unSel=document.getElementById('f-un')?document.getElementById('f-un').value.trim()||null:null;
   const depsSelArr=getFormDeptos();
   const secSel=depsSelArr.length?depsSelArr.join('||'):null;

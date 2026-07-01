@@ -1198,10 +1198,15 @@ function renderResumen(){
   });
 
   // Datos consolidados para efectividad — agrupados por tipo de cap
-  const todosConNota=f.flatMap(c=>getA(c.id).filter(x=>x.nota!=null).map(x=>({...x,nota_aprobacion:c.nota_aprobacion||6,tipo:c.tipo_codigo})));
+  // notaNorm normaliza a base 10 SOLO para esta comparación agregada entre tipos distintos
+  // (INDUCCION usa escala 0-100 en el resto de la app; acá se lleva a 0-10 para que sea comparable)
+  const todosConNota=f.flatMap(c=>{
+    const esIndTipo=c.tipo_codigo==='INDUCCION';
+    return getA(c.id).filter(x=>x.nota!=null).map(x=>({...x,nota_aprobacion:c.nota_aprobacion||(esIndTipo?60:6),tipo:c.tipo_codigo,notaNorm:esIndTipo?x.nota/10:x.nota}));
+  });
   // Resumen global
   const totalEval=todosConNota.length;
-  const promGlobal=totalEval?Math.round(todosConNota.reduce((s,x)=>s+x.nota,0)/totalEval*10)/10:0;
+  const promGlobal=totalEval?Math.round(todosConNota.reduce((s,x)=>s+x.notaNorm,0)/totalEval*10)/10:0;
   const aprGlobal=totalEval?Math.round(todosConNota.filter(x=>x.nota>=x.nota_aprobacion).length/totalEval*100):0;
   // Agrupado por tipo
   const tiposConEval=[...new Set(todosConNota.map(x=>x.tipo))].filter(Boolean);
@@ -1210,7 +1215,7 @@ function renderResumen(){
         {titulo:'📊 General',prom:promGlobal,apr:aprGlobal},
         ...tiposConEval.map(tipo=>{
           const rows=todosConNota.filter(x=>x.tipo===tipo);
-          const prom=Math.round(rows.reduce((s,x)=>s+x.nota,0)/rows.length*10)/10;
+          const prom=Math.round(rows.reduce((s,x)=>s+x.notaNorm,0)/rows.length*10)/10;
           const apr=Math.round(rows.filter(x=>x.nota>=x.nota_aprobacion).length/rows.length*100);
           return{titulo:tipo,prom,apr};
         })
@@ -1379,6 +1384,27 @@ function onChangeBimestre(val){
   const ffInput=document.getElementById('f-fecha-fin');
   if(ffInput&&!ffInput._manual){
     ffInput.value=fechaFinPorBimestre(val);
+  }
+}
+
+function onChangeTipoCapForm(tipoCod){
+  const esInd=tipoCod==='INDUCCION';
+  const notaInput=document.getElementById('f-nota');
+  const denom=document.getElementById('f-nota-denom');
+  const hint=document.getElementById('f-tipo-hint');
+  if(hint) hint.style.display=esInd?'block':'none';
+  if(!notaInput) return;
+  const valorActual=parseFloat(notaInput.value)||0;
+  if(esInd){
+    notaInput.min='1';notaInput.max='100';notaInput.step='1';
+    // Si el valor actual está en escala 0-10 (típico al venir de otro tipo), escalarlo a 0-100
+    if(valorActual>0&&valorActual<=10) notaInput.value=Math.round(valorActual*10);
+    if(denom) denom.textContent='(sobre 100)';
+  } else {
+    notaInput.min='1';notaInput.max='10';notaInput.step='0.5';
+    // Si el valor actual está en escala 0-100 (típico al venir de INDUCCION), volverlo a 0-10
+    if(valorActual>10) notaInput.value=Math.round(valorActual/10*10)/10;
+    if(denom) denom.textContent='(sobre 10)';
   }
 }
 
@@ -2523,11 +2549,12 @@ function buildDetail(id,resetScroll){
 
   // estadisticas nota
   let notaStatsHtml='';
+  const escalaNotaCap=esInduccion?100:10;
   if(hasNota&&a.filter(x=>x.nota!=null).length>0){
     const conNota=a.filter(x=>x.nota!=null);
     const aprobados=conNota.filter(x=>x.nota>=nota_aprobacion).length;
-    const promedio=(conNota.reduce((s,x)=>s+x.nota,0)/conNota.length).toFixed(1);
-    notaStatsHtml=`<div class="detail-row"><span class="detail-key">Nota promedio</span><span class="detail-val">${promedio}/10</span></div>
+    const promedio=esInduccion?Math.round(conNota.reduce((s,x)=>s+x.nota,0)/conNota.length):(conNota.reduce((s,x)=>s+x.nota,0)/conNota.length).toFixed(1);
+    notaStatsHtml=`<div class="detail-row"><span class="detail-key">Nota promedio</span><span class="detail-val">${promedio}/${escalaNotaCap}</span></div>
     <div class="detail-row"><span class="detail-key">Aprobaron (≥${nota_aprobacion})</span><span class="detail-val">${aprobados}/${conNota.length}</span></div>`;
   }
 
@@ -2562,7 +2589,7 @@ function buildDetail(id,resetScroll){
       <div class="detail-row"><span class="detail-key">En lista (esperados)</span><span class="detail-val">${a.length}${listaCerrada?' <span style="font-size:10px;background:#E1F5EE;color:#085041;border:1px solid #1D9E75;border-radius:4px;padding:1px 5px;margin-left:4px">🔒 Lista cerrada</span>':''}</span></div>
       <div class="detail-row"><span class="detail-key">Completaron</span><span class="detail-val">${comp} (${pct}%)</span></div>
       <div class="detail-row"><span class="detail-key">Faltantes</span><span class="detail-val" style="color:${faltantesReal>0?'#BA7517':'#0F6E56'}">${faltantesReal} ${faltantesReal>0?'personas':'✓'}</span></div>
-      ${hasNota?`<div class="detail-row"><span class="detail-key">Nota aprobación</span><span class="detail-val">≥ ${nota_aprobacion}</span></div>`:''}
+      ${hasNota?`<div class="detail-row"><span class="detail-key">Nota aprobación</span><span class="detail-val">≥ ${nota_aprobacion}/${escalaNotaCap}</span></div>`:''}
       ${notaStatsHtml}
       <div class="detail-row"><span class="detail-key">Instructor</span><span class="detail-val">${esc(c.instructor||'—')}</span></div>
       ${c.obs?`<div class="detail-row"><span class="detail-key">Obs.</span><span class="detail-val" style="font-size:11px">${esc(c.obs)}</span></div>`:''}
@@ -2755,13 +2782,15 @@ function calcPuntosPregunta(p, seleccionados){
   if(modo==='parcial'){return peso*(Math.max(0,marcadasBien-marcadasMal)/correctas.length);}
   return (marcadasBien===correctas.length&&marcadasMal===0)?peso:0;
 }
-function calcPuntajeFinal(pqs, respuestasMap){
+function calcPuntajeFinal(pqs, respuestasMap, escala){
+  escala=escala||10;
   const pesoTotal=pqs.reduce((s,p)=>s+getPqPeso(p),0)||1;
   const pts=pqs.reduce((s,p)=>{
     const sel=respuestasMap[p.id]||[];
     return s+calcPuntosPregunta(p,Array.isArray(sel)?sel:[sel]);
   },0);
-  return Math.round(pts/pesoTotal*10*10)/10;
+  const bruto=pts/pesoTotal*escala;
+  return escala===100?Math.round(bruto):Math.round(bruto*10)/10;
 }
 function buildPreguntaPublicaHtml(p, i, total){
   const opts=p.opciones||[];
@@ -3097,12 +3126,14 @@ async function submitEval(evalId,totalPqs){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   const respuestasMap=recogerRespuestasPublicas(pqs);
   if(!respuestasMap) return;
-  const puntaje=calcPuntajeFinal(pqs,respuestasMap);
-  const respuestasLegacy={};
-  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
   const ev=evaluaciones.find(e=>e.id===evalId);
   const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
-  const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
+  const esIndScore=cap&&cap.tipo_codigo==='INDUCCION';
+  const escalaPuntaje=esIndScore?100:10;
+  const puntaje=calcPuntajeFinal(pqs,respuestasMap,escalaPuntaje);
+  const respuestasLegacy={};
+  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
+  const nota_aprobacion=cap?(cap.nota_aprobacion||(esIndScore?60:6)):6;
   const aprobado=puntaje>=nota_aprobacion;
   try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn('Error registrando respuesta',e);}
   const intentoKey='eval_intento_'+evalId+'_'+legajo;
@@ -3111,10 +3142,10 @@ async function submitEval(evalId,totalPqs){
     sessionStorage.setItem(intentoKey,'1');
     document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
       +'<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'
-      +'<div class="result-score fail">'+puntaje+'/10</div>'
+      +'<div class="result-score fail">'+puntaje+'/'+escalaPuntaje+'</div>'
       +'<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">✗ Desaprobado</div>'
       +'<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'
-        +'<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
+        +'<div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/'+escalaPuntaje+')</div>'
         +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong> para rendir la evaluación.</div>'
       +'</div>'
       +'<button onclick="location.reload()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
@@ -3137,7 +3168,7 @@ async function submitEval(evalId,totalPqs){
   const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
     +'<div style="font-size:14px;color:#777">Resultado de '+esc(nombre)+'</div>'
-    +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'
+    +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/'+escalaPuntaje+'</div>'
     +'<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'✓ Aprobado':'✗ Desaprobado')+'</div>'
     +(aprobado?'<div style="font-size:13px;color:#777;margin-bottom:8px">Tu resultado fue registrado correctamente.</div>':'')
     +incorrectasHtml
@@ -3595,7 +3626,8 @@ function showForm(c){
   const eOpts=['Programada','Pendiente','Realizada','Vencida'].map(e=>`<option value="${e}"${c&&c.estado===e?' selected':''}>${e==='Pendiente'?'En Curso (Pendiente)':e}</option>`).join('');
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">${c?'Editar capacitación':'Nueva capacitación'}</div>
-    <div class="form-group"><label class="form-label">Tipo de capacitación *</label><select class="form-input" id="f-tipo">${tipoOpts}</select></div>
+    <div class="form-group"><label class="form-label">Tipo de capacitación *</label><select class="form-input" id="f-tipo" onchange="onChangeTipoCapForm(this.value)">${tipoOpts}</select></div>
+    <div id="f-tipo-hint" style="font-size:10px;color:#EF9F27;margin-top:-6px;margin-bottom:8px;display:${c&&c.tipo_codigo==='INDUCCION'?'block':'none'}">La nota de INDUCCION se maneja en escala de 0 a 100.</div>
     <div class="form-group"><label class="form-label">Título *</label><input class="form-input" id="f-tit" value="${c?esc(c.titulo):''}" placeholder="Nombre de la capacitación"></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Área / Tema</label><input class="form-input" id="f-area" value="${c?esc(c.area||''):''}" placeholder="Ej: Incendios"></div>
@@ -3621,7 +3653,7 @@ function showForm(c){
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Instructor</label><input class="form-input" id="f-inst" value="${c?esc(c.instructor||''):''}" placeholder="Nombre"></div>
-      <div class="form-group"><label class="form-label">Nota mínima aprobación</label><input class="form-input" id="f-nota" type="number" min="1" max="10" step="0.5" value="${c?c.nota_aprobacion:6}"></div>
+      <div class="form-group"><label class="form-label">Nota mínima aprobación <span id="f-nota-denom" style="font-weight:400;color:#999">(sobre ${c&&c.tipo_codigo==='INDUCCION'?100:10})</span></label><input class="form-input" id="f-nota" type="number" min="1" max="${c&&c.tipo_codigo==='INDUCCION'?100:10}" step="${c&&c.tipo_codigo==='INDUCCION'?1:0.5}" value="${c?c.nota_aprobacion:6}"></div>
     </div>
     <div class="form-row"><div class="form-group"><label class="form-label">Código Redmine</label><input class="form-input" id="f-redmine" value="${c?esc(c.codigo_redmine||''):''}"></div><div class="form-group"><label class="form-label">Fecha fin planificada</label><input class="form-input" id="f-fecha-fin" type="date" value="${c&&c.fecha_fin?c.fecha_fin:(c?fechaFinPorBimestre(c.bimestre):'')}" oninput="this._manual=true"><div style="font-size:10px;color:#888;margin-top:2px">Se completa automáticamente al elegir bimestre</div></div></div>
     <div class="form-row">
@@ -3672,7 +3704,7 @@ async function saveCap(id){
   const _ffRaw=document.getElementById('f-fecha-fin')?document.getElementById('f-fecha-fin').value:'';
   const _bimVal=document.getElementById('f-bim')?document.getElementById('f-bim').value:'';
   const fechaFin=_ffRaw||fechaFinPorBimestre(_bimVal)||null;
-  const obj={titulo:tit,tipo_codigo:document.getElementById('f-tipo').value,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,fecha_fin:fechaFin,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||6,instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:unSel,departamento:secSel};
+  const obj={titulo:tit,tipo_codigo:tipoSel,area:document.getElementById('f-area').value.trim(),fecha:document.getElementById('f-fecha').value,fecha_fin:fechaFin,bimestre:document.getElementById('f-bim').value,estado:document.getElementById('f-est').value,duracion:parseFloat(document.getElementById('f-dur').value)||1,participantes_esperados:parseInt(document.getElementById('f-par').value)||1,nota_aprobacion:parseFloat(document.getElementById('f-nota').value)||(tipoSel==='INDUCCION'?60:6),instructor:document.getElementById('f-inst').value.trim(),obs:document.getElementById('f-obs').value.trim(),codigo_redmine:document.getElementById('f-redmine')?document.getElementById('f-redmine').value.trim()||null:null,un:unSel,departamento:secSel};
   const btn=document.getElementById('btn-sv');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   setSyncStatus('syncing');
   try{
@@ -5271,12 +5303,14 @@ async function submitEvalConPresencia(evalId, totalPqs){
   const pqs=preguntas.filter(p=>p.evaluacion_id===evalId);
   const respuestasMap=recogerRespuestasPublicas(pqs);
   if(!respuestasMap) return;
-  const puntaje=calcPuntajeFinal(pqs,respuestasMap);
-  const respuestasLegacy={};
-  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
   const ev=evaluaciones.find(e=>e.id===evalId);
   const cap=caps.find(c=>c.id===(ev?ev.capacitacion_id:null));
-  const nota_aprobacion=cap?(cap.nota_aprobacion||6):6;
+  const esIndScore=cap&&cap.tipo_codigo==='INDUCCION';
+  const escalaPuntaje=esIndScore?100:10;
+  const puntaje=calcPuntajeFinal(pqs,respuestasMap,escalaPuntaje);
+  const respuestasLegacy={};
+  for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
+  const nota_aprobacion=cap?(cap.nota_aprobacion||(esIndScore?60:6)):6;
   const aprobado=puntaje>=nota_aprobacion;
   try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo:datosEmp.legajo,nombre:datosEmp.nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn(e);}
   const intentoKey='eval_intento_'+evalId+'_'+datosEmp.legajo;
@@ -5284,10 +5318,10 @@ async function submitEvalConPresencia(evalId, totalPqs){
   if(!aprobado&&!esSegundoIntento){
     sessionStorage.setItem(intentoKey,'1');
     document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
-      +'<div class="result-score fail">'+puntaje+'/10</div>'
+      +'<div class="result-score fail">'+puntaje+'/'+escalaPuntaje+'</div>'
       +'<div style="font-size:15px;font-weight:600;color:#E24B4A;margin-bottom:12px">✗ Desaprobado</div>'
       +'<div style="background:#FFF8E8;border:2px solid #EF9F27;border-radius:10px;padding:14px;margin:0 0 16px;text-align:left">'
-        +'<div style="font-size:14px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/10)</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#854F0B;margin-bottom:6px">⚠️ No alcanzaste la nota mínima ('+nota_aprobacion+'/'+escalaPuntaje+')</div>'
         +'<div style="font-size:13px;color:#6B4F00">Tenés <strong>una segunda oportunidad</strong>.</div>'
       +'</div>'
       +'<button onclick="(()=>{let d={};try{d=JSON.parse(sessionStorage.getItem(\'presencia_datos_\'+'+evalId+')||\'{}\')}catch(e){}renderEvalPublicaConPresencia('+evalId+',d);})()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
@@ -5299,7 +5333,7 @@ async function submitEvalConPresencia(evalId, totalPqs){
   const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
     +'<div style="font-size:14px;color:#777">Resultado de '+esc(datosEmp.nombre||datosEmp.legajo)+'</div>'
-    +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/10</div>'
+    +'<div class="result-score '+(aprobado?'ok':'fail')+'">'+puntaje+'/'+escalaPuntaje+'</div>'
     +'<div style="font-size:15px;font-weight:600;color:'+(aprobado?'#1D9E75':'#E24B4A')+';margin-bottom:8px">'+(aprobado?'✓ Aprobado':'✗ Desaprobado')+'</div>'
     +(aprobado?'<div style="background:#E1F5EE;border:1px solid #5DCAA5;border-radius:10px;padding:12px 14px;font-size:13px;color:#085041;margin-bottom:8px">✅ Tu asistencia y evaluación quedaron registradas correctamente.</div>':'')
     +incorrectasHtml

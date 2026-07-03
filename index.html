@@ -657,6 +657,8 @@ function getAUnica(capId){
 }
 
 // Devuelve TODAS las métricas de una capacitación de forma coherente
+function exclSet(cap){ return new Set((Array.isArray(cap&&cap.excluidos)?cap.excluidos:[]).map(String)); }
+
 function metricas(cap){
   const esInd=cap.tipo_codigo==='INDUCCION';
   const listaCerrada=!!cap.lista_cerrada;
@@ -693,6 +695,9 @@ function metricas(cap){
       });
     }
   }
+  // Excluidos manualmente de esta capacitación (persistidos en cap.excluidos)
+  const _exc=exclSet(cap);
+  if(_exc.size) padronRef=padronRef.filter(p=>!_exc.has(String(p.legajo)));
   const posibles=padronRef.length;
   // Padrón que NO está en la lista (solo relevante si lista abierta)
   const padronNoEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
@@ -2570,6 +2575,12 @@ function buildDetail(id,resetScroll){
   const agregarBtn=canManageParticipants()?`<button class="btn-sm" style="background:#1D9E75;color:#fff;border-color:#1D9E75" onclick="openAgregarParticipante(${id})" title="Agregar participante designado">+ Agregar</button>`:'';
   const limpiarBtn=canManageParticipants()&&a.length?`<button class="btn-sm red" id="btn-limpiar-${id}" onclick="limpiarParticipantes(${id},${a.length})" title="Eliminar todos los participantes">🗑 Limpiar lista</button>`:'';
   const cerrarListaBtn=canManageParticipants()?`<button class="btn-sm" style="background:${listaCerrada?'#EF9F27':'#1a2f6e'};color:#fff;border-color:${listaCerrada?'#EF9F27':'#1a2f6e'};font-weight:600" onclick="toggleListaCerrada(${id},${!listaCerrada})" title="${listaCerrada?'Abrir lista de participantes':'Cerrar lista de participantes'}">${listaCerrada?'🔓 Abrir lista':'🔒 Cerrar lista'}</button>`:'';
+  // Registro de firmas F10B03 imprimible con QR (todos los tipos)
+  const regFirmasBtn=`<button class="btn-sm" onclick="imprimirRegistroFirmas(${id})" title="Imprimir registro de firmas F10B03 con el QR de esta capacitación">🖨 Registro firmas</button>`;
+  // Gestión de respuestas de evaluación (solo Admin, solo si hay evaluación)
+  const gestionRespBtn=isAdmin()&&getEval(id)?`<button class="btn-sm" style="border-color:#B91C1C;color:#B91C1C" onclick="gestionarRespuestas(${id})" title="Ver, mover o eliminar definitivamente respuestas de evaluación">⚙ Gestionar resp.</button>`:'';
+  // Excluidos del padrón (visible si hay excluidos)
+  const excluidosBtn=(Array.isArray(c.excluidos)&&c.excluidos.length)?`<button class="btn-sm" style="color:#888" onclick="verExcluidos(${id})" title="Personas excluidas de los Posibles de esta capacitación">🚫 Excluidos (${c.excluidos.length})</button>`:'';
 
   showModal(`<div class="modal-handle"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
@@ -2598,7 +2609,7 @@ function buildDetail(id,resetScroll){
     ${evalHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;flex-wrap:wrap;gap:6px">
       <div class="modal-section-title" style="margin:0" data-capid-title="${id}">Asistentes${listaCerrada?' 🔒':''}${posibles&&!listaCerrada?' — '+posibles+' en padrón':''}${aExt.length?` · Externos: ${aExt.length}`:''}</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${cerrarListaBtn}${qrPresBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${cerrarListaBtn}${qrPresBtn}${regFirmasBtn}${exportBtn}${exportAllBtn}${exportRespBtn}${gestionRespBtn}${plantillaBtn}${agregarBtn}${forzarBtn}${importBtn}${limpiarBtn}${excluidosBtn}</div>
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
@@ -3524,39 +3535,174 @@ async function exportRespuestas(capId){
   if(!pqsLocal.length){toast('Sin preguntas');return;}
   toast('Generando reporte...',6000);
   try{
-    const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=legajo,nombre,respuestas,puntaje');
+    const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=*');
     if(!resp||!resp.length){toast('Sin respuestas registradas');return;}
+    // Orden cronológico (created_at si existe, sino id)
+    resp.sort((x,y)=>String(x.created_at||'').localeCompare(String(y.created_at||''))||((x.id||0)-(y.id||0)));
+    const aCap=getA(capId);
     const rows=[];
     resp.forEach(r=>{
       const respObj=r.respuestas||{};
+      // Fecha: created_at de la respuesta; fallback: fecha_evaluacion del asistente
+      let fechaTxt='';
+      if(r.created_at){
+        const d=new Date(r.created_at);
+        fechaTxt=('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+      } else {
+        const asis=aCap.find(x=>String(x.legajo)===String(r.legajo));
+        if(asis&&asis.fecha_evaluacion) fechaTxt=fmtF(asis.fecha_evaluacion);
+      }
       pqsLocal.forEach((p,i)=>{
-        const opciones=[p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d].filter(Boolean);
-        const idxRespuesta=respObj[p.id];
-        const idxCorrecta=p.correcta;
-        const respuestaDada=idxRespuesta!=null&&opciones[idxRespuesta]!=null?opciones[idxRespuesta]:'—';
-        const respuestaCorrecta=idxCorrecta!=null&&opciones[idxCorrecta]!=null?opciones[idxCorrecta]:'—';
-        const esCorrecta=idxRespuesta===idxCorrecta;
+        const opciones=[p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d];
+        const raw=respObj[p.id];
+        const sel=raw==null?[]:(Array.isArray(raw)?raw.map(Number):[Number(raw)]);
+        const correctas=getPqCorrectas(p);
+        const peso=getPqPeso(p);
+        const puntos=calcPuntosPregunta(p,sel);
+        const respuestaDada=sel.length?sel.map(ix=>opciones[ix]!=null?opciones[ix]:'?').join(' | '):'—';
+        const respuestaCorrecta=correctas.length?correctas.map(ix=>opciones[ix]!=null?opciones[ix]:'?').join(' | '):'—';
+        const estado=puntos>=peso?'Sí':(puntos>0?'Parcial':'No');
         rows.push({
           'Capacitación':c.titulo,
           'Evaluación':ev.titulo,
           'Legajo':r.legajo,
           'Nombre':r.nombre,
+          'Fecha evaluación':fechaTxt||'—',
           'N° Pregunta':i+1,
           'Pregunta':p.pregunta||'',
           'Respuesta dada':respuestaDada,
           'Respuesta correcta':respuestaCorrecta,
-          '¿Correcta?':esCorrecta?'Sí':'No',
-          'Puntaje':r.puntaje!=null?r.puntaje:''
+          '¿Correcta?':estado,
+          'Puntos':Math.round(puntos*100)/100,
+          'Peso':peso,
+          'Puntaje final':r.puntaje!=null?r.puntaje:''
         });
       });
     });
     const wb=XLSX.utils.book_new();
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws['!cols']=[{wch:32},{wch:28},{wch:8},{wch:28},{wch:12},{wch:60},{wch:35},{wch:35},{wch:10},{wch:8}];
+    ws['!cols']=[{wch:32},{wch:28},{wch:8},{wch:28},{wch:15},{wch:12},{wch:60},{wch:35},{wch:35},{wch:9},{wch:7},{wch:6},{wch:11}];
     XLSX.utils.book_append_sheet(wb,ws,'Respuestas');
     XLSX.writeFile(wb,'respuestas_eval_'+c.titulo.replace(/[^a-z0-9]/gi,'_').toLowerCase()+'.xlsx');
     toast('Excel descargado');
   }catch(e){toast('Error al generar reporte');console.error(e);}
+}
+
+// ===== GESTIÓN DE RESPUESTAS DE EVALUACIÓN (mover / eliminar definitivo) =====
+async function gestionarRespuestas(capId){
+  if(!isAdmin())return;
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const ev=getEval(capId);if(!ev){toast('Sin evaluación');return;}
+  toast('Cargando respuestas...');
+  let resp=[];
+  try{ resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=*')||[]; }
+  catch(e){toast('Error al cargar respuestas');return;}
+  resp.sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||''))||((y.id||0)-(x.id||0)));
+  window['_gestResp_'+capId]=resp;
+  const rows=resp.length?resp.map(r=>{
+    let f='—';
+    if(r.created_at){
+      const d=new Date(r.created_at);
+      f=('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    }
+    const acciones=(r.id==null)
+      ?'<span style="font-size:9px;color:#aaa">sin id</span>'
+      :`<button class="btn-sm" style="font-size:10px;padding:2px 7px" onclick="moverRespuesta(${capId},${r.id})" title="Mover a otra capacitación">↪ Mover</button> <button class="btn-sm red" style="font-size:10px;padding:2px 7px" onclick="eliminarRespuesta(${capId},${r.id})" title="Eliminar definitivamente de la base de datos">🗑</button>`;
+    return `<tr><td style="font-size:10px;color:#666;white-space:nowrap">${f}</td><td style="font-size:11px">${esc(String(r.legajo||''))}</td><td style="font-size:11px;white-space:normal;word-break:break-word">${esc(r.nombre||'')}</td><td style="text-align:center;font-size:11px;font-weight:600">${r.puntaje!=null?r.puntaje:'—'}</td><td style="white-space:nowrap;text-align:right">${acciones}</td></tr>`;
+  }).join(''):'<tr><td colspan="5" style="text-align:center;color:#888;font-size:11px;padding:12px">Sin respuestas registradas para esta evaluación</td></tr>';
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:4px">⚙ Gestionar respuestas de evaluación</div>
+    <div style="font-size:12px;color:#555;margin-bottom:2px">${esc(c.titulo)} — ${esc(ev.titulo||'')}</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">${resp.length} respuesta${resp.length!==1?'s':''} registrada${resp.length!==1?'s':''}. Podés mover una respuesta hecha en la capacitación equivocada, o eliminar definitivamente las de prueba.</div>
+    <div style="overflow-x:auto"><table class="legajo-table"><thead><tr><th style="width:95px">Fecha</th><th style="width:55px">Legajo</th><th>Nombre</th><th style="width:52px">Puntaje</th><th style="width:120px"></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button class="btn-sec" style="width:100%;margin-top:14px" onclick="buildDetail(${capId})">← Volver al detalle</button>`);
+}
+
+async function eliminarRespuesta(capId, respId){
+  if(!isAdmin())return;
+  const resp=(window['_gestResp_'+capId]||[]).find(r=>r.id===respId);
+  if(!resp)return;
+  if(!confirm(`¿Eliminar DEFINITIVAMENTE la respuesta de ${resp.nombre||resp.legajo}?\n\nSe borra de la base de datos y NO se puede recuperar.`))return;
+  try{
+    setSyncStatus('syncing');
+    await api('DELETE','respuestas_evaluacion','','?id=eq.'+respId);
+    setSyncStatus('ok');
+    const asis=getA(capId).find(x=>String(x.legajo)===String(resp.legajo));
+    if(asis&&(asis.completo||asis.nota!=null)){
+      if(confirm(`¿Revertir también el registro de ${resp.nombre||resp.legajo} en la lista de participantes?\n\nAceptar = quitar nota y fecha, marcarlo "No completó"\nCancelar = dejar el participante como está`)){
+        await api('PATCH','asistentes',{completo:false,nota:null,fecha_evaluacion:null},`?id=eq.${asis.id}`);
+        asis.completo=false;asis.nota=null;asis.fecha_evaluacion=null;
+      }
+    }
+    toast('Respuesta eliminada definitivamente');
+    window._suppressReload=Date.now()+8000;
+    gestionarRespuestas(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+function moverRespuesta(capId, respId){
+  if(!isAdmin())return;
+  const resp=(window['_gestResp_'+capId]||[]).find(r=>r.id===respId);
+  if(!resp)return;
+  const destinos=caps.filter(x=>x.id!==capId&&getEval(x.id));
+  if(!destinos.length){toast('No hay otras capacitaciones con evaluación');return;}
+  const opts=destinos.map(d=>`<option value="${d.id}">${esc(d.titulo)}${d.fecha?' — '+fmtF(d.fecha):''}</option>`).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:6px">↪ Mover respuesta a otra capacitación</div>
+    <div style="font-size:12px;color:#555;margin-bottom:10px">Respuesta de <strong>${esc(resp.nombre||String(resp.legajo))}</strong> (puntaje ${resp.puntaje!=null?resp.puntaje:'—'}).<br>Elegí la capacitación destino (solo se listan las que tienen evaluación):</div>
+    <select id="mover-resp-dest" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:12px;margin-bottom:12px">${opts}</select>
+    <div style="display:flex;gap:8px">
+      <button class="btn-sec" style="flex:1" onclick="gestionarRespuestas(${capId})">Cancelar</button>
+      <button class="btn-green" style="flex:1" onclick="confirmarMoverRespuesta(${capId},${respId})">Mover</button>
+    </div>`);
+}
+
+async function confirmarMoverRespuesta(capId, respId){
+  if(!isAdmin())return;
+  const sel=document.getElementById('mover-resp-dest');if(!sel)return;
+  const destId=parseInt(sel.value);
+  const resp=(window['_gestResp_'+capId]||[]).find(r=>r.id===respId);
+  const destCap=caps.find(x=>x.id===destId);
+  const destEv=getEval(destId);
+  if(!resp||!destCap||!destEv){toast('Destino inválido');return;}
+  if(!confirm(`¿Mover la respuesta de ${resp.nombre||resp.legajo} a "${destCap.titulo}"?\n\nSe trasladará también la nota, la fecha y el estado "Completó" del participante.`))return;
+  try{
+    setSyncStatus('syncing');
+    // 1) Reasignar la respuesta a la evaluación destino
+    await api('PATCH','respuestas_evaluacion',{evaluacion_id:destEv.id},'?id=eq.'+respId);
+    // 2) Tomar nota/fecha del asistente en origen (si existe) o de la propia respuesta
+    const asisOrig=getA(capId).find(x=>String(x.legajo)===String(resp.legajo));
+    const nota=(asisOrig&&asisOrig.nota!=null)?asisOrig.nota:resp.puntaje;
+    const fechaEv=(asisOrig&&asisOrig.fecha_evaluacion)?asisOrig.fecha_evaluacion:(resp.created_at?String(resp.created_at).slice(0,10):null);
+    const notaApr=destCap.nota_aprobacion||(destCap.tipo_codigo==='INDUCCION'?60:6);
+    const completo=nota!=null?(nota>=notaApr):true;
+    // 3) Crear o actualizar el asistente en la capacitación destino
+    const exist=await api('GET','asistentes','',`?capacitacion_id=eq.${destId}&legajo=eq.${encodeURIComponent(resp.legajo)}`);
+    if(exist&&exist.length){
+      await api('PATCH','asistentes',{completo,nota,fecha_evaluacion:fechaEv},`?id=eq.${exist[0].id}`);
+      const loc=asistentes.find(a=>a.id===exist[0].id);
+      if(loc){loc.completo=completo;loc.nota=nota;loc.fecha_evaluacion=fechaEv;}
+      else{const nvLoc=Object.assign({},exist[0],{completo,nota,fecha_evaluacion:fechaEv});asistentes.push(nvLoc);}
+    } else {
+      const nuevo={capacitacion_id:destId,legajo:resp.legajo,nombre:resp.nombre||(asisOrig?asisOrig.nombre:''),un:asisOrig?(asisOrig.un||''):'',sector:asisOrig?(asisOrig.sector||''):'',departamento:asisOrig?(asisOrig.departamento||null):null,cuil:asisOrig?(asisOrig.cuil||null):null,en_meta:true,completo,nota,fecha_evaluacion:fechaEv};
+      const r2=await api('POST','asistentes',nuevo,'');
+      const nv=Array.isArray(r2)?r2[0]:r2;
+      if(nv)asistentes.push(nv);
+    }
+    // 4) Revertir en origen (opcional, con confirmación)
+    if(asisOrig){
+      if(confirm(`¿Revertir el registro en la capacitación de ORIGEN?\n\nAceptar = quitar nota/fecha y marcar "No completó" en "${caps.find(x=>x.id===capId).titulo}"\nCancelar = dejarlo como está en origen`)){
+        await api('PATCH','asistentes',{completo:false,nota:null,fecha_evaluacion:null},`?id=eq.${asisOrig.id}`);
+        asisOrig.completo=false;asisOrig.nota=null;asisOrig.fecha_evaluacion=null;
+      }
+    }
+    setSyncStatus('ok');
+    toast('Respuesta movida a "'+destCap.titulo+'"');
+    window._suppressReload=Date.now()+10000;
+    gestionarRespuestas(capId);
+    renderContent();
+  }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
 }
 
 async function importExcel(event,capId){
@@ -4444,25 +4590,60 @@ function renderCharts(){
 
 async function quitarDePadron(capId, legajo, nombre, cuil, depto, un, sector){
   if(!canManageParticipants()) return;
-  if(!confirm(`¿Quitar a ${nombre} del padrón para esta capacitación?\n\nEl empleado quedará registrado en la lista como "No completó" y podrá eliminarse luego con el botón ×.`)) return;
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  if(!confirm(`¿Eliminar a ${nombre} de los posibles del padrón para esta capacitación?\n\nDejará de aparecer como "Posible" y no contará como faltante.\nPodés restaurarlo luego desde el botón "🚫 Excluidos".`)) return;
   try{
     setSyncStatus('syncing');
-    const existing=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&legajo=eq.${encodeURIComponent(legajo)}`);
-    if(existing&&existing.length){ toast('Este participante ya está en la lista'); setSyncStatus('ok'); return; }
-    const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
-    const nv=Array.isArray(r)?r[0]:r;
-    if(nv) asistentes.push(nv);
-    const totalNuevo=getA(capId).length;
-    const capObj=caps.find(x=>x.id===capId);
-    if(capObj&&totalNuevo>(capObj.participantes_esperados||0)){
-      await api('PATCH','capacitaciones',{participantes_esperados:totalNuevo},`?id=eq.${capId}`);
-      capObj.participantes_esperados=totalNuevo;
-    }
+    const excl=Array.isArray(c.excluidos)?c.excluidos.slice():[];
+    if(!excl.map(String).includes(String(legajo))) excl.push(String(legajo));
+    await api('PATCH','capacitaciones',{excluidos:excl},`?id=eq.${capId}`);
+    c.excluidos=excl;
     setSyncStatus('ok');
-    toast(`${nombre} incorporado a la lista`);
+    toast(`${nombre} excluido de esta capacitación`);
+    window._suppressReload=Date.now()+8000;
     buildDetail(capId);
     renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    const msg=(e&&e.message)?e.message:'';
+    if(msg.toLowerCase().includes('excluidos')||msg.includes('column')){
+      alert('Falta la columna "excluidos" en la tabla capacitaciones.\n\nEjecutá una sola vez en el SQL Editor de Supabase:\n\nALTER TABLE capacitaciones ADD COLUMN IF NOT EXISTS excluidos jsonb DEFAULT \'[]\'::jsonb;');
+    } else { toast('Error: '+msg.slice(0,120)); }
+  }
+}
+
+async function restaurarExcluido(capId, legajo){
+  if(!canManageParticipants()) return;
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const excl=(Array.isArray(c.excluidos)?c.excluidos:[]).filter(l=>String(l)!==String(legajo));
+  try{
+    setSyncStatus('syncing');
+    await api('PATCH','capacitaciones',{excluidos:excl},`?id=eq.${capId}`);
+    c.excluidos=excl;
+    setSyncStatus('ok');
+    toast('Restaurado a Posibles');
+    window._suppressReload=Date.now()+8000;
+    if(excl.length){ verExcluidos(capId); } else { buildDetail(capId); renderContent(); }
   }catch(e){setSyncStatus('error');toast('Error: '+e.message);}
+}
+
+function verExcluidos(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const excl=Array.isArray(c.excluidos)?c.excluidos:[];
+  if(!excl.length){ buildDetail(capId); renderContent(); return; }
+  const rows=excl.map(l=>{
+    const emp=padron.find(p=>String(p.legajo)===String(l));
+    const nom=emp?emp.nombre:'(no está en el padrón actual)';
+    const dep=emp?(emp.departamento||(emp.datos_extra&&emp.datos_extra.Departamento)||''):'';
+    const btn=canManageParticipants()?`<button class="btn-sm" style="font-size:10px;padding:2px 8px" onclick="restaurarExcluido(${capId},'${esc(String(l))}')">↩ Restaurar</button>`:'';
+    return `<tr><td style="font-size:11px">${esc(String(l))}</td><td style="font-size:11px;white-space:normal;word-break:break-word">${esc(nom)}</td><td style="font-size:10px;color:#888">${esc(dep)}</td><td style="text-align:right">${btn}</td></tr>`;
+  }).join('');
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:4px">🚫 Excluidos del padrón</div>
+    <div style="font-size:12px;color:#555;margin-bottom:2px">${esc(c.titulo)}</div>
+    <div style="font-size:11px;color:#888;margin-bottom:10px">Estas personas no se muestran como Posibles ni cuentan como faltantes en esta capacitación. Podés restaurarlas cuando quieras.</div>
+    <div style="overflow-x:auto"><table class="legajo-table"><thead><tr><th style="width:60px">Legajo</th><th>Nombre</th><th style="width:110px">Depto</th><th style="width:90px"></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button class="btn-sec" style="width:100%;margin-top:14px" onclick="buildDetail(${capId})">← Volver al detalle</button>`);
 }
 
 // ── TOGGLE LISTA CERRADA ────────────────────────────────────────────────────
@@ -4495,7 +4676,8 @@ async function toggleListaCerrada(capId, cerrar){
         return true;
       });
     }
-    const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+    const _exC=exclSet(c);
+    const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo))&&!_exC.has(String(p.legajo)));
     const msg=`¿Cerrar la lista de participantes de "${c.titulo}"?\n\n`
       +(noEnLista.length
         ?`Se eliminarán ${noEnLista.length} persona${noEnLista.length!==1?'s':''} del padrón que NO están confirmadas en la lista.\nQuedarán solo los ${a.length} participantes verificados.\n\n`
@@ -4555,7 +4737,8 @@ async function limpiarNoEnLista(capId){
       return true;
     });
   }
-  const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  const _exL=exclSet(c);
+  const noEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo))&&!_exL.has(String(p.legajo)));
   if(!noEnLista.length){toast('No hay participantes del padrón fuera de la lista');return;}
   if(!confirm(`Se eliminarán ${noEnLista.length} persona${noEnLista.length!==1?'s':''} del padrón que NO están en la lista de "${c.titulo}".
 
@@ -4595,7 +4778,8 @@ function openAgregarParticipante(capId){
   // Si estamos en vista 'noenlista', filtrar a solo los del padrón no agregados
   const vistaActiva=window[`_asisVista_${capId}`];
   const noEnListaLegajos=window[`_noEnListaLegajos_${capId}`]||new Set();
-  let pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  const _exA=exclSet(c);
+  let pendientes=activosPadron.filter(p=>!legajosEnLista.has(String(p.legajo))&&!_exA.has(String(p.legajo)));
   if(vistaActiva==='noenlista'&&noEnListaLegajos.size>0){
     pendientes=pendientes.filter(p=>noEnListaLegajos.has(String(p.legajo)));
   }
@@ -5413,6 +5597,113 @@ function imprimirQr(capId){
   w.document.write(`<!DOCTYPE html><html><head><title>QR Asistencia</title><style>body{font-family:sans-serif;text-align:center;padding:30px}img{max-width:260px;border:1px solid #eee;border-radius:8px;padding:10px}h2{font-size:15px;color:#1A2F6E;margin-bottom:4px}p{font-size:12px;color:#555}</style></head><body><h2>Registro de Asistencia</h2><p>${esc(cap?cap.titulo:'')}</p><br><img src="${dataUrl}" alt="QR"><p style="font-size:10px;margin-top:12px;color:#888">Escaneá el QR para confirmar tu asistencia</p></body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
+}
+
+// ===== REGISTRO DE FIRMAS F10B03 (impresión A4 con QR) =====
+function imprimirRegistroFirmas(capId){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  const url=location.origin+location.pathname+'?presencia='+capId;
+  const gen=()=>{
+    const tmp=document.createElement('div');
+    tmp.style.cssText='position:fixed;left:-9999px;top:0';
+    document.body.appendChild(tmp);
+    try{
+      new QRCode(tmp,{text:url,width:200,height:200,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    }catch(e){document.body.removeChild(tmp);toast('No se pudo generar el QR');return;}
+    setTimeout(()=>{
+      const canvas=tmp.querySelector('canvas');const img=tmp.querySelector('img');
+      const dataUrl=canvas?canvas.toDataURL():(img?img.src:'');
+      document.body.removeChild(tmp);
+      if(!dataUrl){toast('No se pudo generar el QR');return;}
+      _abrirRegistroFirmas(c,dataUrl);
+    },200);
+  };
+  if(typeof QRCode==='undefined'){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload=gen;
+    s.onerror=()=>toast('No se pudo cargar el generador de QR');
+    document.head.appendChild(s);
+  } else gen();
+}
+
+function _abrirRegistroFirmas(c,qrDataUrl){
+  const fechaTxt=c.fecha?fmtF(c.fecha):'';
+  const horasTxt=(c.duracion!=null&&c.duracion!=='')?String(c.duracion):'';
+  const unTxt=c.un||'';
+  const tiposReg=['Remo','Inducción','Ambiente','SST','Cap. Externa','Varios','Cap. Calificación'];
+  const tiposHtml=tiposReg.map(tp=>'<div class="tipo-item"><span class="chk"></span>'+tp+'</div>').join('');
+  let filas='';
+  for(let i=1;i<=20;i++){
+    filas+='<tr><td class="c">'+i+'</td><td></td><td></td><td></td><td></td><td></td></tr>';
+  }
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>F10B03 - Registro de Capacitación</title><style>'
+    +'@page{size:A4 portrait;margin:10mm}'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#000;width:190mm}'
+    +'table{border-collapse:collapse;width:100%}'
+    +'td,th{border:1px solid #000;padding:2px 4px;vertical-align:middle}'
+    +'.no-border td{border:none}'
+    +'.hdr{display:flex;border:1.5px solid #000}'
+    +'.hdr .logo{width:35mm;display:flex;align-items:center;justify-content:center;border-right:1px solid #000;font-weight:bold;font-size:11px;text-align:center;padding:4px}'
+    +'.hdr .titulo{flex:1;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;letter-spacing:1px}'
+    +'.hdr .cod{width:30mm;border-left:1px solid #000;text-align:center;font-size:10px}'
+    +'.hdr .cod div{padding:4px 2px}'
+    +'.hdr .cod div:first-child{border-bottom:1px solid #000;font-weight:bold}'
+    +'.campos{display:flex;gap:0;margin-top:3mm}'
+    +'.campo{border:1px solid #000;padding:4px 6px;font-size:10px;min-height:8mm;display:flex;align-items:center}'
+    +'.campo b{margin-right:4px;white-space:nowrap}'
+    +'.campo .val{border-bottom:1px solid #999;flex:1;min-height:12px;padding:0 4px;font-size:11px}'
+    +'.main{display:flex;margin-top:3mm;border:1.5px solid #000}'
+    +'.col-tipo{width:42mm;border-right:1px solid #000}'
+    +'.col-tipo .tit{background:#e8e8e8;font-weight:bold;text-align:center;padding:4px 2px;border-bottom:1px solid #000;font-size:9px}'
+    +'.col-tipo .dc{font-size:8px;font-style:italic;text-align:center;padding:2px;border-bottom:1px solid #000;color:#444}'
+    +'.tipo-item{display:flex;align-items:center;gap:5px;padding:5px 6px;border-bottom:1px solid #000;font-size:10px}'
+    +'.tipo-item:last-child{border-bottom:none}'
+    +'.chk{display:inline-block;width:11px;height:11px;border:1.5px solid #000;flex-shrink:0}'
+    +'.col-cont{flex:1;display:flex;flex-direction:column}'
+    +'.tema{border-bottom:1px solid #000;padding:4px 6px;font-size:10px;display:flex;align-items:center;min-height:8mm}'
+    +'.tema b{margin-right:4px}'
+    +'.tema .val{border-bottom:1px solid #999;flex:1;min-height:12px}'
+    +'.qr-cont{display:flex;flex:1}'
+    +'.qr-box{width:52mm;border-right:1px solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px}'
+    +'.qr-box img{width:44mm;height:44mm}'
+    +'.qr-box .cap{font-size:8px;text-align:center;color:#333;margin-top:2px}'
+    +'.contenido{flex:1;padding:4px 6px;font-size:9px}'
+    +'.contenido b{display:block;margin-bottom:2px;font-size:9px}'
+    +'.tabla-firmas{margin-top:3mm}'
+    +'.tabla-firmas th{background:#e8e8e8;font-size:9px;padding:3px 2px;text-align:center}'
+    +'.tabla-firmas td{height:7.2mm;font-size:10px}'
+    +'.tabla-firmas .c{text-align:center;width:8mm}'
+    +'.pie{margin-top:3mm}'
+    +'.pie th{background:#e8e8e8;font-size:9px;text-align:center;padding:3px}'
+    +'.pie td{height:8mm;font-size:9px}'
+    +'.pie .lbl{width:26mm;background:#f2f2f2;font-weight:bold;text-align:center}'
+    +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+    +'</style></head><body>'
+    +'<div class="hdr"><div class="logo">EMA<br>Servicios S.A.</div><div class="titulo">REGISTRO DE CAPACITACI\u00d3N</div><div class="cod"><div>F10B03</div><div>REV. 6</div></div></div>'
+    +'<div class="campos"><div class="campo" style="flex:1.2"><b>FECHA:</b><span class="val">'+esc(fechaTxt)+'</span></div><div class="campo" style="flex:1;border-left:none"><b>CANT. DE HORAS:</b><span class="val">'+esc(horasTxt)+'</span></div></div>'
+    +'<div class="campos" style="margin-top:0"><div class="campo" style="flex:1.2;border-top:none"><b>UNIDAD DE NEGOCIO:</b><span class="val">'+esc(unTxt)+'</span></div><div class="campo" style="flex:1;border-left:none;border-top:none"><b>SECTOR:</b><span class="val"></span></div></div>'
+    +'<div class="main">'
+    +'<div class="col-tipo"><div class="tit">TIPO DE REGISTRO</div><div class="dc">Distribuci\u00f3n Controlada</div>'+tiposHtml+'</div>'
+    +'<div class="col-cont">'
+    +'<div class="tema"><b>TEMA:</b><span class="val"></span></div>'
+    +'<div class="qr-cont">'
+    +'<div class="qr-box"><img src="'+qrDataUrl+'" alt="QR"><div class="cap">Escane\u00e1 el QR para registrar tu asistencia</div></div>'
+    +'<div class="contenido"><b>CONTENIDO / RESE\u00d1A:</b></div>'
+    +'</div></div></div>'
+    +'<table class="tabla-firmas"><thead><tr><th style="width:8mm">N\u00ba</th><th style="width:18mm">LEGAJO</th><th style="width:24mm">DNI</th><th>APELLIDO Y NOMBRES</th><th style="width:38mm">FIRMA</th><th style="width:14mm">CALIF.</th></tr></thead><tbody>'+filas+'</tbody></table>'
+    +'<table class="pie"><thead><tr><th style="width:26mm"></th><th>EXPOSITOR</th><th>GCIA/RESP</th><th>RRHH</th></tr></thead><tbody>'
+    +'<tr><td class="lbl">FIRMA</td><td></td><td></td><td></td></tr>'
+    +'<tr><td class="lbl">ACLARACI\u00d3N</td><td></td><td></td><td></td></tr>'
+    +'<tr><td class="lbl">FECHA</td><td></td><td></td><td></td></tr>'
+    +'</tbody></table>'
+    +'</body></html>';
+  const w=window.open('','_blank','width=820,height=980');
+  if(!w){toast('El navegador bloque\u00f3 la ventana emergente');return;}
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>{try{w.print();}catch(e){}},500);
 }
 
 // ===== renderGantt =====

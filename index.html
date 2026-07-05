@@ -1728,13 +1728,20 @@ function renderPadron(filtro){
 async function exportPlantillaPadron(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet([{
-    legajo:'12345',nombre:'García Juan',
-    'CUIL':'20-12345678-9',
-    'Fecha de Ingreso':'01/03/2020','Fecha de egreso':'',
-    Sector:'Operaciones',Departamento:'Distribución',
-    'Estado Empleado':'Vigente','Unidad de Negocio':'Servicios Electricos',
-    Establecimiento:'Casa Central',Documento:'25678901',
-    Celular:'1132994971',Email:'juan.garcia@gmail.com'
+    'Legajo':'12345',
+    'Nombre':'García Juan',
+    'C.U.I.L':'20-12345678-9',
+    'Fecha de Ingreso':'01/03/2020',
+    'Fecha de egreso':'',
+    'Sector':'Operaciones',
+    'Departamento':'Distribución',
+    'Estado Empleado':'Vigente',
+    'Unidad de Negocio':'Servicios Electricos',
+    'Teléfono':'1132994971',
+    'Fecha cálculo antigüedad':'01/03/2020',
+    'Establecimiento':'Casa Central',
+    'Documento':'25678901',
+    'Correo electronico':'juan.garcia@gmail.com'
   }]);
   XLSX.utils.book_append_sheet(wb,ws,'Padrón');
   XLSX.writeFile(wb,'plantilla_padron.xlsx');
@@ -1745,20 +1752,20 @@ async function exportarPadron(){
   if(!padron.length){toast('No hay datos en el padrón');return;}
   const sorted=[...padron].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
   const rows=sorted.map(p=>({
-    legajo:p.legajo,
-    nombre:p.nombre,
-    'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+    'Legajo':p.legajo,
+    'Nombre':p.nombre,
+    'C.U.I.L':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
     'Fecha de Ingreso':p.fecha_ingreso||'',
     'Fecha de egreso':p.fecha_egreso||'',
     'Sector':p.sector||'',
     'Departamento':p.departamento||p.datos_extra?.Departamento||'',
     'Estado Empleado':p.estado||'Vigente',
     'Unidad de Negocio':p.un||'',
-    'Fecha calculo antiguedad':p.fecha_calculo_antiguedad||'',
+    'Teléfono':p.celular||'',
+    'Fecha cálculo antigüedad':p.fecha_calculo_antiguedad||'',
     'Establecimiento':p.establecimiento||p.datos_extra?.Establecimiento||'',
     'Documento':p.documento||p.datos_extra?.Documento||'',
-    'Celular':p.celular||'',
-    'Email':p.email||'',
+    'Correo electronico':p.email||'',
   }));
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
@@ -2038,15 +2045,15 @@ async function importarPadron(event){
         }
         return null;
       };
-      const CAMPOS_BASE=['legajo','nombre','apellido','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil','celular','whatsapp','telefono','email',
+      const CAMPOS_BASE=['legajo','nombre','apellido','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha cálculo antigüedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil','c.u.i.l','celular','whatsapp','telefono','teléfono','email','correo','correo electronico','correo electrónico',
         // Variantes del CSV de precarga de candidatos ("CARGA EN TU RECIBO")
         'nombre(*)','apellido(*)','dni(*)','dni','cuil(*)','email(*)','numero_legajo(*)','numero_legajo','fecha_contratacion','password','correo_corporativo'];
       // Detectar si el archivo trae columnas de contacto. Si NO las trae (ej: Excel de padrón
       // viejo), NO se envían esos campos en el upsert → merge-duplicates no pisa los celulares
       // y emails ya cargados de la precarga de candidatos.
       const _hdrs=rawRows.length?Object.keys(rawRows[0]).map(k=>k.trim().toLowerCase()):[];
-      const _tieneCelular=_hdrs.some(h=>['celular','whatsapp','telefono'].includes(h));
-      const _tieneEmail=_hdrs.some(h=>['email','email(*)','correo'].includes(h));
+      const _tieneCelular=_hdrs.some(h=>['celular','whatsapp','telefono','teléfono'].includes(h));
+      const _tieneEmail=_hdrs.some(h=>['email','email(*)','correo','correo electronico','correo electrónico'].includes(h));
       const nuevos=rows.map(r=>{
         // LEGAJO: soporta columna "legajo" del padrón o "numero_legajo(*)" del CSV de candidatos
         const legajo=get(r,'legajo','Legajo','LEGAJO','numero_legajo(*)','numero_legajo');
@@ -2065,18 +2072,18 @@ async function importarPadron(event){
         });
         
         // CUIL: extraer y formatear (soporta "cuil(*)" del CSV: 27406717130 → 27-40671713-0)
-        const cuilRaw=get(r,'CUIL','cuil','Cuil','cuil(*)')||null;
+        const cuilRaw=get(r,'CUIL','cuil','Cuil','cuil(*)','C.U.I.L','c.u.i.l')||null;
         const cuilVal=cuilRaw?formatearCUIL(cuilRaw):null;
         if(datos_extra.CUIL) delete datos_extra.CUIL;
         if(datos_extra.Cuil) delete datos_extra.Cuil;
         if(datos_extra.cuil) delete datos_extra.cuil;
         
-        // CELULAR: normalizar para WhatsApp (prioridad: celular > whatsapp > telefono)
-        const celularRaw=get(r,'celular','Celular','CELULAR','whatsapp','WhatsApp','WHATSAPP','telefono','Telefono','TELEFONO')||null;
+        // CELULAR: normalizar para WhatsApp (prioridad: celular > whatsapp > teléfono)
+        const celularRaw=get(r,'celular','Celular','CELULAR','whatsapp','WhatsApp','WHATSAPP','telefono','Telefono','TELEFONO','Teléfono','teléfono','TELÉFONO')||null;
         const celularVal=celularRaw?normalizarCelular(celularRaw):null;
         
-        // EMAIL: extraer (soporta "email(*)" del CSV)
-        const emailVal=get(r,'email','Email','EMAIL','email(*)','correo','Correo','CORREO')||null;
+        // EMAIL: extraer (soporta "email(*)" del CSV y "Correo electronico" del padrón)
+        const emailVal=get(r,'email','Email','EMAIL','email(*)','correo','Correo','CORREO','Correo electronico','correo electronico','Correo electrónico','correo electrónico')||null;
         
         // SECTOR: buscar UN/DPTO existentes en padrón con este sector
         const sectorCSV=get(r,'Sector','sector','SECTOR')||null;
@@ -5863,6 +5870,9 @@ function imprimirQr(capId){
   setTimeout(()=>w.print(),400);
 }
 
+// Logo EMA Servicios embebido (PNG optimizado, se usa en el registro F10B03)
+const LOGO_EMA_B64='data:image/png;base64,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';
+
 // ===== REGISTRO DE FIRMAS F10B03 (impresión A4 con QR) =====
 function imprimirRegistroFirmas(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
@@ -5892,7 +5902,9 @@ function imprimirRegistroFirmas(capId){
 }
 
 function _abrirRegistroFirmas(c,qrDataUrl){
-  const fechaTxt=c.fecha?fmtF(c.fecha):'';
+  // FECHA: se imprime la fecha del día (fecha de impresión), no la fecha de la capacitación
+  const _hoy=new Date();
+  const fechaTxt=String(_hoy.getDate()).padStart(2,'0')+'/'+String(_hoy.getMonth()+1).padStart(2,'0')+'/'+_hoy.getFullYear();
   const horasTxt=(c.duracion!=null&&c.duracion!=='')?String(c.duracion):'';
   const unTxt=c.un||'';
   const tiposReg=['Remo','Inducción','Ambiente','SST','Cap. Externa','Varios','Cap. Calificación'];
@@ -5909,7 +5921,7 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'td,th{border:1px solid #000;padding:2px 4px;vertical-align:middle}'
     +'.no-border td{border:none}'
     +'.hdr{display:flex;border:1.5px solid #000}'
-    +'.hdr .logo{width:35mm;display:flex;align-items:center;justify-content:center;border-right:1px solid #000;font-weight:bold;font-size:11px;text-align:center;padding:4px}'
+    +'.hdr .logo{width:35mm;display:flex;align-items:center;justify-content:center;border-right:1px solid #000;padding:3px}.hdr .logo img{max-width:100%;max-height:11mm;object-fit:contain}'
     +'.hdr .titulo{flex:1;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;letter-spacing:1px}'
     +'.hdr .cod{width:30mm;border-left:1px solid #000;text-align:center;font-size:10px}'
     +'.hdr .cod div{padding:4px 2px}'
@@ -5945,7 +5957,7 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'.pie .lbl{width:26mm;background:#f2f2f2;font-weight:bold;text-align:center}'
     +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     +'</style></head><body>'
-    +'<div class="hdr"><div class="logo">EMA<br>Servicios S.A.</div><div class="titulo">REGISTRO DE CAPACITACI\u00d3N</div><div class="cod"><div>F10B03</div><div>REV. 6</div></div></div>'
+    +'<div class="hdr"><div class="logo"><img src="'+LOGO_EMA_B64+'" alt="EMA Servicios"></div><div class="titulo">REGISTRO DE CAPACITACI\u00d3N</div><div class="cod"><div>F10B03</div><div>REV. 6</div></div></div>'
     +'<div class="campos"><div class="campo" style="flex:1.2"><b>FECHA:</b><span class="val">'+esc(fechaTxt)+'</span></div><div class="campo" style="flex:1;border-left:none"><b>CANT. DE HORAS:</b><span class="val">'+esc(horasTxt)+'</span></div></div>'
     +'<div class="campos" style="margin-top:0"><div class="campo" style="flex:1.2;border-top:none"><b>UNIDAD DE NEGOCIO:</b><span class="val">'+esc(unTxt)+'</span></div><div class="campo" style="flex:1;border-left:none;border-top:none"><b>SECTOR:</b><span class="val"></span></div></div>'
     +'<div class="main">'

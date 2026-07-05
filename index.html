@@ -951,6 +951,19 @@ function renderContent(resetScroll){
   const _prevY=resetScroll?0:window.scrollY;
   const _prevX=resetScroll?0:window.scrollX;
   const _prevInnerTop=resetScroll?0:(_scrollEl?_scrollEl.scrollTop:0);
+  // Guardar scroll (vertical Y HORIZONTAL) de todos los contenedores internos scrolleables
+  // (ej: tabla del padrón con scroll horizontal, recuadro "Evaluaciones por código Redmine").
+  // Se identifican por su índice entre los <div> del contenido: tras el rerender la estructura
+  // es la misma (auto-refresh), así que el índice apunta al mismo contenedor.
+  const _innerScrolls=[];
+  if(_scrollEl&&!resetScroll){
+    const _divs=_scrollEl.querySelectorAll('div');
+    for(let i=0;i<_divs.length;i++){
+      if(_divs[i].scrollTop>0||_divs[i].scrollLeft>0){
+        _innerScrolls.push({idx:i,top:_divs[i].scrollTop,left:_divs[i].scrollLeft});
+      }
+    }
+  }
   try{
     const f=getFiltered();renderStats(f);
     const el=document.getElementById('content');
@@ -975,7 +988,17 @@ function renderContent(resetScroll){
   // mientras se está trabajando desplace la vista al principio de la pantalla.
   requestAnimationFrame(()=>{
     window.scrollTo(_prevX,_prevY);
-    if(_scrollEl) _scrollEl.scrollTop=_prevInnerTop;
+    if(_scrollEl){
+      _scrollEl.scrollTop=_prevInnerTop;
+      // Restaurar scroll de contenedores internos (horizontal y vertical)
+      if(_innerScrolls.length){
+        const _divs=_scrollEl.querySelectorAll('div');
+        _innerScrolls.forEach(s=>{
+          const n=_divs[s.idx];
+          if(n){n.scrollTop=s.top;n.scrollLeft=s.left;}
+        });
+      }
+    }
   });
 }
 
@@ -1644,7 +1667,7 @@ function renderPadron(filtro){
       ${filtro!=='todos'?`<span style="font-size:11px;background:#f4f4f2;border-radius:6px;padding:4px 10px;color:#555">Mostrando: <strong>${labelFiltro}</strong></span>`:''}
       ${isAdmin()?`
         <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla</button>
-        <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarPadron(event)"></label>
+        <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarPadron(event)"></label>
         <button class="btn-sm blue" onclick="exportarPadron()">📤 Exportar</button>
         <button class="btn-sm" style="background:#CC0000;color:#fff" onclick="limpiarPadron()">🗑 Limpiar</button>
       `:''}
@@ -1680,9 +1703,12 @@ function renderPadron(filtro){
     <button class="btn-sm blue" onclick="exportarEstructura()">📊 Exportar UN / Departamento / Sector</button>
   </div>
   <div class="config-section">
-    <div class="config-title">Formato del archivo Excel</div>
+    <div class="config-title">Formato del archivo Excel / CSV</div>
+    <div style="background:#E6F1FB;border:1px solid #185FA5;border-radius:8px;padding:8px 10px;font-size:11px;color:#185FA5;margin-bottom:8px">
+      💡 <strong>Precarga de candidatos:</strong> también se acepta directamente el CSV "CARGA EN TU RECIBO" (columnas <em>nombre(*), apellido(*), dni(*), cuil(*), numero_legajo(*), whatsapp, email(*), sector, fecha_contratacion</em>). El nombre se arma como "APELLIDO. NOMBRE", el CUIL se formatea y el celular se normaliza automáticamente. UN y Depto se copian de otro empleado del mismo sector, o quedan "Por asignar" hasta actualizar el padrón.
+    </div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
-      <div><strong>legajo *</strong> — número de legajo (campo único)</div>
+      <div><strong>legajo *</strong> — número de legajo (campo único; también acepta "numero_legajo(*)")</div>
       <div><strong>nombre * / apellido *</strong> — nombre y apellido separados (o nombre completo en una sola columna)</div>
       <div><strong>CUIL</strong> — número de CUIL (ej: 20-12345678-9 o 20123456789)</div>
       <div><strong>Documento</strong> — número de DNI (requerido para validación en evaluaciones)</div>
@@ -1707,7 +1733,8 @@ async function exportPlantillaPadron(){
     'Fecha de Ingreso':'01/03/2020','Fecha de egreso':'',
     Sector:'Operaciones',Departamento:'Distribución',
     'Estado Empleado':'Vigente','Unidad de Negocio':'Servicios Electricos',
-    Establecimiento:'Casa Central',Documento:'25678901'
+    Establecimiento:'Casa Central',Documento:'25678901',
+    Celular:'1132994971',Email:'juan.garcia@gmail.com'
   }]);
   XLSX.utils.book_append_sheet(wb,ws,'Padrón');
   XLSX.writeFile(wb,'plantilla_padron.xlsx');
@@ -1730,6 +1757,8 @@ async function exportarPadron(){
     'Fecha calculo antiguedad':p.fecha_calculo_antiguedad||'',
     'Establecimiento':p.establecimiento||p.datos_extra?.Establecimiento||'',
     'Documento':p.documento||p.datos_extra?.Documento||'',
+    'Celular':p.celular||'',
+    'Email':p.email||'',
   }));
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.json_to_sheet(rows);
@@ -1831,17 +1860,26 @@ function formatearCUIL(cuil){
 }
 
 function normalizarCelular(celular){
-  // Convertir a formato +549xxxxx
+  // Convertir a formato WhatsApp argentino: +549 + código de área + número
+  // Ej: "1132994971" → "+5491132994971"
   if(!celular) return null;
-  const clean=String(celular).replace(/[^0-9+]/g,'');
-  // Si ya tiene +54, dejarlo así
-  if(clean.startsWith('+54')) return clean;
-  // Si empieza con 9 seguido de 10 dígitos (11 total), agregar +54
+  let clean=String(celular).replace(/[^0-9+]/g,'');
+  if(!clean) return null;
+  // Si ya tiene +549 o +54, dejarlo así
+  if(clean.startsWith('+549')) return clean;
+  if(clean.startsWith('+54')) return '+549'+clean.slice(3);
+  // Sin el "+": 549xxxxxxxxxx (13 dígitos)
+  if(/^549\d{10}$/.test(clean)) return '+'+clean;
+  // 54xxxxxxxxxx (12 dígitos, falta el 9)
+  if(/^54\d{10}$/.test(clean)) return '+549'+clean.slice(2);
+  // Quitar 0 inicial (formato nacional: 011..., 0341...)
+  if(clean.startsWith('0')) clean=clean.slice(1);
+  // 9 + área + número (11 dígitos): 91132994971
   if(/^9\d{10}$/.test(clean)) return '+54'+clean;
-  // Si empieza con 0 y 9, remover el 0 y agregar +54
-  if(/^09\d{9}$/.test(clean)) return '+54'+clean.slice(1);
-  // Si tiene 10 dígitos sin 9, retornar como viene
-  return clean.length>=9?'+54'+clean:null;
+  // área + número (10 dígitos): 1132994971 → agregar 9
+  if(/^\d{10}$/.test(clean)) return '+549'+clean;
+  // Otros largos razonables: agregar +549 igual (mejor intento)
+  return clean.length>=8?'+549'+clean:null;
 }
 
 async function editarContactoPadron(padronId, legajo, nombre, celularAct, emailAct){
@@ -2000,18 +2038,25 @@ async function importarPadron(event){
         }
         return null;
       };
-      const CAMPOS_BASE=['legajo','nombre','apellido','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil','celular','whatsapp','email'];
+      const CAMPOS_BASE=['legajo','nombre','apellido','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil','celular','whatsapp','telefono','email',
+        // Variantes del CSV de precarga de candidatos ("CARGA EN TU RECIBO")
+        'nombre(*)','apellido(*)','dni(*)','dni','cuil(*)','email(*)','numero_legajo(*)','numero_legajo','fecha_contratacion','password','correo_corporativo'];
+      // Detectar si el archivo trae columnas de contacto. Si NO las trae (ej: Excel de padrón
+      // viejo), NO se envían esos campos en el upsert → merge-duplicates no pisa los celulares
+      // y emails ya cargados de la precarga de candidatos.
+      const _hdrs=rawRows.length?Object.keys(rawRows[0]).map(k=>k.trim().toLowerCase()):[];
+      const _tieneCelular=_hdrs.some(h=>['celular','whatsapp','telefono'].includes(h));
+      const _tieneEmail=_hdrs.some(h=>['email','email(*)','correo'].includes(h));
       const nuevos=rows.map(r=>{
-        const legajo=get(r,'legajo','Legajo','LEGAJO');
-        // NOMBRE: buscar primero si viene ya armado, si no armar desde nombre + apellido
-        let nombre=get(r,'nombre','Nombre','NOMBRE');
-        if(!nombre||nombre.indexOf('.')===0){
-          // Si no hay nombre o está vacío, intentar construir desde apellido + nombre
-          const apellido=get(r,'apellido','Apellido','APELLIDO');
-          const nom=get(r,'nombre - columna separada','NOMBRE - columna separada')||'';
-          if(apellido&&nom) nombre=formatearNombre(nom,apellido);
-          else if(apellido) nombre=apellido;
-        }
+        // LEGAJO: soporta columna "legajo" del padrón o "numero_legajo(*)" del CSV de candidatos
+        const legajo=get(r,'legajo','Legajo','LEGAJO','numero_legajo(*)','numero_legajo');
+        // NOMBRE: si el archivo trae apellido separado (CSV de candidatos: "nombre(*)" + "apellido(*)"),
+        // se arma como "APELLIDO. NOMBRE". Si viene ya armado (Excel de padrón), se usa tal cual.
+        const apellidoRaw=get(r,'apellido','Apellido','APELLIDO','apellido(*)');
+        const nombreRaw=get(r,'nombre','Nombre','NOMBRE','nombre(*)');
+        let nombre;
+        if(apellidoRaw&&nombreRaw) nombre=formatearNombre(nombreRaw,apellidoRaw);
+        else nombre=nombreRaw||apellidoRaw||'';
         if(!legajo||!nombre) return null;
         
         const datos_extra={};
@@ -2019,19 +2064,19 @@ async function importarPadron(event){
           if(!CAMPOS_BASE.includes(k.toLowerCase().trim())&&r[k]!==''&&r[k]!==null) datos_extra[k]=r[k];
         });
         
-        // CUIL: extraer y formatear
-        const cuilRaw=get(r,'CUIL','cuil','Cuil')||null;
+        // CUIL: extraer y formatear (soporta "cuil(*)" del CSV: 27406717130 → 27-40671713-0)
+        const cuilRaw=get(r,'CUIL','cuil','Cuil','cuil(*)')||null;
         const cuilVal=cuilRaw?formatearCUIL(cuilRaw):null;
         if(datos_extra.CUIL) delete datos_extra.CUIL;
         if(datos_extra.Cuil) delete datos_extra.Cuil;
         if(datos_extra.cuil) delete datos_extra.cuil;
         
-        // CELULAR: normalizar para WhatsApp
-        const celularRaw=get(r,'celular','Celular','CELULAR','whatsapp','WhatsApp','WHATSAPP')||null;
+        // CELULAR: normalizar para WhatsApp (prioridad: celular > whatsapp > telefono)
+        const celularRaw=get(r,'celular','Celular','CELULAR','whatsapp','WhatsApp','WHATSAPP','telefono','Telefono','TELEFONO')||null;
         const celularVal=celularRaw?normalizarCelular(celularRaw):null;
         
-        // EMAIL: extraer
-        const emailVal=get(r,'email','Email','EMAIL','correo','Correo','CORREO')||null;
+        // EMAIL: extraer (soporta "email(*)" del CSV)
+        const emailVal=get(r,'email','Email','EMAIL','email(*)','correo','Correo','CORREO')||null;
         
         // SECTOR: buscar UN/DPTO existentes en padrón con este sector
         const sectorCSV=get(r,'Sector','sector','SECTOR')||null;
@@ -2056,22 +2101,24 @@ async function importarPadron(event){
           deptoVal='Por asignar';
         }
         
-        return{
+        const _reg={
           legajo,nombre,
           cuil:cuilVal,
           un:unVal,
           sector:sectorCSV,
           departamento:deptoVal,
-          celular:celularVal,
-          email:emailVal,
-          fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
+          fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso','fecha_contratacion','Fecha_Contratacion')),
           fecha_calculo_antiguedad:parseFecha(getF(r,'Fecha calculo antiguedad','fecha_calculo_antiguedad','Fecha Calculo Antiguedad','Fecha de Calculo de Antiguedad','FECHA_CALCULO_ANTIGUEDAD','Fecha cálculo antigüedad')),
           fecha_egreso:parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja')),
           estado:get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente',
           establecimiento:get(r,'Establecimiento','establecimiento')||null,
-          documento:get(r,'Documento','documento','DOCUMENTO')||null,
+          documento:get(r,'Documento','documento','DOCUMENTO','dni(*)','dni','DNI')||null,
           datos_extra:Object.keys(datos_extra).length?datos_extra:{}
         };
+        // Solo incluir celular/email si el archivo trae esas columnas (evita pisar con null)
+        if(_tieneCelular) _reg.celular=celularVal;
+        if(_tieneEmail) _reg.email=emailVal;
+        return _reg;
       }).filter(Boolean);
       if(!nuevos.length){
         // Diagnóstico: mostrar las columnas que tiene el Excel para ayudar a identificar el problema

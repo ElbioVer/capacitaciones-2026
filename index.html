@@ -361,6 +361,7 @@ select.form-input{cursor:pointer}
     <select id="flt-sec" onchange="applyFilters()"><option value="">Todos</option></select>
     <label>Ordenar</label>
     <select id="flt-sort" onchange="applyFilters()">
+      <option value="fecha">Fecha de inicio</option>
       <option value="redmine">Cód. Redmine</option>
       <option value="tipo">Tipo</option>
       <option value="bimestre">Bimestre</option>
@@ -414,7 +415,7 @@ const H={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Be
 const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre (May-Jun)','4° Bimestre (Jul-Ago)','5° Bimestre (Sep-Oct)','6° Bimestre (Nov-Dic)'];
 
 let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
-let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='redmine';
+let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='fecha';
 let currentUser=null;
 let _searchQuery='';
 // Texto de WhatsApp configurable — se guarda en localStorage
@@ -741,7 +742,7 @@ function getFiltered(){
 
 
 function clearFilters(){
-  fltTipo=''; fltBim=''; fltUN=''; fltSec=''; _searchQuery=''; sortOrder='redmine';
+  fltTipo=''; fltBim=''; fltUN=''; fltSec=''; _searchQuery=''; sortOrder='fecha';
   const ids=['flt-tipo','flt-bim','flt-un','flt-sec'];
   ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const srt=document.getElementById('flt-sort');
@@ -913,7 +914,26 @@ function switchTab(t){
 function sortCaps(arr){
   const TIPO_ORD=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
   const rn=s=>{if(!s)return 9999999;const m=String(s).match(/\d+/);return m?parseInt(m[0],10):9999999;};
+  // Convierte la fecha de inicio a un número comparable (YYYYMMDD). Sin fecha → al final.
+  const fnum=c=>{
+    const f=c.fecha;
+    if(!f) return 99999999;
+    const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(f);
+    if(iso) return parseInt(iso[1]+iso[2]+iso[3],10);
+    const dmy=/^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(f);
+    if(dmy) return parseInt(dmy[3]+dmy[2].padStart(2,'0')+dmy[1].padStart(2,'0'),10);
+    return 99999999;
+  };
+  const bidx=c=>{const i=BIMESTRES.indexOf(c.bimestre);return i<0?BIMESTRES.length:i;};
   return [...arr].sort((a,b)=>{
+    if(sortOrder==='fecha'){
+      // Orden inicial: por fecha de inicio y, a igualdad, por bimestre; luego por Redmine
+      const df=fnum(a)-fnum(b);
+      if(df!==0)return df;
+      const dbim=bidx(a)-bidx(b);
+      if(dbim!==0)return dbim;
+      return rn(a.codigo_redmine)-rn(b.codigo_redmine);
+    }
     if(sortOrder==='tipo'){
       const ia=TIPO_ORD.indexOf(a.tipo_codigo);const ib=TIPO_ORD.indexOf(b.tipo_codigo);
       const diff=(ia<0?TIPO_ORD.length:ia)-(ib<0?TIPO_ORD.length:ib);

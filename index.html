@@ -1989,12 +1989,17 @@ async function importarPadron(event){
       const rawRows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true,dateNF:'DD/MM/YYYY'});
       // Normalizar claves: quitar espacios extremos, pasar a minúsculas
       // Esto soluciona que el Excel tenga "Legajo ", "LEGAJO", "legajo" etc.
+      // Además se genera una clave "slug" (sin acentos, puntos, guiones bajos ni espacios)
+      // para que "Fecha cálculo antigüedad", "fecha_calculo_antiguedad", "C.U.I.L", "Teléfono",
+      // etc. coincidan sin importar acentos o puntuación del encabezado.
+      const _slug=k=>String(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9()*]/g,'');
       const rows=rawRows.map(r=>{
         const norm={};
         Object.keys(r).forEach(k=>{
           const kn=k.trim().toLowerCase();
           norm[kn]=r[k];          // clave normalizada (ej: "legajo")
           norm[k]=r[k];           // clave original también (por si acaso)
+          norm['§'+_slug(k)]=r[k]; // clave slug (ej: "§fechacalculoantiguedad")
         });
         return norm;
       });
@@ -2006,6 +2011,9 @@ async function importarPadron(event){
           if(v!==undefined&&v!==null&&String(v).trim()!=='') return String(v).trim();
           // Intentar normalizada
           v=r[k.trim().toLowerCase()];
+          if(v!==undefined&&v!==null&&String(v).trim()!=='') return String(v).trim();
+          // Intentar slug (sin acentos ni puntuación)
+          v=r['§'+_slug(k)];
           if(v!==undefined&&v!==null&&String(v).trim()!=='') return String(v).trim();
         }
         return '';
@@ -2042,6 +2050,8 @@ async function importarPadron(event){
           if(v!==undefined&&v!==null&&v!=='') return v;
           v=r[k.trim().toLowerCase()];
           if(v!==undefined&&v!==null&&v!=='') return v;
+          v=r['§'+_slug(k)];
+          if(v!==undefined&&v!==null&&v!=='') return v;
         }
         return null;
       };
@@ -2051,9 +2061,15 @@ async function importarPadron(event){
       // Detectar si el archivo trae columnas de contacto. Si NO las trae (ej: Excel de padrón
       // viejo), NO se envían esos campos en el upsert → merge-duplicates no pisa los celulares
       // y emails ya cargados de la precarga de candidatos.
-      const _hdrs=rawRows.length?Object.keys(rawRows[0]).map(k=>k.trim().toLowerCase()):[];
-      const _tieneCelular=_hdrs.some(h=>['celular','whatsapp','telefono','teléfono'].includes(h));
-      const _tieneEmail=_hdrs.some(h=>['email','email(*)','correo','correo electronico','correo electrónico'].includes(h));
+      const _hdrSlugs=rawRows.length?Object.keys(rawRows[0]).map(k=>_slug(k)):[];
+      const _tieneCelular=_hdrSlugs.some(h=>['celular','whatsapp','telefono'].includes(h));
+      const _tieneEmail=_hdrSlugs.some(h=>['email','email(*)','correo','correoelectronico'].includes(h));
+      // Misma protección para columnas que el CSV de candidatos no trae: solo se actualizan
+      // si la columna figura en el archivo (así reimportar el CSV no borra datos del padrón oficial)
+      const _tieneFCA=_hdrSlugs.some(h=>['fechacalculoantiguedad','fechadecalculodeantiguedad'].includes(h));
+      const _tieneEgreso=_hdrSlugs.some(h=>['fechadeegreso','fechaegreso','fechadebaja'].includes(h));
+      const _tieneEstab=_hdrSlugs.includes('establecimiento');
+      const _tieneEstado=_hdrSlugs.some(h=>['estado','estadoempleado'].includes(h));
       const nuevos=rows.map(r=>{
         // LEGAJO: soporta columna "legajo" del padrón o "numero_legajo(*)" del CSV de candidatos
         const legajo=get(r,'legajo','Legajo','LEGAJO','numero_legajo(*)','numero_legajo');
@@ -2067,8 +2083,14 @@ async function importarPadron(event){
         if(!legajo||!nombre) return null;
         
         const datos_extra={};
+        const _baseSlugs=CAMPOS_BASE.map(c=>_slug(c));
+        const _vistos={};
         Object.keys(r).forEach(k=>{
-          if(!CAMPOS_BASE.includes(k.toLowerCase().trim())&&r[k]!==''&&r[k]!==null) datos_extra[k]=r[k];
+          if(k.startsWith('§')) return;           // clave interna slug, ignorar
+          const ks=_slug(k);
+          if(_baseSlugs.includes(ks)) return;      // es un campo del sistema, no va a extras
+          if(_vistos[ks]) return;                  // evitar duplicados (clave original + normalizada)
+          if(r[k]!==''&&r[k]!==null){datos_extra[k]=r[k];_vistos[ks]=1;}
         });
         
         // CUIL: extraer y formatear (soporta "cuil(*)" del CSV: 27406717130 → 27-40671713-0)
@@ -2090,23 +2112,20 @@ async function importarPadron(event){
         let unVal=get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null;
         let deptoVal=get(r,'Departamento','departamento','DEPARTAMENTO')||null;
         
-        // Si sector viene en CSV y NO hay UN/DPTO explícito, buscar en padrón
-        if(sectorCSV&&!unVal&&!deptoVal){
-          const conMismoSector=padron.find(p=>p.sector===sectorCSV);
-          if(conMismoSector){
-            unVal=conMismoSector.un||null;
-            deptoVal=conMismoSector.departamento||null;
-          } else {
-            // Si no existe ese sector, asignar "Por asignar"
-            unVal='Por asignar';
-            deptoVal='Por asignar';
+        // Completar individualmente cada campo faltante buscando otro empleado del mismo
+        // sector en el padrón (ignorando los que tienen "Por asignar")
+        if(sectorCSV){
+          if(!unVal){
+            const m=padron.find(p=>p.sector===sectorCSV&&p.un&&p.un!=='Por asignar');
+            if(m) unVal=m.un;
           }
-        } else if(!unVal){
-          unVal='Por asignar';
+          if(!deptoVal){
+            const m=padron.find(p=>p.sector===sectorCSV&&p.departamento&&p.departamento!=='Por asignar');
+            if(m) deptoVal=m.departamento;
+          }
         }
-        if(!deptoVal){
-          deptoVal='Por asignar';
-        }
+        if(!unVal) unVal='Por asignar';
+        if(!deptoVal) deptoVal='Por asignar';
         
         const _reg={
           legajo,nombre,
@@ -2115,16 +2134,18 @@ async function importarPadron(event){
           sector:sectorCSV,
           departamento:deptoVal,
           fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso','fecha_contratacion','Fecha_Contratacion')),
-          fecha_calculo_antiguedad:parseFecha(getF(r,'Fecha calculo antiguedad','fecha_calculo_antiguedad','Fecha Calculo Antiguedad','Fecha de Calculo de Antiguedad','FECHA_CALCULO_ANTIGUEDAD','Fecha cálculo antigüedad')),
-          fecha_egreso:parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja')),
-          estado:get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente',
-          establecimiento:get(r,'Establecimiento','establecimiento')||null,
           documento:get(r,'Documento','documento','DOCUMENTO','dni(*)','dni','DNI')||null,
           datos_extra:Object.keys(datos_extra).length?datos_extra:{}
         };
-        // Solo incluir celular/email si el archivo trae esas columnas (evita pisar con null)
+        // Solo incluir estos campos si la columna figura en el archivo (evita pisar con null
+        // los datos ya cargados cuando se importa un archivo que no trae esas columnas)
         if(_tieneCelular) _reg.celular=celularVal;
         if(_tieneEmail) _reg.email=emailVal;
+        if(_tieneFCA) _reg.fecha_calculo_antiguedad=parseFecha(getF(r,'Fecha calculo antiguedad','fecha_calculo_antiguedad','Fecha Calculo Antiguedad','Fecha de Calculo de Antiguedad','FECHA_CALCULO_ANTIGUEDAD','Fecha cálculo antigüedad'));
+        if(_tieneEgreso) _reg.fecha_egreso=parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja'));
+        if(_tieneEstab) _reg.establecimiento=get(r,'Establecimiento','establecimiento')||null;
+        if(_tieneEstado) _reg.estado=get(r,'Estado Empleado','estado','Estado','ESTADO')||'Vigente';
+        else _reg.estado='Vigente'; // Candidatos nuevos: estado Vigente por defecto
         return _reg;
       }).filter(Boolean);
       if(!nuevos.length){

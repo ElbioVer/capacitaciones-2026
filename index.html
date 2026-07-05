@@ -1669,6 +1669,7 @@ function renderPadron(filtro){
         <button class="btn-sm green" onclick="exportPlantillaPadron()">📥 Plantilla</button>
         <label class="upload-label" style="font-size:11px;padding:4px 9px">📂 Importar<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarPadron(event)"></label>
         <button class="btn-sm blue" onclick="exportarPadron()">📤 Exportar</button>
+        <button class="btn-sm" style="background:#6B4FA0;color:#fff" onclick="diagnosticarPadron()" title="Verificar qué columnas existen en la base de datos">🔍 Diagnóstico</button>
         <button class="btn-sm" style="background:#CC0000;color:#fff" onclick="limpiarPadron()">🗑 Limpiar</button>
       `:''}
     </div>
@@ -1976,6 +1977,47 @@ async function recordarEnMasaPendientes(capId){
   },300*enviados+500);
 }
 
+async function diagnosticarPadron(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  toast('Consultando estructura de la base de datos...',5000);
+  // Traer un registro cualquiera para ver qué columnas devuelve realmente Supabase
+  try{
+    const muestra=await api('GET','padron','','?limit=1');
+    const cols=(muestra&&muestra.length)?Object.keys(muestra[0]):[];
+    const requeridas=['celular','email','fecha_calculo_antiguedad','departamento','sector','un','documento'];
+    let reporte='📋 COLUMNAS EN LA TABLA "padron":\n\n';
+    reporte+=cols.length?cols.join(', '):'(la tabla está vacía, no se pueden ver columnas)';
+    reporte+='\n\n─────────────────────\n\n✓ / ✗ COLUMNAS CLAVE:\n\n';
+    requeridas.forEach(c=>{
+      reporte+=(cols.includes(c)?'✅ ':'❌ FALTA: ')+c+'\n';
+    });
+    const faltantes=requeridas.filter(c=>!cols.includes(c));
+    if(faltantes.length){
+      reporte+='\n─────────────────────\n\n⚠️ EJECUTÁ ESTE SQL EN SUPABASE:\n\n';
+      const sqlMap={celular:'ALTER TABLE padron ADD COLUMN IF NOT EXISTS celular VARCHAR(20) UNIQUE;',
+        email:'ALTER TABLE padron ADD COLUMN IF NOT EXISTS email VARCHAR(100);',
+        fecha_calculo_antiguedad:'ALTER TABLE padron ADD COLUMN IF NOT EXISTS fecha_calculo_antiguedad DATE;',
+        departamento:'ALTER TABLE padron ADD COLUMN IF NOT EXISTS departamento TEXT;',
+        documento:'ALTER TABLE padron ADD COLUMN IF NOT EXISTS documento TEXT;'};
+      faltantes.forEach(c=>{if(sqlMap[c])reporte+=sqlMap[c]+'\n';});
+    } else {
+      reporte+='\n✓ Todas las columnas clave existen. Si un dato no se actualiza, revisá que la columna correspondiente esté en el archivo que subís.';
+    }
+    // Además, mostrar el estado del legajo 10676 (HOGAS) si existe
+    const hogas=padron.find(p=>String(p.legajo)==='10676');
+    if(hogas){
+      reporte+='\n\n─────────────────────\n\n👤 LEGAJO 10676 (en memoria):\n';
+      reporte+='• fecha_calculo_antiguedad: '+(hogas.fecha_calculo_antiguedad||'(vacío)')+'\n';
+      reporte+='• celular: '+(hogas.celular||'(vacío)')+'\n';
+      reporte+='• email: '+(hogas.email||'(vacío)')+'\n';
+      reporte+='• departamento: '+(hogas.departamento||'(vacío)')+'\n';
+    }
+    alert(reporte);
+  }catch(e){
+    alert('Error al consultar la estructura:\n\n'+((e&&e.message)||String(e)));
+  }
+}
+
 async function importarPadron(event){
   if(!isAdmin()){toast('Sin permisos');return;}
   // NOTA: Se requieren ejecutar estas migraciones SQL en Supabase antes de usar esta función:
@@ -2158,19 +2200,44 @@ async function importarPadron(event){
       const CHUNK=500;
       let importados=0;
       let errores=0;
+      let ultimoError='';
       for(let i=0;i<nuevos.length;i+=CHUNK){
         const lote=nuevos.slice(i,i+CHUNK);
         toast(`Importando... ${Math.min(i+CHUNK,nuevos.length)} de ${nuevos.length}`,15000);
         try{
           await api('POST','padron',lote,'?on_conflict=legajo',{'Prefer':'resolution=merge-duplicates'});
           importados+=lote.length;
-        }catch(e){errores+=lote.length;console.warn('Error en lote',i,e);}
+        }catch(e){errores+=lote.length;ultimoError=(e&&e.message)||String(e);console.warn('Error en lote',i,e);}
       }
       await syncUNsSectoresDesde(nuevos);
       await loadAll();
       if(errores>0){
-        toast(`${importados} registros importados. ${errores} con error.`);
+        // Mostrar el error real de Supabase para poder diagnosticar (ej: columna inexistente)
+        let hint='';
+        if(/column|columna/i.test(ultimoError)){
+          hint='\n\n⚠️ Parece que falta una columna en la tabla "padron" de Supabase. Verificá que existan:\n• celular\n• email\n\nSQL:\nALTER TABLE padron ADD COLUMN IF NOT EXISTS celular VARCHAR(20) UNIQUE;\nALTER TABLE padron ADD COLUMN IF NOT EXISTS email VARCHAR(100);';
+        }
+        alert(`Importación: ${importados} OK, ${errores} con error.\n\nError de Supabase:\n${ultimoError}${hint}`);
+        toast(`${importados} importados. ${errores} con error.`);
       } else {
+        // Reporte de qué columnas se detectaron y actualizaron, para transparencia
+        const detectadas=[];
+        if(_tieneCelular) detectadas.push('Teléfono/Celular');
+        if(_tieneEmail) detectadas.push('Correo/Email');
+        if(_tieneFCA) detectadas.push('Fecha cálculo antigüedad');
+        if(_tieneEgreso) detectadas.push('Fecha egreso');
+        if(_tieneEstab) detectadas.push('Establecimiento');
+        if(_tieneEstado) detectadas.push('Estado');
+        const noDetectadas=[];
+        if(!_tieneFCA) noDetectadas.push('Fecha cálculo antigüedad');
+        if(!_tieneCelular) noDetectadas.push('Teléfono/Celular');
+        if(!_tieneEmail) noDetectadas.push('Correo/Email');
+        let msg=`${importados} registros importados al padrón ✓`;
+        if(noDetectadas.length){
+          msg+=`\n\n⚠️ El archivo NO traía estas columnas (no se modificaron):\n• ${noDetectadas.join('\n• ')}\n\nSi querés actualizar esos datos, incluí esas columnas en el archivo.`;
+          // Solo mostramos alert si faltan columnas importantes, para no molestar en cada import
+          setTimeout(()=>alert(msg),300);
+        }
         toast(`${importados} registros importados al padrón ✓`);
       }
       renderContent();

@@ -1596,7 +1596,10 @@ function renderPadron(filtro){
     :`background:${bg};border-radius:10px;padding:8px 16px;font-size:12px;cursor:pointer;border:2px solid transparent;transition:.15s;opacity:0.8`;
 
   const sorted=[...lista].sort((a,b)=>String(a.legajo).localeCompare(String(b.legajo)));
-  const filas=sorted.map((p,i)=>`<tr>
+  const filas=sorted.map((p,i)=>{
+    const celularBtn=p.celular?`<button class="btn-sm" style="font-size:9px;padding:2px 5px;background:#25D366;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="window.open('https://wa.me/${p.celular}','_blank')" title="Enviar por WhatsApp">📱 WA</button>`:'<span style="font-size:10px;color:#aaa">—</span>';
+    const editContactoBtn=`<button class="btn-sm" style="font-size:9px;padding:2px 5px;background:#1A2F6E;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="editarContactoPadron(${p.id},'${esc(p.legajo)}','${esc(p.nombre)}','${esc(p.celular||'')}','${esc(p.email||'')}')" title="Editar celular y email">✎</button>`;
+    return`<tr>
     <td style="${tdS(i)};font-weight:600">${esc(String(p.legajo||''))}</td>
     <td style="${tdS(i)}">${esc(p.nombre||'')}</td>
     <td style="${tdS(i)}">${esc(p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'')}</td>
@@ -1609,7 +1612,12 @@ function renderPadron(filtro){
     <td style="${tdS(i)}">${p.fecha_calculo_antiguedad?fmtF(p.fecha_calculo_antiguedad.slice(0,10)):''}</td>
     <td style="${tdS(i)}">${esc(p.establecimiento||p.datos_extra?.Establecimiento||p.datos_extra?.establecimiento||'')}</td>
     <td style="${tdS(i)}">${esc(p.documento||p.datos_extra?.Documento||p.datos_extra?.documento||'')}</td>
-  </tr>`).join('');
+    <td style="${tdS(i)};text-align:center">${p.celular?esc(p.celular):'—'}</td>
+    <td style="${tdS(i)};text-align:center;word-break:break-word;font-size:10px">${p.email?esc(p.email):'—'}</td>
+    <td style="${tdS(i)};text-align:center;white-space:nowrap">${celularBtn}</td>
+    <td style="${tdS(i)};text-align:center">${editContactoBtn}</td>
+  </tr>`;
+  }).join('');
 
   const labelFiltro=filtro==='vigentes'?`Vigentes (${vigentes})`
                    :filtro==='bajas'?`Bajas (${bajas})`
@@ -1644,7 +1652,7 @@ function renderPadron(filtro){
   </div>
   ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
   <div style="overflow:auto;border-radius:8px;border:1px solid #e0e0e0;max-height:calc(100vh - 310px)">
-    <table style="width:100%;border-collapse:collapse;min-width:900px">
+    <table style="width:100%;border-collapse:collapse;min-width:1200px">
       <thead><tr>
         <th style="${thS}">Legajo</th>
         <th style="${thS}">Nombre</th>
@@ -1658,6 +1666,10 @@ function renderPadron(filtro){
         <th style="${thS}">Fecha cálculo antigüedad</th>
         <th style="${thS}">Establecimiento</th>
         <th style="${thS}">Documento</th>
+        <th style="${thS}">Celular</th>
+        <th style="${thS}">Email</th>
+        <th style="${thS}">Acciones</th>
+        <th style="${thS}">Editar</th>
       </tr></thead>
       <tbody>${filas}</tbody>
     </table>
@@ -1671,16 +1683,18 @@ function renderPadron(filtro){
     <div class="config-title">Formato del archivo Excel</div>
     <div style="background:#f4f4f2;border-radius:8px;padding:10px;font-size:11px;line-height:2;color:#444">
       <div><strong>legajo *</strong> — número de legajo (campo único)</div>
-      <div><strong>nombre *</strong> — nombre y apellido completo</div>
-      <div><strong>CUIL</strong> — número de CUIL (ej: 20-12345678-9)</div>
+      <div><strong>nombre * / apellido *</strong> — nombre y apellido separados (o nombre completo en una sola columna)</div>
+      <div><strong>CUIL</strong> — número de CUIL (ej: 20-12345678-9 o 20123456789)</div>
+      <div><strong>Documento</strong> — número de DNI (requerido para validación en evaluaciones)</div>
+      <div><strong>Celular / WhatsApp</strong> — número de celular (se normaliza a +549xxxxx para WhatsApp)</div>
+      <div><strong>Email</strong> — correo electrónico personal</div>
       <div><strong>Fecha de Ingreso</strong> — DD/MM/AAAA</div>
       <div><strong>Fecha de egreso</strong> — DD/MM/AAAA</div>
-      <div><strong>Sector</strong> — sector del empleado</div>
-      <div><strong>Departamento</strong> — departamento</div>
+      <div><strong>Sector</strong> — sector del empleado (si existe en padrón, se copian UN/DPTO; si no, se asigna "Por asignar")</div>
+      <div><strong>Departamento</strong> — departamento (opcional)</div>
       <div><strong>Estado Empleado</strong> — Vigente / Renuncia / Despido / Suspendido</div>
-      <div><strong>Unidad de Negocio</strong> — UN</div>
+      <div><strong>Unidad de Negocio</strong> — UN (opcional, se puede derivar del Sector)</div>
       <div><strong>Establecimiento</strong> — establecimiento</div>
-      <div><strong>Documento</strong> — número de documento</div>
     </div>
   </div>`;
 }
@@ -1798,8 +1812,130 @@ async function syncUNsSectoresDesde(registros){
   }
 }
 
+// ===== Funciones auxiliares para formateo de datos de padrón =====
+function formatearNombre(nombre, apellido){
+  // Construir "APELLIDO. NOMBRE" en mayúsculas
+  const ap=(apellido||'').toString().trim().toUpperCase();
+  const nom=(nombre||'').toString().trim().toUpperCase();
+  if(!ap||!nom) return nom||ap||'';
+  return ap+'. '+nom;
+}
+
+function formatearCUIL(cuil){
+  // Convertir 27406717130 → 27-40671713-0
+  const clean=String(cuil||'').replace(/[^0-9]/g,'');
+  if(clean.length===11){
+    return clean.slice(0,2)+'-'+clean.slice(2,10)+'-'+clean.slice(10,11);
+  }
+  return cuil; // Retornar como viene si no es válido
+}
+
+function normalizarCelular(celular){
+  // Convertir a formato +549xxxxx
+  if(!celular) return null;
+  const clean=String(celular).replace(/[^0-9+]/g,'');
+  // Si ya tiene +54, dejarlo así
+  if(clean.startsWith('+54')) return clean;
+  // Si empieza con 9 seguido de 10 dígitos (11 total), agregar +54
+  if(/^9\d{10}$/.test(clean)) return '+54'+clean;
+  // Si empieza con 0 y 9, remover el 0 y agregar +54
+  if(/^09\d{9}$/.test(clean)) return '+54'+clean.slice(1);
+  // Si tiene 10 dígitos sin 9, retornar como viene
+  return clean.length>=9?'+54'+clean:null;
+}
+
+async function editarContactoPadron(padronId, legajo, nombre, celularAct, emailAct){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const nuevoCell=prompt('Celular (formato +549xxxxx o 9xxxxx):\n(Actual: '+(celularAct||'sin registrar')+')',celularAct||'');
+  if(nuevoCell===null) return; // Canceló
+  const celularNorm=nuevoCell.trim()?normalizarCelular(nuevoCell.trim()):null;
+  const nuevoEmail=prompt('Email:\n(Actual: '+(emailAct||'sin registrar')+')',emailAct||'');
+  if(nuevoEmail===null) return; // Canceló
+  
+  try{
+    await api('PATCH','padron',{celular:celularNorm,email:nuevoEmail.trim()||null},`?id=eq.${padronId}`);
+    const emp=padron.find(p=>p.id===padronId);
+    if(emp){emp.celular=celularNorm;emp.email=nuevoEmail.trim()||null;}
+    toast('✓ Contacto actualizado');
+    renderContent();
+  }catch(e){
+    toast('Error al actualizar: '+e.message);
+  }
+}
+
+function recordarPorWAIndividual(legajo, capId){
+  // Enviar recordatorio por WA a un empleado específico para realizar evaluación
+  const emp=getPadronEmpleado(legajo);
+  if(!emp||!emp.celular){
+    alert('El empleado no tiene celular registrado.');
+    return;
+  }
+  const cap=caps.find(c=>c.id===capId);
+  const ev=cap?getEval(capId):null;
+  if(!ev){
+    alert('Esta capacitación no tiene evaluación.');
+    return;
+  }
+  // Construir URL de evaluación (similar a cómo funciona en compartirWACap)
+  const baseUrl=window.location.origin+window.location.pathname;
+  const evalUrl=baseUrl+'?eval='+ev.id;
+  const msg=`Hola ${esc(emp.nombre)}! 👋\n\nTe recordamos que tenés una evaluación pendiente:\n\n📋 ${esc(cap.titulo)}\n\nCompletá la evaluación aquí:\n${evalUrl}\n\n¡Gracias!`;
+  window.open('https://wa.me/'+emp.celular+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+async function recordarEnMasaPendientes(capId){
+  // Enviar recordatorio masivo a todos los que NO completaron evaluación
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const cap=caps.find(c=>c.id===capId);
+  if(!cap){alert('Capacitación no encontrada');return;}
+  const ev=getEval(capId);
+  if(!ev){alert('Esta capacitación no tiene evaluación');return;}
+  
+  const asisEnCap=asistentes.filter(a=>a.capacitacion_id===capId);
+  const sinCompletar=asisEnCap.filter(a=>!a.completo);
+  
+  if(!sinCompletar.length){
+    alert('Todos completaron la evaluación.');
+    return;
+  }
+  
+  // Obtener datos de contacto desde padrón
+  const conCelular=sinCompletar.map(a=>{
+    const emp=getPadronEmpleado(a.legajo);
+    return{asistente:a,empleado:emp};
+  }).filter(x=>x.empleado&&x.empleado.celular);
+  
+  if(!conCelular.length){
+    alert('Ninguno de los pendientes tiene celular registrado.');
+    return;
+  }
+  
+  const confirma=confirm(`Se enviarán recordatorios a ${conCelular.length} persona(s) sin completar la evaluación.\n\n¿Continuamos?`);
+  if(!confirma) return;
+  
+  const baseUrl=window.location.origin+window.location.pathname;
+  const evalUrl=baseUrl+'?eval='+ev.id;
+  
+  toast(`Enviando recordatorios a ${conCelular.length} personas...`,10000);
+  let enviados=0;
+  for(const {asistente,empleado} of conCelular){
+    const msg=`Hola ${esc(empleado.nombre)}! 👋\n\nTe recordamos que todavía NO completaste la evaluación:\n\n📋 ${esc(cap.titulo)}\n\nCompletá la evaluación aquí:\n${evalUrl}\n\n¡Es importante completarla!`;
+    // Abrir en nueva pestaña (se abrirán varias)
+    setTimeout(()=>{
+      window.open('https://wa.me/'+empleado.celular+'?text='+encodeURIComponent(msg),'_blank');
+      enviados++;
+    },300*enviados); // Espaciar las aperturas
+  }
+  setTimeout(()=>{
+    toast(`✓ Se abrieron ${enviados} chats de WhatsApp`);
+  },300*enviados+500);
+}
+
 async function importarPadron(event){
   if(!isAdmin()){toast('Sin permisos');return;}
+  // NOTA: Se requieren ejecutar estas migraciones SQL en Supabase antes de usar esta función:
+  // ALTER TABLE padron ADD COLUMN IF NOT EXISTS celular VARCHAR(20) UNIQUE;
+  // ALTER TABLE padron ADD COLUMN IF NOT EXISTS email VARCHAR(100);
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=async function(e){
@@ -1864,26 +2000,70 @@ async function importarPadron(event){
         }
         return null;
       };
-      const CAMPOS_BASE=['legajo','nombre','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil'];
+      const CAMPOS_BASE=['legajo','nombre','apellido','un','unidad de negocio','sector','departamento','fecha_ingreso','fecha de ingreso','fecha_calculo_antiguedad','fecha calculo antiguedad','fecha de calculo de antiguedad','fecha_egreso','fecha de egreso','estado','estado empleado','establecimiento','documento','cuil','celular','whatsapp','email'];
       const nuevos=rows.map(r=>{
         const legajo=get(r,'legajo','Legajo','LEGAJO');
-        const nombre=get(r,'nombre','Nombre','NOMBRE');
+        // NOMBRE: buscar primero si viene ya armado, si no armar desde nombre + apellido
+        let nombre=get(r,'nombre','Nombre','NOMBRE');
+        if(!nombre||nombre.indexOf('.')===0){
+          // Si no hay nombre o está vacío, intentar construir desde apellido + nombre
+          const apellido=get(r,'apellido','Apellido','APELLIDO');
+          const nom=get(r,'nombre - columna separada','NOMBRE - columna separada')||'';
+          if(apellido&&nom) nombre=formatearNombre(nom,apellido);
+          else if(apellido) nombre=apellido;
+        }
         if(!legajo||!nombre) return null;
+        
         const datos_extra={};
         Object.keys(r).forEach(k=>{
           if(!CAMPOS_BASE.includes(k.toLowerCase().trim())&&r[k]!==''&&r[k]!==null) datos_extra[k]=r[k];
         });
-        const cuilVal=get(r,'CUIL','cuil','Cuil')||null;
-        // Limpiar CUIL de datos_extra para no duplicar si ya viene como columna
+        
+        // CUIL: extraer y formatear
+        const cuilRaw=get(r,'CUIL','cuil','Cuil')||null;
+        const cuilVal=cuilRaw?formatearCUIL(cuilRaw):null;
         if(datos_extra.CUIL) delete datos_extra.CUIL;
         if(datos_extra.Cuil) delete datos_extra.Cuil;
         if(datos_extra.cuil) delete datos_extra.cuil;
+        
+        // CELULAR: normalizar para WhatsApp
+        const celularRaw=get(r,'celular','Celular','CELULAR','whatsapp','WhatsApp','WHATSAPP')||null;
+        const celularVal=celularRaw?normalizarCelular(celularRaw):null;
+        
+        // EMAIL: extraer
+        const emailVal=get(r,'email','Email','EMAIL','correo','Correo','CORREO')||null;
+        
+        // SECTOR: buscar UN/DPTO existentes en padrón con este sector
+        const sectorCSV=get(r,'Sector','sector','SECTOR')||null;
+        let unVal=get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null;
+        let deptoVal=get(r,'Departamento','departamento','DEPARTAMENTO')||null;
+        
+        // Si sector viene en CSV y NO hay UN/DPTO explícito, buscar en padrón
+        if(sectorCSV&&!unVal&&!deptoVal){
+          const conMismoSector=padron.find(p=>p.sector===sectorCSV);
+          if(conMismoSector){
+            unVal=conMismoSector.un||null;
+            deptoVal=conMismoSector.departamento||null;
+          } else {
+            // Si no existe ese sector, asignar "Por asignar"
+            unVal='Por asignar';
+            deptoVal='Por asignar';
+          }
+        } else if(!unVal){
+          unVal='Por asignar';
+        }
+        if(!deptoVal){
+          deptoVal='Por asignar';
+        }
+        
         return{
           legajo,nombre,
           cuil:cuilVal,
-          un:get(r,'Unidad de Negocio','un','UN','unidad_de_negocio')||null,
-          sector:get(r,'Sector','sector','SECTOR')||null,
-          departamento:get(r,'Departamento','departamento','DEPARTAMENTO')||null,
+          un:unVal,
+          sector:sectorCSV,
+          departamento:deptoVal,
+          celular:celularVal,
+          email:emailVal,
           fecha_ingreso:parseFecha(getF(r,'Fecha de Ingreso','fecha_ingreso','FECHA_INGRESO','Fecha Ingreso')),
           fecha_calculo_antiguedad:parseFecha(getF(r,'Fecha calculo antiguedad','fecha_calculo_antiguedad','Fecha Calculo Antiguedad','Fecha de Calculo de Antiguedad','FECHA_CALCULO_ANTIGUEDAD','Fecha cálculo antigüedad')),
           fecha_egreso:parseFecha(getF(r,'Fecha de egreso','fecha_egreso','FECHA_EGRESO','Fecha Egreso','Fecha de Baja')),

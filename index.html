@@ -1886,8 +1886,12 @@ function normalizarCelular(celular){
   if(/^9\d{10}$/.test(clean)) return '+54'+clean;
   // área + número (10 dígitos): 1132994971 → agregar 9
   if(/^\d{10}$/.test(clean)) return '+549'+clean;
+  // Si es demasiado largo para ser un teléfono válido, descartarlo (evita datos corruptos)
+  if(clean.length>15) return null;
   // Otros largos razonables: agregar +549 igual (mejor intento)
-  return clean.length>=8?'+549'+clean:null;
+  const _r=clean.length>=8?'+549'+clean:null;
+  // Seguridad: nunca devolver algo que no entre en la columna
+  return (_r&&_r.length<=20)?_r:null;
 }
 
 async function editarContactoPadron(padronId, legajo, nombre, celularAct, emailAct){
@@ -2250,6 +2254,8 @@ async function importarPadron(event){
           hint='\n\n⚠️ La columna "celular" tiene una restricción UNIQUE que impide guardar teléfonos repetidos o vacíos. Hay que quitarla.\n\nEJECUTÁ ESTE SQL EN SUPABASE:\n\nALTER TABLE padron DROP CONSTRAINT IF EXISTS padron_celular_key;\n\nDespués volvé a importar el padrón.';
         } else if(/unique constraint|duplicate key/i.test(ultimoError)){
           hint='\n\n⚠️ Hay una restricción UNIQUE bloqueando la carga. Revisá el nombre del constraint en el mensaje de arriba y quitalo con:\nALTER TABLE padron DROP CONSTRAINT IF EXISTS <nombre_del_constraint>;';
+        } else if(/value too long|too long for type/i.test(ultimoError)){
+          hint='\n\n⚠️ Algún dato es más largo que el tamaño permitido en la columna (probablemente "celular").\n\nEJECUTÁ ESTE SQL EN SUPABASE:\n\nALTER TABLE padron ALTER COLUMN celular TYPE VARCHAR(30);\n\nDespués volvé a importar el padrón.';
         } else if(/column|columna/i.test(ultimoError)){
           hint='\n\n⚠️ Parece que falta una columna en la tabla "padron". Usá el botón 🔍 Diagnóstico para ver cuáles faltan.';
         }

@@ -2006,11 +2006,20 @@ async function diagnosticarPadron(){
     // Además, mostrar el estado del legajo 10676 (HOGAS) si existe
     const hogas=padron.find(p=>String(p.legajo)==='10676');
     if(hogas){
-      reporte+='\n\n─────────────────────\n\n👤 LEGAJO 10676 (en memoria):\n';
-      reporte+='• fecha_calculo_antiguedad: '+(hogas.fecha_calculo_antiguedad||'(vacío)')+'\n';
-      reporte+='• celular: '+(hogas.celular||'(vacío)')+'\n';
-      reporte+='• email: '+(hogas.email||'(vacío)')+'\n';
-      reporte+='• departamento: '+(hogas.departamento||'(vacío)')+'\n';
+      reporte+='\n\n─────────────────────\n\n👤 LEGAJO 10676 EN LA BASE:\n';
+      reporte+='• fecha_calculo_antiguedad: '+(hogas.fecha_calculo_antiguedad||'❌ (vacío)')+'\n';
+      reporte+='• celular: '+(hogas.celular||'❌ (vacío)')+'\n';
+      reporte+='• email: '+(hogas.email||'❌ (vacío)')+'\n';
+      reporte+='• departamento: '+(hogas.departamento||'❌ (vacío)')+'\n';
+      reporte+='• sector: '+(hogas.sector||'❌ (vacío)')+'\n';
+    }
+    // Mostrar los encabezados del último archivo importado en esta sesión
+    if(window._ultimoImportHeaders&&window._ultimoImportHeaders.length){
+      reporte+='\n─────────────────────\n\n📄 ENCABEZADOS DEL ÚLTIMO ARCHIVO QUE IMPORTASTE:\n\n';
+      reporte+=window._ultimoImportHeaders.join(' | ');
+      reporte+='\n\n(Si acá NO aparece "Fecha cálculo antigüedad", "Teléfono" o "Correo", ese archivo no traía esos datos.)';
+    } else {
+      reporte+='\n─────────────────────\n\n📄 Todavía no importaste ningún archivo en esta sesión. Importá el padrón y volvé a tocar Diagnóstico para ver qué columnas trae.';
     }
     alert(reporte);
   }catch(e){
@@ -2103,7 +2112,14 @@ async function importarPadron(event){
       // Detectar si el archivo trae columnas de contacto. Si NO las trae (ej: Excel de padrón
       // viejo), NO se envían esos campos en el upsert → merge-duplicates no pisa los celulares
       // y emails ya cargados de la precarga de candidatos.
-      const _hdrSlugs=rawRows.length?Object.keys(rawRows[0]).map(k=>_slug(k)):[];
+      // Recolectar TODOS los encabezados que aparecen en cualquier fila (no solo rawRows[0],
+      // porque con celdas vacías XLSX puede omitir claves en algunas filas).
+      const _hdrSet=new Set();
+      rawRows.forEach(rr=>Object.keys(rr).forEach(k=>_hdrSet.add(k)));
+      const _hdrOrig=[..._hdrSet];
+      const _hdrSlugs=_hdrOrig.map(k=>_slug(k));
+      // Guardar para el diagnóstico posterior
+      window._ultimoImportHeaders=_hdrOrig;
       const _tieneCelular=_hdrSlugs.some(h=>['celular','whatsapp','telefono'].includes(h));
       const _tieneEmail=_hdrSlugs.some(h=>['email','email(*)','correo','correoelectronico'].includes(h));
       // Misma protección para columnas que el CSV de candidatos no trae: solo se actualizan

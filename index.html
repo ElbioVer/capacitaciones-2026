@@ -2335,6 +2335,9 @@ function buildDetail(id,resetScroll){
       ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-todos-${id}" onclick="pasarTodosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
         ✓ Pasar todos a Lista (${faltantesSolopadron.length})
       </button>`:''}
+      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
+        🚫 Pasar todos a Excluidos (${faltantesSolopadron.length})
+      </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
       ${a.length||faltantesSolopadron.length
@@ -3295,9 +3298,11 @@ function filtrarAsistentes(vista, capId){
       limpBtn.title='Eliminar todos los participantes';
     }
   }
-  // Mostrar/ocultar botón "Pasar todos a Lista" solo en vista noenlista
+  // Mostrar/ocultar botones "Pasar todos a Lista" y "Pasar todos a Excluidos" solo en vista noenlista
   const pasarBtn=document.getElementById(`btn-pasar-todos-${capId}`);
   if(pasarBtn) pasarBtn.style.display=(vista==='noenlista')?'':'none';
+  const exclBtn=document.getElementById(`btn-excluir-todos-${capId}`);
+  if(exclBtn) exclBtn.style.display=(vista==='noenlista')?'':'none';
   // Mostrar filas de la vista
   const rowsHtml=data[vista]||data.todos;
   tbody.innerHTML=rowsHtml;
@@ -4908,6 +4913,38 @@ async function pasarTodosALista(capId){
   toast(`✓ ${ok} agregado${ok!==1?'s':''} a la lista`+(err?` · ${err} con error`:''));
   buildDetail(capId);
   renderContent();
+}
+
+async function pasarTodosAExcluidos(capId){
+  if(!canManageParticipants()) return;
+  const datos=window[`_noEnListaDatos_${capId}`]||[];
+  if(!datos.length){toast('No hay participantes del padrón fuera de la lista');return;}
+  const c=caps.find(x=>x.id===capId);
+  if(!c){toast('Capacitación no encontrada');return;}
+  if(!confirm(`Se excluirán ${datos.length} persona${datos.length!==1?'s':''} del padrón de los Posibles de "${c.titulo}".\n\nNo se mostrarán como Posibles ni contarán como faltantes.\nPodés restaurarlos cuando quieras desde el botón "🚫 Excluidos".\n\n¿Continuar?`)) return;
+  try{
+    setSyncStatus('syncing');
+    const excl=Array.isArray(c.excluidos)?c.excluidos.slice():[];
+    const yaExcl=new Set(excl.map(String));
+    let nuevos=0;
+    for(const p of datos){
+      const l=String(p.legajo);
+      if(!yaExcl.has(l)){excl.push(l);yaExcl.add(l);nuevos++;}
+    }
+    await api('PATCH','capacitaciones',{excluidos:excl},`?id=eq.${capId}`);
+    c.excluidos=excl;
+    setSyncStatus('ok');
+    toast(`🚫 ${nuevos} excluido${nuevos!==1?'s':''} — total: ${excl.length}`);
+    window._suppressReload=Date.now()+8000;
+    buildDetail(capId);
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    const msg=(e&&e.message)?e.message:'';
+    if(msg.toLowerCase().includes('excluidos')||msg.includes('column')){
+      alert('Falta la columna "excluidos" en la tabla capacitaciones.\n\nEjecutá una sola vez en el SQL Editor de Supabase:\n\nALTER TABLE capacitaciones ADD COLUMN IF NOT EXISTS excluidos jsonb DEFAULT \'[]\'::jsonb;');
+    } else { toast('Error: '+msg.slice(0,120)); }
+  }
 }
 
 async function agregarParticipanteIndividual(capId){

@@ -416,6 +416,9 @@ const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre
 
 let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
 let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='fecha';
+// Estado del panel "Limpiar plan de capacitación" (persisten entre rerenders/auto-refresh)
+let _limpFltTipo='', _limpFltUN='';
+let _limpSel=new Set(); // ids de capacitaciones tildadas para borrar
 let currentUser=null;
 let _searchQuery='';
 // Texto de WhatsApp configurable — se guarda en localStorage
@@ -900,6 +903,8 @@ function capCard(cap){
 function switchTab(t){
   try{
     if(t!=='padron') window._padronFiltro='todos';
+    // Al salir de Config, limpiar el estado del panel de limpieza (filtros y selección)
+    if(currentTab==='config'&&t!=='config'){ _limpSel.clear(); _limpFltTipo=''; _limpFltUN=''; }
     currentTab=t;
     ['lista','tipo','bim','un','resumen','indicadores','gantt','padron','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t);});
     // Mostrar buscador solo en tabs de listas de capacitaciones
@@ -2531,21 +2536,43 @@ ALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEF
   <div class="config-section" style="border:1.5px solid #FCEBEB">
     <div class="config-title" style="color:#A32D2D">&#x1F5D1; Limpiar plan de capacitaci&#xF3;n</div>
     <p style="font-size:12px;color:#777;margin-bottom:10px">Seleccion&#xE1; las capacitaciones que quer&#xE9;s eliminar del sistema. Se borrar&#xE1;n tambi&#xE9;n sus asistentes, materiales y evaluaciones asociadas. <strong style="color:#A32D2D">Esta acci&#xF3;n no se puede deshacer.</strong></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;background:#faf6f6;padding:8px;border-radius:8px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:10px;color:#888;font-weight:600">Tipo</label>
+        <select id="limp-flt-tipo" onchange="cambiarFiltroLimpieza()" style="font-size:12px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+          <option value="">Todos</option>
+          ${tipos.map(t=>`<option value="${t.codigo}"${_limpFltTipo===t.codigo?' selected':''}>${t.codigo} — ${t.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:10px;color:#888;font-weight:600">Unidad de Negocio</label>
+        <select id="limp-flt-un" onchange="cambiarFiltroLimpieza()" style="font-size:12px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+          <option value="">Todas</option>
+          ${[...new Set(caps.map(c=>c.un).filter(Boolean))].sort().map(u=>`<option value="${esc(u)}"${_limpFltUN===u?' selected':''}>${esc(u)}</option>`).join('')}
+        </select>
+      </div>
+      ${(_limpFltTipo||_limpFltUN)?`<button class="btn-sm" style="background:#eee;color:#666;border:1px solid #ddd;align-self:flex-end" onclick="_limpFltTipo='';_limpFltUN='';renderContent()">✕ Quitar filtros</button>`:''}
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-      <button class="btn-sm" style="background:#f4f4f2;color:#555;border:1px solid #ddd" onclick="seleccionarTodasCaps(true)">&#x2611; Seleccionar todas</button>
+      <button class="btn-sm" style="background:#f4f4f2;color:#555;border:1px solid #ddd" onclick="seleccionarTodasCaps(true)">&#x2611; Seleccionar todas (visibles)</button>
       <button class="btn-sm" style="background:#f4f4f2;color:#555;border:1px solid #ddd" onclick="seleccionarTodasCaps(false)">&#x2610; Deseleccionar todas</button>
       <button class="btn-sm" id="btn-borrar-seleccionadas" style="background:#E24B4A;color:#fff;border-color:#E24B4A;display:none" onclick="borrarCapsSeleccionadas()">&#x1F5D1; Borrar seleccionadas (<span id="lbl-cant-sel">0</span>)</button>
     </div>
     <div id="lista-caps-limpiar" style="max-height:320px;overflow-y:auto;border:1px solid #e5e5e0;border-radius:8px;background:#fff">
-      ${caps.length===0?'<div style="padding:16px;text-align:center;font-size:12px;color:#aaa">No hay capacitaciones cargadas</div>':
-        caps.map(c=>`<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f0ef;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
-          <input type="checkbox" class="chk-cap-limpiar" value="${c.id}" style="margin-top:2px;accent-color:#E24B4A" onchange="actualizarContadorCaps()">
+      ${(()=>{
+        let capsLimp=caps.filter(c=>(!_limpFltTipo||c.tipo_codigo===_limpFltTipo)&&(!_limpFltUN||c.un===_limpFltUN));
+        capsLimp=sortCaps(capsLimp);
+        if(caps.length===0) return '<div style="padding:16px;text-align:center;font-size:12px;color:#aaa">No hay capacitaciones cargadas</div>';
+        if(capsLimp.length===0) return '<div style="padding:16px;text-align:center;font-size:12px;color:#aaa">Ninguna capacitación coincide con los filtros</div>';
+        return capsLimp.map(c=>`<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f0ef;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+          <input type="checkbox" class="chk-cap-limpiar" value="${c.id}" ${_limpSel.has(c.id)?'checked':''} style="margin-top:2px;accent-color:#E24B4A" onchange="toggleSelLimpieza(${c.id},this.checked)">
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.titulo)}</div>
             <div style="font-size:10px;color:#999;margin-top:1px">${tipoBadge(c.tipo_codigo||'OTRO')} &nbsp;${c.bimestre?`Bim. ${c.bimestre} &nbsp;`:''} ${c.un?`${esc(c.un)} &nbsp;`:''} ${c.codigo_redmine?`<code style="background:#f4f4f2;padding:1px 4px;border-radius:4px;font-size:10px">${esc(c.codigo_redmine)}</code>`:''}</div>
           </div>
           <span class="badge ${estadoClass(estadoCap(c)||'Programada')}" style="flex-shrink:0;margin-top:2px">${estadoLabel(estadoCap(c)||'Programada')}</span>
-        </label>`).join('')}
+        </label>`).join('');
+      })()}
     </div>
   </div>`;}
 
@@ -6860,20 +6887,40 @@ function exportPlantillaEval(){
 }
 
 // ===== LIMPIAR PLAN =====
+function cambiarFiltroLimpieza(){
+  const t=document.getElementById('limp-flt-tipo');
+  const u=document.getElementById('limp-flt-un');
+  if(t) _limpFltTipo=t.value;
+  if(u) _limpFltUN=u.value;
+  renderContent();
+}
+function toggleSelLimpieza(id,checked){
+  if(checked) _limpSel.add(id);
+  else _limpSel.delete(id);
+  actualizarContadorCaps();
+}
 function actualizarContadorCaps(){
-  const chks=[...document.querySelectorAll('.chk-cap-limpiar:checked')];
-  const n=chks.length;
+  // El contador refleja el total real seleccionado (aunque estén ocultos por filtros)
+  const n=_limpSel.size;
   const btn=document.getElementById('btn-borrar-seleccionadas');
   const lbl=document.getElementById('lbl-cant-sel');
   if(btn)btn.style.display=n>0?'':'none';
   if(lbl)lbl.textContent=n;
 }
 function seleccionarTodasCaps(marcar){
-  document.querySelectorAll('.chk-cap-limpiar').forEach(c=>{c.checked=marcar;});
+  // Aplica solo a las capacitaciones VISIBLES según los filtros actuales
+  const visibles=caps.filter(c=>(!_limpFltTipo||c.tipo_codigo===_limpFltTipo)&&(!_limpFltUN||c.un===_limpFltUN));
+  if(marcar){
+    visibles.forEach(c=>_limpSel.add(c.id));
+  } else {
+    // Deseleccionar todas: limpia toda la selección
+    _limpSel.clear();
+  }
+  document.querySelectorAll('.chk-cap-limpiar').forEach(c=>{c.checked=_limpSel.has(Number(c.value));});
   actualizarContadorCaps();
 }
 async function borrarCapsSeleccionadas(){
-  const ids=[...document.querySelectorAll('.chk-cap-limpiar:checked')].map(c=>Number(c.value));
+  const ids=[..._limpSel];
   if(!ids.length){toast('No hay capacitaciones seleccionadas');return;}
   const n=ids.length;
   if(!confirm('Seguro queres eliminar '+n+' capacitaci\xf3n'+(n>1?'es':'')+'?\n\nSe borrar\xe1n tambi\xe9n sus asistentes, materiales y evaluaciones. Esta acci\xf3n no se puede deshacer.')) return;
@@ -6896,6 +6943,7 @@ async function borrarCapsSeleccionadas(){
       materiales=materiales.filter(m=>m.capacitacion_id!==id);
       evaluaciones=evaluaciones.filter(e=>e.capacitacion_id!==id);
       preguntas=preguntas.filter(p=>!evs.find(e=>e.id===p.evaluacion_id));
+      _limpSel.delete(id);
       ok++;
     }catch(e){err++;console.error('Error borrando cap',id,e);}
   }
@@ -7168,6 +7216,10 @@ setInterval(()=>{
   if(modal&&modal.classList.contains('open')) return;
   // No recargar si se acaba de eliminar un participante
   if(window._suppressReload&&Date.now()<window._suppressReload) return;
+  // No recargar en pestañas de trabajo donde el rerender interrumpe: Config (limpieza de plan,
+  // texto de WhatsApp) y Padrón (edición de contactos, scroll horizontal). Ahí el auto-refresh
+  // haría perder la selección, el scroll o el foco mientras el usuario opera.
+  if(currentTab==='config'||currentTab==='padron') return;
   loadAll();
 },30000);
 

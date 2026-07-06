@@ -80,8 +80,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tipo-AMBIENTE{background:#EAF3DE;color:#27500A}
 .tipo-CALIFICACION{background:#EEEDFE;color:#3C3489}
 .tipo-INDUCCION{background:#FAEEDA;color:#854F0B}
-.tipo-IND-SST{background:#ECECEC;color:#111111}
-.tipo-TEC-CAMPO{background:#E0F3F5;color:#0E7C86}
 .tipo-OTRO{background:#f4f4f2;color:#555}
 .chip-global{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#EAF3DE;color:#27500A;border:1px solid #b5d98b}
 /* CARDS */
@@ -859,9 +857,7 @@ function sFill(estado,pct){
 
 function tipoBadge(codigo){
   const t=getTipo(codigo);
-  // El código puede tener punto (IND.SST, TEC.CAMPO) que no es válido en clase CSS: se reemplaza por guion
-  const cls=String(codigo||'OTRO').replace(/[^A-Za-z0-9_-]/g,'-');
-  return`<span class="tipo-badge tipo-${cls}">${t.codigo}</span>`;
+  return`<span class="tipo-badge tipo-${codigo||'OTRO'}">${t.codigo}</span>`;
 }
 
 // Alias para uso en cards/listados
@@ -2428,6 +2424,8 @@ function renderConfig(){
     <p style="font-size:11px;color:#888;margin-top:4px">Pone <strong>participantes_esperados = 0</strong> en todas las capacitaciones de tipo INDUCCIÓN para que la meta se calcule dinámicamente desde el padrón (fecha de antigüedad).</p>
     <button class="btn-sm" style="margin-top:6px;background:#854F0B;color:#fff;border-color:#854F0B" onclick="sincronizarInduccion()">👥 Sincronizar posibles/faltantes de INDUCCION</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Agrega automáticamente como posibles y faltantes a los empleados del padrón cuya <strong>Fecha cálculo antigüedad</strong> coincida con el mes/año de cada capacitación de tipo INDUCCION.</p>
+    <button class="btn-sm" style="margin-top:6px;background:#3C3489;color:#fff;border-color:#3C3489" onclick="sincronizarEvaluacionesDesdeRespuestas()">🔄 Sincronizar evaluaciones con padrón</button>
+    <p style="font-size:11px;color:#888;margin-top:4px">Busca en las respuestas de evaluación a los que rindieron pero <strong>no aparecen en la lista</strong> (porque no estaban en el padrón al momento de rendir) y les carga la <strong>nota y la fecha de evaluación</strong>. Corré esto después de actualizar el padrón. Es seguro: nunca pisa notas ya cargadas ni borra respuestas.</p>
     <div style="margin-top:14px;background:#F0FBF7;border:1px solid #1D9E75;border-radius:8px;padding:10px 12px">
       <div style="font-size:12px;font-weight:600;color:#085041;margin-bottom:6px">🗄️ SQL requerido en Supabase — Nuevas columnas</div>
       <p style="font-size:11px;color:#555;margin-bottom:8px">Ejecutar una sola vez en el <strong>SQL Editor</strong> de Supabase para habilitar "Lista cerrada" y multi-departamento:</p>
@@ -4580,6 +4578,176 @@ async function sincronizarInduccion(){
   alert(msg);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// sincronizarEvaluacionesDesdeRespuestas
+// Reconcilia respuestas_evaluacion → asistentes.
+// Caso de uso: un candidato rindió la evaluación pero NO estaba en el
+// padrón (o el registro en asistentes falló silenciosamente), por lo que
+// su resultado no aparece en la lista de la capacitación. Esta función
+// recorre TODAS las respuestas, y para cada legajo que aprobó:
+//   • si NO está en asistentes de esa cap → lo crea con nota/fecha/UN/sector
+//   • si YA está pero le falta nota o fecha_evaluacion → completa esos campos
+// Es IDEMPOTENTE (se puede correr N veces sin duplicar) y NUNCA pisa una
+// nota ya cargada manualmente ni borra respuestas.
+// ═══════════════════════════════════════════════════════════════════
+async function sincronizarEvaluacionesDesdeRespuestas(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+
+  setSyncStatus('syncing');
+  toast('Leyendo respuestas de evaluación...',15000);
+
+  // 1) Traer TODAS las respuestas con paginación (evita el corte de 1000 filas)
+  let respuestas=[];
+  try{
+    let offset=0;
+    while(true){
+      const lote=await api('GET','respuestas_evaluacion','',`?order=id.asc&limit=1000&offset=${offset}&select=id,evaluacion_id,legajo,nombre,puntaje,created_at`);
+      if(!lote||!lote.length) break;
+      respuestas=respuestas.concat(lote);
+      if(lote.length<1000) break;
+      offset+=1000;
+    }
+  }catch(e){
+    setSyncStatus('error');
+    alert('Error al leer respuestas de evaluación:\n'+((e&&e.message)||e));
+    return;
+  }
+
+  if(!respuestas.length){
+    setSyncStatus('ok');
+    alert('No hay respuestas de evaluación registradas para sincronizar.');
+    return;
+  }
+
+  // 2) Mapa evaluacion_id → capacitación (para resolver nota_aprobacion y capId)
+  const evById=new Map(evaluaciones.map(e=>[e.id,e]));
+
+  // 3) Agrupar por (capacitacion_id + legajo), conservando la MEJOR respuesta
+  //    (mayor puntaje; ante empate, la más reciente por created_at/id).
+  //    Clave: `${capId}||${legajo}`
+  const mejores=new Map();
+  let sinEval=0; // respuestas cuya evaluación ya no existe (ej: eval borrada)
+  for(const r of respuestas){
+    const ev=evById.get(r.evaluacion_id);
+    if(!ev){sinEval++;continue;}
+    const cap=caps.find(c=>c.id===ev.capacitacion_id);
+    if(!cap){sinEval++;continue;}
+    const legajo=String(r.legajo||'').trim();
+    if(!legajo) continue;
+    const key=cap.id+'||'+legajo;
+    const prev=mejores.get(key);
+    const puntaje=r.puntaje!=null?Number(r.puntaje):null;
+    if(!prev){
+      mejores.set(key,{cap,legajo,nombre:r.nombre||'',puntaje,created_at:r.created_at||''});
+    }else{
+      const mejorPuntaje=(puntaje!=null?puntaje:-1)>(prev.puntaje!=null?prev.puntaje:-1);
+      const mismoPuntajeMasNuevo=(puntaje===prev.puntaje)&&String(r.created_at||'')>String(prev.created_at||'');
+      if(mejorPuntaje||mismoPuntajeMasNuevo){
+        prev.puntaje=puntaje;prev.created_at=r.created_at||prev.created_at;
+        if(r.nombre) prev.nombre=r.nombre;
+      }
+    }
+  }
+
+  // 4) Recorrer cada mejor-respuesta y decidir crear / actualizar
+  toast('Reconciliando con la lista de participantes...',15000);
+  let creados=0, actualizados=0, yaOk=0, errores=0;
+  let ultimoError='';
+  const detalleCreados=[];
+
+  for(const {cap,legajo,nombre,puntaje,created_at} of mejores.values()){
+    const esInd=cap.tipo_codigo==='INDUCCION';
+    const notaAprob=cap.nota_aprobacion||(esInd?60:6);
+    const aprobado=puntaje!=null&&puntaje>=notaAprob;
+
+    // Fecha de evaluación: preferimos created_at de la respuesta (YYYY-MM-DD)
+    let fechaEval=null;
+    if(created_at){
+      const d=new Date(created_at);
+      if(!isNaN(d.getTime())) fechaEval=d.toISOString().slice(0,10);
+    }
+
+    // ¿Ya existe este legajo como asistente de esta cap? (en memoria local)
+    const asisLocal=asistentes.find(a=>a.capacitacion_id===cap.id&&String(a.legajo)===legajo);
+
+    // Datos de contacto/organización desde el padrón (si ahora existe)
+    const emp=padron.find(p=>String(p.legajo)===legajo);
+    const unPad=emp?(emp.un||''):'';
+    const sectorPad=emp?(emp.sector||''):'';
+    const deptoPad=emp?(emp.departamento||emp.datos_extra?.Departamento||''):'';
+    const cuilPad=emp?(emp.cuil||''):'';
+    const nombrePad=emp?(emp.nombre||nombre):nombre;
+
+    try{
+      if(!asisLocal){
+        // CREAR: no estaba en la lista → lo agregamos con su resultado
+        const reg={
+          capacitacion_id:cap.id,
+          legajo,
+          nombre:nombrePad||nombre||legajo,
+          un:unPad,
+          sector:sectorPad,
+          departamento:deptoPad||null,
+          cuil:cuilPad||null,
+          completo:aprobado,
+          nota:puntaje,
+          fecha_evaluacion:fechaEval,
+          en_meta:emp?true:false  // si vino del padrón cuenta en meta; si es externo, no
+        };
+        const ins=await api('POST','asistentes',reg,'');
+        if(Array.isArray(ins)&&ins.length) asistentes.push(ins[0]);
+        else if(ins&&ins.id) asistentes.push(ins);
+        creados++;
+        detalleCreados.push(`• ${cap.codigo_redmine||'#'+cap.id} — ${legajo} ${nombrePad||nombre} (${puntaje!=null?puntaje:'—'})`);
+      }else{
+        // YA EXISTE: solo completar lo que falte, sin pisar datos manuales.
+        const patch={};
+        if(asisLocal.nota==null&&puntaje!=null) patch.nota=puntaje;
+        if(!asisLocal.fecha_evaluacion&&fechaEval) patch.fecha_evaluacion=fechaEval;
+        // Si aprobó y el asistente figura como no completo pero tampoco tenía nota previa,
+        // marcarlo completo. (No tocamos si ya tenía nota cargada distinta.)
+        if(aprobado&&!asisLocal.completo&&asisLocal.nota==null) patch.completo=true;
+        // Completar CUIL/UN/sector si están vacíos y el padrón los tiene
+        if(!asisLocal.cuil&&cuilPad) patch.cuil=cuilPad;
+        if((!asisLocal.un||asisLocal.un==='')&&unPad) patch.un=unPad;
+        if((!asisLocal.sector||asisLocal.sector==='')&&sectorPad) patch.sector=sectorPad;
+        if((!asisLocal.departamento||asisLocal.departamento==='')&&deptoPad) patch.departamento=deptoPad;
+
+        if(Object.keys(patch).length){
+          await api('PATCH','asistentes',patch,`?id=eq.${asisLocal.id}`);
+          Object.assign(asisLocal,patch);
+          actualizados++;
+        }else{
+          yaOk++;
+        }
+      }
+    }catch(e){
+      errores++;
+      ultimoError=(e&&e.message)||String(e);
+      console.warn('Error sincronizando eval legajo',legajo,'cap',cap.id,e);
+    }
+  }
+
+  await loadAll();
+  setSyncStatus(errores?'error':'ok');
+  renderContent();
+
+  // 5) Reporte
+  let msg=`Sincronización de evaluaciones completada.\n\n`
+    +`• Participantes creados (no estaban en la lista): ${creados}\n`
+    +`• Participantes actualizados (se completó nota/fecha): ${actualizados}\n`
+    +`• Ya estaban correctos: ${yaOk}`;
+  if(sinEval) msg+=`\n• Respuestas sin evaluación/cap asociada (ignoradas): ${sinEval}`;
+  if(errores) msg+=`\n• Errores: ${errores}\n\nÚltimo error:\n${ultimoError}`;
+  if(detalleCreados.length){
+    const muestra=detalleCreados.slice(0,20).join('\n');
+    msg+=`\n\nCreados:\n${muestra}`;
+    if(detalleCreados.length>20) msg+=`\n… y ${detalleCreados.length-20} más.`;
+  }
+  alert(msg);
+  toast(`Eval sincronizadas: ${creados} creados, ${actualizados} actualizados`);
+}
+
 async function sincronizarEsperados(){
   if(!isAdmin()){toast('Sin permisos');return;}
   if(!confirm('¿Sincronizar participantes esperados de todas las capacitaciones con el total real de asistentes?')) return;
@@ -6167,19 +6335,8 @@ function renderGantt(){
   const year=new Date().getFullYear();
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const statusColors={'Realizada':'#1D9E75','En curso':'#EF9F27','Programada':'#85B7EB','Vencida':'#E24B4A'};
-  // Color por tipo de capacitación (barras del Gantt), tomando el color fuerte de cada chip.
-  // Los códigos con punto (IND.SST, TEC.CAMPO) también se contemplan.
-  const tipoColors={
-    'REMO':'#185FA5',
-    'SST':'#A32D2D',
-    'SALUD':'#085041',
-    'AMBIENTE':'#27500A',
-    'CALIFICACION':'#3C3489',
-    'INDUCCION':'#C77F1A',
-    'IND.SST':'#111111',
-    'TEC.CAMPO':'#0E7C86',
-    'OTRO':'#7A7A7A'
-  };
+  // Color por tipo de capacitación (barras del Gantt). Versión sólida de los chips de tipo.
+  const tipoColors={REMO:'#185FA5',SST:'#C0392B',SALUD:'#0E7A5F',AMBIENTE:'#4B7A1E',CALIFICACION:'#5B4FC4',INDUCCION:'#C77F1A',OTRO:'#7A7A7A'};
   const colorDeTipo=c=>tipoColors[c&&c.tipo_codigo]||tipoColors.OTRO;
   const colW=62;
   const labelW=200;
@@ -6268,11 +6425,8 @@ function renderGantt(){
 
   // Leyenda: colores por TIPO (solo los presentes) + indicadores de estado
   const tiposPresentes=[...new Set(getFiltered().map(c=>c.tipo_codigo||'OTRO'))];
-  const ordenTipos=['REMO','SST','IND.SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','TEC.CAMPO','OTRO'];
-  tiposPresentes.sort((a,b)=>{
-    const ia=ordenTipos.indexOf(a),ib=ordenTipos.indexOf(b);
-    return (ia<0?99:ia)-(ib<0?99:ib);
-  });
+  const ordenTipos=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
+  tiposPresentes.sort((a,b)=>ordenTipos.indexOf(a)-ordenTipos.indexOf(b));
   const leyendaTipos=tiposPresentes.map(tc=>{
     const nom=(getTipo(tc)||{}).nombre||tc;
     return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:${tipoColors[tc]||tipoColors.OTRO};display:inline-block"></span>${esc(nom)}</span>`;

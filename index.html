@@ -6140,14 +6140,13 @@ function renderGantt(){
   const colW=62;
   const labelW=200;
 
-  // Agrupar por UN → Departamento (respeta filtros activos)
+  // Agrupar solo por UN (sin subdividir por departamento, para no separar capacitaciones
+  // del mismo bimestre que tengan cargado un departamento/área distinto). Respeta filtros.
   const grupos={};
   getFiltered().forEach(cap=>{
     const un=cap.un||'(Sin UN)';
-    const dep=cap.departamento||cap.area||'(General)';
-    if(!grupos[un]) grupos[un]={};
-    if(!grupos[un][dep]) grupos[un][dep]=[];
-    grupos[un][dep].push(cap);
+    if(!grupos[un]) grupos[un]=[];
+    grupos[un].push(cap);
   });
 
   const mesHeaders=meses.map((m,i)=>{
@@ -6159,10 +6158,35 @@ function renderGantt(){
   let rows='';
   Object.keys(grupos).sort().forEach(un=>{
     rows+=`<tr style="background:#EAF0FC"><td style="padding:5px 10px;font-size:11px;font-weight:700;color:#1A2F6E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #d0ddf0;position:sticky;left:0;z-index:1;background:#EAF0FC">📁 ${esc(un)}</td>${meses.map(()=>`<td style="background:#EAF0FC;border-right:1px solid #d8e5f4;border-bottom:1px solid #d0ddf0"></td>`).join('')}</tr>`;
-    Object.keys(grupos[un]).sort().forEach(dep=>{
-      const capsDepto=grupos[un][dep];
-      rows+=`<tr style="background:#F4F7FF"><td style="padding:3px 10px 3px 20px;font-size:10px;font-weight:600;color:#3A5A9E;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #e5eaf8;position:sticky;left:0;z-index:1;background:#F4F7FF">${esc(dep)}</td>${meses.map(()=>`<td style="background:#F4F7FF;border-right:1px solid #eaeef8;border-bottom:1px solid #e5eaf8"></td>`).join('')}</tr>`;
-      capsDepto.forEach(cap=>{
+    const capsUN=grupos[un];
+      // Ordenar por el número de bimestre que figura en el título (1°, 2°, 3°...),
+      // como criterio principal; a igualdad, por fecha de inicio y luego por título.
+      // Detecta "1° Bimestre", "2° Bimestre", "1er Bimestre", "Bimestre 3", etc.
+      const bimDelTitulo=t=>{
+        if(!t) return 99;
+        const s=String(t);
+        let m=s.match(/(\d+)\s*(?:°|º|er|do|ro|to|vo)?\s*bimestre/i);
+        if(m) return parseInt(m[1],10);
+        m=s.match(/bimestre\s*(\d+)/i);
+        if(m) return parseInt(m[1],10);
+        return 99;
+      };
+      const fnumG=c=>{
+        if(!c.fecha) return 99999999;
+        const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(c.fecha);
+        if(iso) return parseInt(iso[1]+iso[2]+iso[3],10);
+        const dmy=/^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(c.fecha);
+        if(dmy) return parseInt(dmy[3]+dmy[2].padStart(2,'0')+dmy[1].padStart(2,'0'),10);
+        return 99999999;
+      };
+      capsUN.sort((a,b)=>{
+        const db=bimDelTitulo(a.titulo)-bimDelTitulo(b.titulo);
+        if(db!==0) return db;
+        const df=fnumG(a)-fnumG(b);
+        if(df!==0) return df;
+        return String(a.titulo||'').localeCompare(String(b.titulo||''));
+      });
+      capsUN.forEach(cap=>{
         const estado=estadoCap(cap);
         const color=statusColors[estado]||'#bbb';
         // Calcular % cumplimiento usando métricas centralizadas
@@ -6190,7 +6214,6 @@ function renderGantt(){
         }).join('');
         rows+=`<tr><td style="padding:2px 10px 2px 28px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #f0f3fb;cursor:pointer;position:sticky;left:0;z-index:1;background:#fff" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>${esc(cap.titulo)}</td>${celdas}</tr>`;
       });
-    });
   });
 
   if(!rows) rows=`<tr><td colspan="13" style="text-align:center;padding:30px;color:#aaa;font-size:12px">Sin capacitaciones cargadas</td></tr>`;

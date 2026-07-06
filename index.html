@@ -2677,12 +2677,11 @@ function buildDetail(id,resetScroll){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const colAntig=esInduccion?'<th style="width:78px">F. Antigüedad</th>':'';
+  const colAntig='<th style="width:78px">F. Antigüedad</th>';
   const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
 
-  // Mapa legajo → fecha_calculo_antiguedad del padrón (para INDUCCIÓN)
+  // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
-    if(!esInduccion) return '';
     const emp=padron.find(p=>String(p.legajo)===String(legajo));
     return emp?(emp.fecha_calculo_antiguedad||''):'';
   }
@@ -2694,7 +2693,7 @@ function buildDetail(id,resetScroll){
     const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
     const _fAntig=getFechaAntiguedad(x.legajo);
-    const antigCell=esInduccion?`<td style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`:'';
+    const antigCell=`<td style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`;
     if(esFaltantePadron){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
@@ -6164,6 +6163,9 @@ function renderGantt(){
   const year=new Date().getFullYear();
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const statusColors={'Realizada':'#1D9E75','En curso':'#EF9F27','Programada':'#85B7EB','Vencida':'#E24B4A'};
+  // Color por tipo de capacitación (barras del Gantt). Versión sólida de los chips de tipo.
+  const tipoColors={REMO:'#185FA5',SST:'#C0392B',SALUD:'#0E7A5F',AMBIENTE:'#4B7A1E',CALIFICACION:'#5B4FC4',INDUCCION:'#C77F1A',OTRO:'#7A7A7A'};
+  const colorDeTipo=c=>tipoColors[c&&c.tipo_codigo]||tipoColors.OTRO;
   const colW=62;
   const labelW=200;
 
@@ -6215,7 +6217,10 @@ function renderGantt(){
       });
       capsUN.forEach(cap=>{
         const estado=estadoCap(cap);
-        const color=statusColors[estado]||'#bbb';
+        const color=colorDeTipo(cap); // color por TIPO de capacitación
+        // El estado se refleja con la opacidad/estilo de la barra (realizada=sólida, resto=más tenue)
+        const opac=estado==='Realizada'?1:(estado==='Vencida'?0.92:(estado==='En curso'?0.85:0.55));
+        const barExtra=estado==='Programada'?'border:1.5px dashed rgba(255,255,255,0.7);':(estado==='Vencida'?'box-shadow:inset 0 0 0 2px #E24B4A;':'');
         // Calcular % cumplimiento usando métricas centralizadas
         const _mg=metricas(cap);
         const esp=_mg.esperados;
@@ -6227,6 +6232,7 @@ function renderGantt(){
         if(cap.fecha){const ps=cap.fecha.split('-');if(parseInt(ps[0])===year){mesStart=parseInt(ps[1])-1;mesEnd=mesStart;}}
         if(ff){const pe=ff.split('-');if(parseInt(pe[0])===year) mesEnd=parseInt(pe[1])-1;}
         if(mesStart<0&&mesEnd>=0) mesStart=mesEnd;
+        const _tipoNom=(getTipo(cap.tipo_codigo)||{}).nombre||cap.tipo_codigo||'Otro';
         const celdas=meses.map((_,i)=>{
           const alt=(i%2===0)?'#FAFBFF':'#fff';
           const bdr='border-right:1px solid #edf0f8;border-bottom:1px solid #f0f3fb';
@@ -6235,17 +6241,29 @@ function renderGantt(){
             const br=`border-radius:${iF?'4px':'0'} ${iL?'4px 4px':'0 0'} ${iF?'4px':'0'}`;
             // En la celda de cruce mostramos el % de cumplimiento (no el nombre)
             const labelInBar=iF?pctLabel:'';
-            return `<td style="${bdr};padding:2px 1px;background:${alt}"><div title="${esc(cap.titulo)} — ${esc(estado)} — ${pctLabel}" onclick="openDetail(${cap.id})" style="background:${color};${br};padding:2px 4px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:${colW-4}px;font-weight:700;line-height:1.4;text-align:center;min-height:18px;display:flex;align-items:center;justify-content:center">${labelInBar}</div></td>`;
+            return `<td style="${bdr};padding:2px 1px;background:${alt}"><div title="${esc(cap.titulo)} — ${esc(_tipoNom)} — ${esc(estado)} — ${pctLabel}" onclick="openDetail(${cap.id})" style="background:${color};opacity:${opac};${barExtra}${br};padding:2px 4px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:${colW-4}px;font-weight:700;line-height:1.4;text-align:center;min-height:18px;display:flex;align-items:center;justify-content:center">${labelInBar}</div></td>`;
           }
           return `<td style="${bdr};background:${alt}"></td>`;
         }).join('');
-        rows+=`<tr><td style="padding:2px 10px 2px 28px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #f0f3fb;cursor:pointer;position:sticky;left:0;z-index:1;background:#fff" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>${esc(cap.titulo)}</td>${celdas}</tr>`;
+        rows+=`<tr><td style="padding:2px 10px 2px 28px;font-size:10px;color:#444;white-space:nowrap;min-width:${labelW}px;max-width:${labelW}px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #c8d5ee;border-bottom:1px solid #f0f3fb;cursor:pointer;position:sticky;left:0;z-index:1;background:#fff" onclick="openDetail(${cap.id})" title="${esc(cap.titulo)} — ${esc(_tipoNom)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>${esc(cap.titulo)}</td>${celdas}</tr>`;
       });
   });
 
   if(!rows) rows=`<tr><td colspan="13" style="text-align:center;padding:30px;color:#aaa;font-size:12px">Sin capacitaciones cargadas</td></tr>`;
 
-  const leyenda=Object.entries(statusColors).map(([k,v])=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#555"><span style="width:10px;height:10px;border-radius:3px;background:${v};display:inline-block"></span>${k}</span>`).join('');
+  // Leyenda: colores por TIPO (solo los presentes) + indicadores de estado
+  const tiposPresentes=[...new Set(getFiltered().map(c=>c.tipo_codigo||'OTRO'))];
+  const ordenTipos=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
+  tiposPresentes.sort((a,b)=>ordenTipos.indexOf(a)-ordenTipos.indexOf(b));
+  const leyendaTipos=tiposPresentes.map(tc=>{
+    const nom=(getTipo(tc)||{}).nombre||tc;
+    return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:${tipoColors[tc]||tipoColors.OTRO};display:inline-block"></span>${esc(nom)}</span>`;
+  }).join('');
+  const leyendaEstados='<span style="font-size:10px;color:#999;margin-left:4px">Estado:</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:#7A7A7A;display:inline-block"></span>Realizada</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:#7A7A7A;opacity:0.55;display:inline-block"></span>Programada</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:#7A7A7A;box-shadow:inset 0 0 0 2px #E24B4A;display:inline-block"></span>Vencida</span>';
+  const leyenda=leyendaTipos+'<span style="width:1px;height:14px;background:#ddd;display:inline-block;margin:0 4px"></span>'+leyendaEstados;
 
   return `<div style="padding:10px 14px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">

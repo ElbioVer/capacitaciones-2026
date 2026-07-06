@@ -80,6 +80,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tipo-AMBIENTE{background:#EAF3DE;color:#27500A}
 .tipo-CALIFICACION{background:#EEEDFE;color:#3C3489}
 .tipo-INDUCCION{background:#FAEEDA;color:#854F0B}
+.tipo-IND-SST{background:#ECECEC;color:#111111}
+.tipo-TEC-CAMPO{background:#E0F3F5;color:#0E7C86}
 .tipo-OTRO{background:#f4f4f2;color:#555}
 .chip-global{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#EAF3DE;color:#27500A;border:1px solid #b5d98b}
 /* CARDS */
@@ -857,7 +859,9 @@ function sFill(estado,pct){
 
 function tipoBadge(codigo){
   const t=getTipo(codigo);
-  return`<span class="tipo-badge tipo-${codigo||'OTRO'}">${t.codigo}</span>`;
+  // El código puede tener punto (IND.SST, TEC.CAMPO) que no es válido en clase CSS: se reemplaza por guion
+  const cls=String(codigo||'OTRO').replace(/[^A-Za-z0-9_-]/g,'-');
+  return`<span class="tipo-badge tipo-${cls}">${t.codigo}</span>`;
 }
 
 // Alias para uso en cards/listados
@@ -6163,8 +6167,19 @@ function renderGantt(){
   const year=new Date().getFullYear();
   const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const statusColors={'Realizada':'#1D9E75','En curso':'#EF9F27','Programada':'#85B7EB','Vencida':'#E24B4A'};
-  // Color por tipo de capacitación (barras del Gantt). Versión sólida de los chips de tipo.
-  const tipoColors={REMO:'#185FA5',SST:'#C0392B',SALUD:'#0E7A5F',AMBIENTE:'#4B7A1E',CALIFICACION:'#5B4FC4',INDUCCION:'#C77F1A',OTRO:'#7A7A7A'};
+  // Color por tipo de capacitación (barras del Gantt), tomando el color fuerte de cada chip.
+  // Los códigos con punto (IND.SST, TEC.CAMPO) también se contemplan.
+  const tipoColors={
+    'REMO':'#185FA5',
+    'SST':'#A32D2D',
+    'SALUD':'#085041',
+    'AMBIENTE':'#27500A',
+    'CALIFICACION':'#3C3489',
+    'INDUCCION':'#C77F1A',
+    'IND.SST':'#111111',
+    'TEC.CAMPO':'#0E7C86',
+    'OTRO':'#7A7A7A'
+  };
   const colorDeTipo=c=>tipoColors[c&&c.tipo_codigo]||tipoColors.OTRO;
   const colW=62;
   const labelW=200;
@@ -6253,8 +6268,11 @@ function renderGantt(){
 
   // Leyenda: colores por TIPO (solo los presentes) + indicadores de estado
   const tiposPresentes=[...new Set(getFiltered().map(c=>c.tipo_codigo||'OTRO'))];
-  const ordenTipos=['REMO','SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','OTRO'];
-  tiposPresentes.sort((a,b)=>ordenTipos.indexOf(a)-ordenTipos.indexOf(b));
+  const ordenTipos=['REMO','SST','IND.SST','SALUD','AMBIENTE','CALIFICACION','INDUCCION','TEC.CAMPO','OTRO'];
+  tiposPresentes.sort((a,b)=>{
+    const ia=ordenTipos.indexOf(a),ib=ordenTipos.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
   const leyendaTipos=tiposPresentes.map(tc=>{
     const nom=(getTipo(tc)||{}).nombre||tc;
     return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#555"><span style="width:12px;height:12px;border-radius:3px;background:${tipoColors[tc]||tipoColors.OTRO};display:inline-block"></span>${esc(nom)}</span>`;

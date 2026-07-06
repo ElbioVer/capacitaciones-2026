@@ -146,6 +146,7 @@ select.form-input{cursor:pointer}
   .legajo-table td,.legajo-table th{padding:4px 5px;font-size:10px}
 }
 .del-btn{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:0;line-height:1}
+.ver-resp-btn:hover{opacity:1 !important}
 .del-btn:hover{color:#A32D2D}
 .nota-chip{display:inline-block;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:600}
 .nota-ok{background:#E1F5EE;color:#085041}
@@ -2691,6 +2692,11 @@ function buildDetail(id,resetScroll){
   function buildRow(x, esFaltantePadron=false, index=null){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
+    // Celda de nota CON botón 👁 para ver el detalle de respuestas (solo si rindió)
+    const verBtn=(hasNota&&x.nota!=null&&!esFaltantePadron)
+      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;vertical-align:middle;opacity:.7">👁</button>`
+      :'';
+    const notaCellVer=hasNota?`<td style="white-space:nowrap">${notaHtml}${verBtn}</td>`:'';
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     const fechaEvalCell=`<td class="col-fevaluac" data-sortkey="${x.fecha_evaluacion||''}" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
@@ -2708,7 +2714,7 @@ function buildDetail(id,resetScroll){
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
     const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
-    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCell}${fechaEvalCell}${delCell}</tr>`;
+    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCellVer}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view
@@ -4028,6 +4034,126 @@ async function exportRespuestas(capId){
   }catch(e){toast('Error al generar reporte');console.error(e);}
 }
 
+// ===== VISUALIZADOR RÁPIDO DE RESPUESTAS DE UN PARTICIPANTE =====
+// Muestra, en un modal de solo lectura, las preguntas que contestó la persona:
+// qué marcó, cuál era la correcta y un ✓/✗ por pregunta. No modifica nada.
+async function verRespuestasParticipante(capId, legajo){
+  const c=caps.find(x=>x.id===capId);if(!c)return;
+  legajo=String(legajo);
+  const esInd=c.tipo_codigo==='INDUCCION';
+  toast('Buscando respuestas...');
+
+  // Resolver evaluación a consultar. Para no-INDUCCION es la eval de la cap.
+  // Para INDUCCION, como se rinde una eval genérica, buscamos la respuesta del
+  // legajo en la eval de esta cap y, si no aparece, en cualquier eval de
+  // inducción (el resultado es el mismo examen).
+  let resp=null, evUsada=null;
+  const evCap=getEval(capId);
+  try{
+    if(evCap){
+      const rr=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+evCap.id+'&legajo=eq.'+encodeURIComponent(legajo)+'&select=*&order=id.desc');
+      if(rr&&rr.length){resp=rr[0];evUsada=evCap;}
+    }
+    if(!resp&&esInd){
+      // Buscar en todas las evaluaciones de capacitaciones de INDUCCION
+      const capsIndIds=caps.filter(x=>x.tipo_codigo==='INDUCCION').map(x=>x.id);
+      const evsInd=evaluaciones.filter(e=>capsIndIds.includes(e.capacitacion_id));
+      for(const e of evsInd){
+        const rr=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+e.id+'&legajo=eq.'+encodeURIComponent(legajo)+'&select=*&order=id.desc');
+        if(rr&&rr.length){resp=rr[0];evUsada=e;break;}
+      }
+    }
+  }catch(err){toast('Error al cargar respuestas');console.warn(err);return;}
+
+  if(!resp||!evUsada){
+    showModal(`<div class="modal-handle"></div>
+      <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:6px">👁 Respuestas del participante</div>
+      <div style="font-size:12px;color:#555;margin-bottom:10px">Legajo ${esc(legajo)} — ${esc(c.titulo)}</div>
+      <div style="background:#f4f4f2;border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#888">No se encontraron respuestas registradas para este participante.</div>
+      <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+    return;
+  }
+
+  // Preguntas de la evaluación usada
+  const pqs=preguntas.filter(p=>p.evaluacion_id===evUsada.id);
+  const respObj=resp.respuestas||{};
+  const letras=['A','B','C','D','E','F'];
+  const nota_aprobacion=c.nota_aprobacion||(esInd?60:6);
+
+  // Normaliza opciones: soporta array p.opciones o columnas opcion_a..opcion_d
+  const getOpts=(p)=>{
+    if(Array.isArray(p.opciones)&&p.opciones.length) return p.opciones;
+    return [p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d].filter(o=>o!=null&&o!=='');
+  };
+
+  let correctasCount=0;
+  const filas=pqs.map((p,i)=>{
+    const opts=getOpts(p);
+    const raw=respObj[p.id];
+    const sel=raw==null?[]:(Array.isArray(raw)?raw.map(Number):[Number(raw)]);
+    const correctas=getPqCorrectas(p);
+    const peso=getPqPeso(p);
+    const puntos=calcPuntosPregunta(p,sel);
+    const bien=puntos>=peso;
+    const parcial=puntos>0&&puntos<peso;
+    if(bien) correctasCount++;
+    // Marca por opción: correcta (verde), elegida-mal (roja), elegida-bien (verde fuerte)
+    const optsHtml=opts.map((o,j)=>{
+      const esCorrecta=correctas.includes(j);
+      const fueElegida=sel.includes(j);
+      let bg='',border='#e5e5e0',icon='';
+      if(esCorrecta&&fueElegida){bg='#E1F5EE';border='#1D9E75';icon='✓ ';}
+      else if(esCorrecta&&!fueElegida){bg='#F0FBF7';border='#9FE1CB';icon='◦ ';}
+      else if(!esCorrecta&&fueElegida){bg='#FCEBEB';border='#E24B4A';icon='✗ ';}
+      return `<div style="display:flex;gap:6px;align-items:flex-start;padding:5px 8px;margin:3px 0;background:${bg||'#fafafa'};border:1px solid ${border};border-radius:6px;font-size:11px">
+        <span style="font-weight:700;color:#555;min-width:16px">${letras[j]||j+1}.</span>
+        <span style="flex:1;color:#333">${esc(o)}</span>
+        <span style="font-weight:700">${icon}</span>
+      </div>`;
+    }).join('');
+    const estadoBadge=bien
+      ?'<span style="font-size:10px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:2px 8px;border-radius:99px">✓ Correcta</span>'
+      :(parcial?'<span style="font-size:10px;font-weight:700;color:#854F0B;background:#FAEEDA;padding:2px 8px;border-radius:99px">Parcial</span>'
+      :'<span style="font-size:10px;font-weight:700;color:#A32D2D;background:#FCEBEB;padding:2px 8px;border-radius:99px">✗ Incorrecta</span>');
+    return `<div style="border:1px solid #e5e5e0;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:#1A2F6E">Pregunta ${i+1} de ${pqs.length}${peso!==1?` · Peso ${peso}`:''}</div>
+        ${estadoBadge}
+      </div>
+      <div style="font-size:12px;color:#222;margin-bottom:6px">${esc(p.pregunta||'')}</div>
+      ${optsHtml}
+    </div>`;
+  }).join('');
+
+  // Fecha en que rindió
+  let fechaTxt='—';
+  if(resp.created_at){
+    const d=new Date(resp.created_at);
+    fechaTxt=('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  }
+  const puntaje=resp.puntaje!=null?resp.puntaje:null;
+  const escala=esInd?100:10;
+  const aprobado=puntaje!=null&&puntaje>=nota_aprobacion;
+  const notaColor=aprobado?'#0F6E56':'#A32D2D';
+  const leyenda=`<div style="font-size:10px;color:#888;margin:8px 0 12px;line-height:1.6">
+    <span style="color:#0F6E56">✓ = correcta elegida</span> · 
+    <span style="color:#5DCAA5">◦ = correcta no elegida</span> · 
+    <span style="color:#A32D2D">✗ = elegida incorrecta</span></div>`;
+
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:4px">👁 Respuestas de ${esc(resp.nombre||('Legajo '+legajo))}</div>
+    <div style="font-size:12px;color:#555;margin-bottom:2px">${esc(c.titulo)}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:#666;margin-bottom:8px">
+      <span>Legajo <strong>${esc(legajo)}</strong></span>
+      <span>Rindió: <strong>${fechaTxt}</strong></span>
+      <span>Correctas: <strong>${correctasCount}/${pqs.length}</strong></span>
+      ${puntaje!=null?`<span>Nota: <strong style="color:${notaColor}">${puntaje}/${escala}</strong> ${aprobado?'✓':'✗'}</span>`:''}
+    </div>
+    ${leyenda}
+    <div style="max-height:55vh;overflow-y:auto;padding-right:4px">${filas||'<div style="font-size:12px;color:#888;text-align:center;padding:14px">Esta evaluación no tiene preguntas cargadas.</div>'}</div>
+    <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+}
+
 // ===== GESTIÓN DE RESPUESTAS DE EVALUACIÓN (mover / eliminar definitivo) =====
 async function gestionarRespuestas(capId){
   if(!isAdmin())return;
@@ -4723,11 +4849,16 @@ async function sincronizarEvaluacionesDesdeRespuestas(){
   let creados=0, actualizados=0, yaOk=0, errores=0;
   let ultimoError='';
   const detalleCreados=[];
+  // Para INDUCCION: registrar el capId CORRECTO de cada legajo (el mes que le
+  // corresponde por antigüedad). Se usa después para limpiar duplicados en
+  // otras inducciones — un empleado sólo puede estar en UNA inducción.
+  const indUbicado=new Map(); // legajo → capId correcto
 
   for(const {cap,legajo,nombre,puntaje,created_at} of mejores.values()){
     const esInd=cap.tipo_codigo==='INDUCCION';
     const notaAprob=cap.nota_aprobacion||(esInd?60:6);
     const aprobado=puntaje!=null&&puntaje>=notaAprob;
+    if(esInd) indUbicado.set(legajo,cap.id);
 
     // Fecha de evaluación: preferimos created_at de la respuesta (YYYY-MM-DD)
     let fechaEval=null;
@@ -4797,6 +4928,80 @@ async function sincronizarEvaluacionesDesdeRespuestas(){
     }
   }
 
+  // 4b) LIMPIEZA de duplicados de INDUCCION.
+  //     La inducción se hace UNA sola vez en la vida laboral, por lo que cada
+  //     empleado debe estar en exactamente UNA capacitación de inducción: la
+  //     del mes que coincide con su Fecha cálculo antigüedad. Si figura en otra
+  //     inducción de otro mes, ese registro sobra y se elimina.
+  //     • Con antigüedad conocida (está en indUbicado): se conserva el registro
+  //       de la cap correcta y se borran los de las demás inducciones.
+  //     • Sin antigüedad (no está en indUbicado) pero duplicado en varias
+  //       inducciones: NO se toca, solo se avisa para revisión manual.
+  //     IMPORTANTE: el borrado es real en Supabase, así que primero se DETECTA
+  //     qué sobra, se muestra un resumen y se pide CONFIRMACIÓN antes de borrar.
+  const capsIndIds=new Set(caps.filter(c=>c.tipo_codigo==='INDUCCION').map(c=>c.id));
+  let dupEliminados=0;
+  const dupSinAntig=[]; // legajos duplicados sin poder resolver (sin antigüedad)
+  const detalleEliminados=[];
+  const aBorrar=[];     // registros detectados para eliminar (pendiente de confirmar)
+
+  if(capsIndIds.size){
+    // Agrupar asistentes de inducción por legajo
+    const indPorLegajo=new Map(); // legajo → [asistentes en inducciones]
+    for(const a of asistentes){
+      if(!capsIndIds.has(a.capacitacion_id)) continue;
+      const lg=String(a.legajo);
+      if(!indPorLegajo.has(lg)) indPorLegajo.set(lg,[]);
+      indPorLegajo.get(lg).push(a);
+    }
+
+    // DETECCIÓN (sin borrar todavía)
+    for(const [lg,regs] of indPorLegajo.entries()){
+      const capCorrecta=indUbicado.get(lg);
+      if(capCorrecta!=null){
+        for(const a of regs){
+          if(a.capacitacion_id!==capCorrecta){
+            const capOtra=caps.find(c=>c.id===a.capacitacion_id);
+            const capOk=caps.find(c=>c.id===capCorrecta);
+            aBorrar.push({
+              id:a.id, legajo:lg, nombre:a.nombre||'',
+              deLabel:capOtra?(capOtra.codigo_redmine||capOtra.titulo||'#'+capOtra.id):('#'+a.capacitacion_id),
+              aLabel:capOk?(capOk.codigo_redmine||capOk.titulo||'#'+capCorrecta):('#'+capCorrecta)
+            });
+          }
+        }
+      }else if(regs.length>1){
+        dupSinAntig.push(lg);
+      }
+    }
+
+    // CONFIRMACIÓN antes de borrar
+    if(aBorrar.length){
+      const muestra=aBorrar.slice(0,25).map(x=>`• ${x.legajo} ${x.nombre} — sacar de ${x.deLabel} (queda en ${x.aLabel})`).join('\n');
+      const extra=aBorrar.length>25?`\n… y ${aBorrar.length-25} más.`:'';
+      const ok=confirm(
+        `Se detectaron ${aBorrar.length} registro(s) de INDUCCIÓN en un mes que NO corresponde según la antigüedad.\n\n`
+        +`Como la inducción se hace una sola vez, estos registros se van a ELIMINAR de la base de datos (el empleado queda solo en el mes correcto, con su fecha de evaluación):\n\n`
+        +muestra+extra
+        +`\n\n¿Confirmás la eliminación?`
+      );
+      if(ok){
+        for(const x of aBorrar){
+          try{
+            await api('DELETE','asistentes','',`?id=eq.${x.id}`);
+            asistentes=asistentes.filter(a=>a.id!==x.id);
+            dupEliminados++;
+            detalleEliminados.push(`• ${x.legajo} ${x.nombre} — sacado de ${x.deLabel}`);
+          }catch(e){
+            errores++;
+            ultimoError=(e&&e.message)||String(e);
+            console.warn('Error eliminando duplicado inducción legajo',x.legajo,'id',x.id,e);
+          }
+        }
+      }
+    }
+  }
+
   await loadAll();
   setSyncStatus(errores?'error':'ok');
   renderContent();
@@ -4806,13 +5011,24 @@ async function sincronizarEvaluacionesDesdeRespuestas(){
     +`• Participantes creados (no estaban en la lista): ${creados}\n`
     +`• Participantes actualizados (se completó nota/fecha): ${actualizados}\n`
     +`• Ya estaban correctos: ${yaOk}`;
+  if(dupEliminados) msg+=`\n• Duplicados de INDUCCIÓN eliminados (movidos al mes correcto): ${dupEliminados}`;
   if(sinEval) msg+=`\n• Respuestas sin evaluación/cap asociada (ignoradas): ${sinEval}`;
   if(indSinMes) msg+=`\n• Inducciones sin ubicar (sin antigüedad en padrón o sin inducción cargada para ese mes): ${indSinMes}`;
   if(errores) msg+=`\n• Errores: ${errores}\n\nÚltimo error:\n${ultimoError}`;
   if(detalleCreados.length){
-    const muestra=detalleCreados.slice(0,20).join('\n');
+    const muestra=detalleCreados.slice(0,15).join('\n');
     msg+=`\n\nCreados:\n${muestra}`;
-    if(detalleCreados.length>20) msg+=`\n… y ${detalleCreados.length-20} más.`;
+    if(detalleCreados.length>15) msg+=`\n… y ${detalleCreados.length-15} más.`;
+  }
+  if(detalleEliminados.length){
+    const muestra=detalleEliminados.slice(0,15).join('\n');
+    msg+=`\n\nDuplicados de inducción corregidos:\n${muestra}`;
+    if(detalleEliminados.length>15) msg+=`\n… y ${detalleEliminados.length-15} más.`;
+  }
+  if(dupSinAntig.length){
+    msg+=`\n\n⚠️ Estos legajos figuran en VARIAS inducciones pero NO tienen Fecha cálculo antigüedad en el padrón, así que no se pudo determinar el mes correcto. Revisalos a mano:\n`
+      +dupSinAntig.slice(0,20).join(', ');
+    if(dupSinAntig.length>20) msg+=` … (+${dupSinAntig.length-20})`;
   }
   alert(msg);
   toast(`Eval sincronizadas: ${creados} creados, ${actualizados} actualizados`);

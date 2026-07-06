@@ -2443,6 +2443,11 @@ ALTER TABLE asistentes ADD COLUMN IF NOT EXISTS agregado_post_cierre BOOLEAN DEF
       <button class="btn-sm blue" onclick="exportarTodosCompletados('conNota')">📥 Con calificación</button>
     </div>
     <p style="font-size:11px;color:#888">Incluye: Legajo · Nombre · CUIL · UN · Departamento · Completó · Nota · Fecha Evaluación · Capacitación · Tipo · Fecha Cap · Bimestre · Instructor</p>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #ddd">
+      <button class="btn-sm" style="background:#3C3489;color:#fff;border-color:#3C3489" onclick="exportarCompletadosConDetalle('todos')">📊 Resumen + detalle por pregunta</button>
+      <button class="btn-sm" style="margin-left:6px;background:#534AB7;color:#fff;border-color:#534AB7" onclick="exportarCompletadosConDetalle('conNota')">📊 Solo con calificación</button>
+      <p style="font-size:11px;color:#888;margin-top:6px">Genera un único Excel con <strong>dos solapas</strong>: "Resumen" (una fila por persona con su nota) y "Detalle preguntas" (qué contestó cada uno vs. la respuesta correcta). Lee directo de las respuestas de evaluación. <strong>Tip:</strong> corré antes "🔄 Sincronizar evaluaciones con padrón" para que las notas también queden cargadas en las listas.</p>
+    </div>
   </div>
   <div class="config-section"><div class="config-title">Formato Excel de asistentes</div>
     <button class="btn-sm green" onclick="exportPlantillaAsistentes()" style="margin-bottom:8px">📥 Plantilla Excel asistentes</button>
@@ -3972,6 +3977,148 @@ function exportarTodosCompletados(modo){
   const fecha=new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb,`completados_${modo==='conNota'?'con_nota_':''}${fecha}.xlsx`);
   toast(`${rows.length} registros exportados`);
+}
+
+// Exporta UN solo Excel con DOS solapas:
+//   • "Resumen": un renglón por persona/capacitación (legajo, nombre, nota, aprobó, fecha…)
+//   • "Detalle preguntas": un renglón por cada pregunta contestada (qué marcó vs. la correcta)
+// Lee las respuestas reales desde respuestas_evaluacion (todas las evaluaciones),
+// así que trae el detalle aunque la nota todavía no esté volcada en la lista.
+async function exportarCompletadosConDetalle(modo){
+  if(!caps.length){toast('Sin capacitaciones');return;}
+  toast('Generando Excel (resumen + detalle)...',8000);
+
+  // Normaliza opciones: soporta array p.opciones o columnas opcion_a..opcion_d
+  const getOpts=(p)=>{
+    if(Array.isArray(p.opciones)&&p.opciones.length) return p.opciones;
+    return [p.opcion_a,p.opcion_b,p.opcion_c,p.opcion_d];
+  };
+  const fmtFechaHora=(iso)=>{
+    if(!iso) return '';
+    const d=new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  };
+
+  // ── SOLAPA 1: RESUMEN (desde asistentes) ──
+  const resumen=[];
+  caps.forEach(c=>{
+    const esInd=c.tipo_codigo==='INDUCCION';
+    getA(c.id).forEach(x=>{
+      const cumpleCompleto=x.completo&&(!esInd||x.nota!=null);
+      if(!cumpleCompleto) return;
+      if(modo==='conNota'&&x.nota==null) return;
+      resumen.push({
+        '#Redmine':c.codigo_redmine||'',
+        'Legajo':x.legajo,
+        'Nombre':x.nombre,
+        'CUIL':x.cuil||'',
+        'UN':x.un||'',
+        'Departamento':x.departamento||x.sector||'',
+        'Sector':x.sector||'',
+        'Nota':x.nota!=null?x.nota:'',
+        'Aprobó':x.nota!=null?(x.nota>=(c.nota_aprobacion||(esInd?60:6))?'Sí':'No'):'',
+        'Fecha Evaluación':x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'',
+        'Capacitación':c.titulo,
+        'Tipo':c.tipo_codigo||'',
+        'Fecha Capacitación':c.fecha?fmtF(c.fecha):'',
+        'Bimestre':c.bimestre||'',
+        'Instructor':c.instructor||''
+      });
+    });
+  });
+  resumen.sort((a,b)=>
+    (a['Tipo']||'').localeCompare(b['Tipo']||'')||
+    (a['Bimestre']||'').localeCompare(b['Bimestre']||'')||
+    (a['Capacitación']||'').localeCompare(b['Capacitación']||'')||
+    (a['Nombre']||'').localeCompare(b['Nombre']||'')
+  );
+
+  // ── SOLAPA 2: DETALLE PREGUNTAS (desde respuestas_evaluacion) ──
+  // Recorremos cada evaluación que tenga preguntas y traemos sus respuestas.
+  const detalle=[];
+  let leidas=0, errores=0;
+  const evsConPqs=evaluaciones.filter(ev=>preguntas.some(p=>p.evaluacion_id===ev.id));
+  for(const ev of evsConPqs){
+    const c=caps.find(x=>x.id===ev.capacitacion_id);
+    if(!c) continue;
+    const pqsLocal=preguntas.filter(p=>p.evaluacion_id===ev.id);
+    if(!pqsLocal.length) continue;
+    let resp=[];
+    try{
+      // Paginado por si una evaluación tiene muchas respuestas
+      let offset=0;
+      while(true){
+        const lote=await api('GET','respuestas_evaluacion','',`?evaluacion_id=eq.${ev.id}&order=id.asc&limit=1000&offset=${offset}&select=*`);
+        if(!lote||!lote.length) break;
+        resp=resp.concat(lote);
+        if(lote.length<1000) break;
+        offset+=1000;
+      }
+    }catch(e){errores++;console.warn('Error leyendo respuestas eval',ev.id,e);continue;}
+    if(!resp.length) continue;
+    leidas+=resp.length;
+    resp.sort((x,y)=>String(x.created_at||'').localeCompare(String(y.created_at||''))||((x.id||0)-(y.id||0)));
+    const aCap=getA(c.id);
+    resp.forEach(r=>{
+      // Si el modo es "conNota", saltar respuestas sin puntaje
+      if(modo==='conNota'&&r.puntaje==null) return;
+      const respObj=r.respuestas||{};
+      let fechaTxt=fmtFechaHora(r.created_at);
+      if(!fechaTxt){
+        const asis=aCap.find(x=>String(x.legajo)===String(r.legajo));
+        if(asis&&asis.fecha_evaluacion) fechaTxt=fmtF(asis.fecha_evaluacion);
+      }
+      pqsLocal.forEach((p,i)=>{
+        const opciones=getOpts(p);
+        const raw=respObj[p.id];
+        const sel=raw==null?[]:(Array.isArray(raw)?raw.map(Number):[Number(raw)]);
+        const correctas=getPqCorrectas(p);
+        const peso=getPqPeso(p);
+        const puntos=calcPuntosPregunta(p,sel);
+        const respuestaDada=sel.length?sel.map(ix=>opciones[ix]!=null?opciones[ix]:'?').join(' | '):'—';
+        const respuestaCorrecta=correctas.length?correctas.map(ix=>opciones[ix]!=null?opciones[ix]:'?').join(' | '):'—';
+        const estado=puntos>=peso?'Sí':(puntos>0?'Parcial':'No');
+        detalle.push({
+          '#Redmine':c.codigo_redmine||'',
+          'Capacitación':c.titulo,
+          'Tipo':c.tipo_codigo||'',
+          'Legajo':r.legajo,
+          'Nombre':r.nombre,
+          'Fecha evaluación':fechaTxt||'—',
+          'N° Pregunta':i+1,
+          'Pregunta':p.pregunta||'',
+          'Respuesta dada':respuestaDada,
+          'Respuesta correcta':respuestaCorrecta,
+          '¿Correcta?':estado,
+          'Puntos':Math.round(puntos*100)/100,
+          'Peso':peso,
+          'Puntaje final':r.puntaje!=null?r.puntaje:''
+        });
+      });
+    });
+  }
+
+  if(!resumen.length&&!detalle.length){
+    toast('No hay datos para exportar');
+    return;
+  }
+
+  const wb=XLSX.utils.book_new();
+  // Solapa Resumen
+  const wsR=XLSX.utils.json_to_sheet(resumen.length?resumen:[{'(sin datos)':''}]);
+  wsR['!cols']=[{wch:10},{wch:8},{wch:28},{wch:16},{wch:18},{wch:20},{wch:16},{wch:6},{wch:7},{wch:14},{wch:35},{wch:12},{wch:14},{wch:14},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,wsR,'Resumen');
+  // Solapa Detalle
+  const wsD=XLSX.utils.json_to_sheet(detalle.length?detalle:[{'(sin detalle de preguntas)':''}]);
+  wsD['!cols']=[{wch:10},{wch:32},{wch:12},{wch:8},{wch:28},{wch:16},{wch:10},{wch:60},{wch:35},{wch:35},{wch:9},{wch:7},{wch:6},{wch:11}];
+  XLSX.utils.book_append_sheet(wb,wsD,'Detalle preguntas');
+
+  const fecha=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`evaluaciones_completo_${modo==='conNota'?'con_nota_':''}${fecha}.xlsx`);
+  let msg=`Excel generado: ${resumen.length} en Resumen, ${detalle.length} filas de detalle`;
+  if(errores) msg+=` (${errores} evaluaciones con error de lectura)`;
+  toast(msg);
 }
 
 async function exportRespuestas(capId){

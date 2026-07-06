@@ -2679,8 +2679,8 @@ function buildDetail(id,resetScroll){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
-  const colAntig='<th style="width:78px">F. Antigüedad</th>';
-  const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="col-fevaluac" style="width:72px">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
+  const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:72px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -2692,10 +2692,10 @@ function buildDetail(id,resetScroll){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
-    const fechaEvalCell=`<td class="col-fevaluac" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    const fechaEvalCell=`<td class="col-fevaluac" data-sortkey="${x.fecha_evaluacion||''}" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
     const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
     const _fAntig=getFechaAntiguedad(x.legajo);
-    const antigCell=`<td style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`;
+    const antigCell=`<td data-sortkey="${_fAntig||''}" style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`;
     if(esFaltantePadron){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
@@ -3042,11 +3042,34 @@ function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
   const tbody=document.getElementById('tbody-asis-'+capId);
   if(!tbody) return;
   const rows=[...tbody.querySelectorAll('tr')];
-  const colIdx={legajo:1, nombre:2, depto:4};
-  const idx=colIdx[campo]??1;
+  // Los índices fijos (legajo, nombre, depto) no dependen de columnas opcionales.
+  // Para las fechas usamos cellIndex real del <th> correspondiente, porque la
+  // columna F.Evaluac. se corre según exista o no la columna Nota.
+  const thIdMap={antig:'th-antig-', feval:'th-feval-'};
+  let idx;
+  const esFecha=(campo==='antig'||campo==='feval');
+  if(esFecha){
+    const th=document.getElementById(thIdMap[campo]+capId);
+    idx=th?th.cellIndex:null;
+  }else{
+    const colIdx={legajo:1, nombre:2, depto:4};
+    idx=colIdx[campo]??1;
+  }
+  if(idx==null) return;
   rows.sort((a,b)=>{
-    const ta=(a.cells[idx]?.textContent||'').trim().toLowerCase();
-    const tb=(b.cells[idx]?.textContent||'').trim().toLowerCase();
+    const cellA=a.cells[idx], cellB=b.cells[idx];
+    if(esFecha){
+      // Ordenar cronológicamente por la clave ISO (AAAA-MM-DD) en data-sortkey.
+      // Filas sin fecha ("—") van siempre al final, en ambas direcciones.
+      const ka=(cellA?.getAttribute('data-sortkey')||'').trim();
+      const kb=(cellB?.getAttribute('data-sortkey')||'').trim();
+      if(!ka&&!kb) return 0;
+      if(!ka) return 1;
+      if(!kb) return -1;
+      return dir==='asc'?ka.localeCompare(kb):kb.localeCompare(ka);
+    }
+    const ta=(cellA?.textContent||'').trim().toLowerCase();
+    const tb=(cellB?.textContent||'').trim().toLowerCase();
     if(campo==='legajo'){
       const na=parseInt(ta)||0, nb=parseInt(tb)||0;
       return dir==='asc'?na-nb:nb-na;
@@ -3055,8 +3078,8 @@ function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
   });
   rows.forEach(r=>tbody.appendChild(r));
   if(updateIndicators){
-    ['legajo','nombre','depto'].forEach(c=>{
-      const th=document.getElementById('th-'+c+'-'+capId);
+    [['legajo','th-legajo-'],['nombre','th-nombre-'],['depto','th-depto-'],['antig','th-antig-'],['feval','th-feval-']].forEach(([c,pfx])=>{
+      const th=document.getElementById(pfx+capId);
       if(!th) return;
       th.classList.remove('sort-asc','sort-desc');
       if(c===campo) th.classList.add(dir==='asc'?'sort-asc':'sort-desc');
@@ -4622,23 +4645,69 @@ async function sincronizarEvaluacionesDesdeRespuestas(){
   // 2) Mapa evaluacion_id → capacitación (para resolver nota_aprobacion y capId)
   const evById=new Map(evaluaciones.map(e=>[e.id,e]));
 
-  // 3) Agrupar por (capacitacion_id + legajo), conservando la MEJOR respuesta
-  //    (mayor puntaje; ante empate, la más reciente por created_at/id).
-  //    Clave: `${capId}||${legajo}`
+  // 2b) Caps de INDUCCION indexadas por "año-mes" (según su campo fecha), para
+  //     poder ubicar a cada empleado en la inducción del mes que le corresponde.
+  //     Las personas rinden una evaluación genérica de inducción, pero deben
+  //     quedar cargadas en la lista de la inducción cuyo mes/año coincide con
+  //     su Fecha cálculo antigüedad del padrón.
+  const capsIndPorMes=new Map();
+  for(const c of caps){
+    if(c.tipo_codigo==='INDUCCION'&&c.fecha){
+      const parts=c.fecha.split('-');
+      if(parts.length>=2){
+        const key=parseInt(parts[0])+'-'+parseInt(parts[1]);
+        // Si hay varias inducciones el mismo mes, nos quedamos con la primera
+        if(!capsIndPorMes.has(key)) capsIndPorMes.set(key,c);
+      }
+    }
+  }
+
+  // 3) Agrupar por (capacitacion_id destino + legajo), conservando la MEJOR
+  //    respuesta (mayor puntaje; ante empate, la más reciente por created_at).
+  //    Para NO-INDUCCION el destino es la cap de su propia evaluación.
+  //    Para INDUCCION el destino es la cap del mes que coincide con la
+  //    Fecha cálculo antigüedad del empleado en el padrón.
   const mejores=new Map();
-  let sinEval=0; // respuestas cuya evaluación ya no existe (ej: eval borrada)
+  let sinEval=0;      // respuestas cuya evaluación/cap ya no existe
+  let indSinMes=0;    // respuestas de inducción sin cap de mes coincidente
   for(const r of respuestas){
     const ev=evById.get(r.evaluacion_id);
     if(!ev){sinEval++;continue;}
-    const cap=caps.find(c=>c.id===ev.capacitacion_id);
-    if(!cap){sinEval++;continue;}
+    const capEval=caps.find(c=>c.id===ev.capacitacion_id);
+    if(!capEval){sinEval++;continue;}
     const legajo=String(r.legajo||'').trim();
     if(!legajo) continue;
-    const key=cap.id+'||'+legajo;
+
+    // Determinar la capacitación DESTINO donde debe quedar el resultado
+    let capDestino=capEval;
+    if(capEval.tipo_codigo==='INDUCCION'){
+      // Ubicar por Fecha cálculo antigüedad del padrón
+      const emp=padron.find(p=>String(p.legajo)===legajo);
+      if(emp&&emp.fecha_calculo_antiguedad){
+        const fp=emp.fecha_calculo_antiguedad.split('-');
+        if(fp.length>=2){
+          const mesKey=parseInt(fp[0])+'-'+parseInt(fp[1]);
+          const capMes=capsIndPorMes.get(mesKey);
+          if(capMes){
+            capDestino=capMes;
+          }else{
+            // No hay inducción cargada para ese mes → no se puede ubicar
+            indSinMes++;
+            continue;
+          }
+        }else{indSinMes++;continue;}
+      }else{
+        // Sin antigüedad en padrón → no se puede ubicar en el mes correcto
+        indSinMes++;
+        continue;
+      }
+    }
+
+    const key=capDestino.id+'||'+legajo;
     const prev=mejores.get(key);
     const puntaje=r.puntaje!=null?Number(r.puntaje):null;
     if(!prev){
-      mejores.set(key,{cap,legajo,nombre:r.nombre||'',puntaje,created_at:r.created_at||''});
+      mejores.set(key,{cap:capDestino,legajo,nombre:r.nombre||'',puntaje,created_at:r.created_at||''});
     }else{
       const mejorPuntaje=(puntaje!=null?puntaje:-1)>(prev.puntaje!=null?prev.puntaje:-1);
       const mismoPuntajeMasNuevo=(puntaje===prev.puntaje)&&String(r.created_at||'')>String(prev.created_at||'');
@@ -4738,6 +4807,7 @@ async function sincronizarEvaluacionesDesdeRespuestas(){
     +`• Participantes actualizados (se completó nota/fecha): ${actualizados}\n`
     +`• Ya estaban correctos: ${yaOk}`;
   if(sinEval) msg+=`\n• Respuestas sin evaluación/cap asociada (ignoradas): ${sinEval}`;
+  if(indSinMes) msg+=`\n• Inducciones sin ubicar (sin antigüedad en padrón o sin inducción cargada para ese mes): ${indSinMes}`;
   if(errores) msg+=`\n• Errores: ${errores}\n\nÚltimo error:\n${ultimoError}`;
   if(detalleCreados.length){
     const muestra=detalleCreados.slice(0,20).join('\n');

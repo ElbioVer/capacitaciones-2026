@@ -3597,7 +3597,31 @@ async function submitEval(evalId,totalPqs){
   for(const p of pqs){const sel=respuestasMap[p.id]||[];respuestasLegacy[p.id]=sel.length===1?sel[0]:sel;}
   const nota_aprobacion=cap?(cap.nota_aprobacion||(esIndScore?60:6)):6;
   const aprobado=puntaje>=nota_aprobacion;
-  try{await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas:respuestasLegacy,puntaje},'');}catch(e){console.warn('Error registrando respuesta',e);}
+  // Guardado de la respuesta con REINTENTOS. Antes, si este POST fallaba (corte
+  // de red, error momentáneo de Supabase), solo se hacía console.warn y la
+  // persona veía "Aprobado" igual, perdiéndose la respuesta en silencio. Ahora
+  // reintentamos y, si aún así falla, avisamos al empleado para que reintente
+  // en vez de darle un resultado que no quedó guardado.
+  let _respGuardada=false;
+  for(let _intento=1;_intento<=3&&!_respGuardada;_intento++){
+    try{
+      await api('POST','respuestas_evaluacion',{evaluacion_id:evalId,legajo,nombre,respuestas:respuestasLegacy,puntaje},'');
+      _respGuardada=true;
+    }catch(e){
+      console.warn('Error registrando respuesta (intento '+_intento+'/3)',e);
+      if(_intento<3) await new Promise(r=>setTimeout(r,1200*_intento));
+    }
+  }
+  if(!_respGuardada){
+    document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'
+      +'<div style="font-size:15px;font-weight:700;color:#E24B4A;margin-bottom:10px">⚠️ No se pudo guardar tu evaluación</div>'
+      +'<div style="background:#FCEBEB;border:2px solid #E24B4A;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:left">'
+        +'<div style="font-size:13px;color:#7A1F1F;line-height:1.6">Hubo un problema de conexión al registrar tus respuestas. <strong>Tus respuestas NO se guardaron.</strong><br><br>Por favor, verificá tu conexión a internet y volvé a rendir la evaluación tocando el botón de abajo.</div>'
+      +'</div>'
+      +'<button onclick="location.reload()" style="background:#1D9E75;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;width:100%">🔄 Volver a intentar</button>'
+    +'</div></div></div>';
+    return;
+  }
   const intentoKey='eval_intento_'+evalId+'_'+legajo;
   const esSegundoIntento=sessionStorage.getItem(intentoKey)==='1';
   if(!aprobado&&!esSegundoIntento){
@@ -3616,16 +3640,25 @@ async function submitEval(evalId,totalPqs){
   }
   sessionStorage.removeItem(intentoKey);
   if(cap){
-    try{
-      const existing=await fetch(SUPA_URL+'/rest/v1/asistentes?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo),{headers:H});
-      const existingData=await existing.json();
-      const campos={completo:aprobado,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval};
-      if(!existingData||!existingData.length){
-        await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,un:pubUN||'',sector:pubSec||'',en_meta:false,...campos},'');
-      }else{
-        await api('PATCH','asistentes',campos,'?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo));
+    let _asisOk=false;
+    for(let _i=1;_i<=3&&!_asisOk;_i++){
+      try{
+        const existing=await fetch(SUPA_URL+'/rest/v1/asistentes?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo),{headers:H});
+        const existingData=await existing.json();
+        const campos={completo:aprobado,nota:puntaje,cuil:pubCuil||null,departamento:pubDepto||null,fecha_evaluacion:fechaEval};
+        if(!existingData||!existingData.length){
+          await api('POST','asistentes',{capacitacion_id:cap.id,legajo,nombre,un:pubUN||'',sector:pubSec||'',en_meta:false,...campos},'');
+        }else{
+          await api('PATCH','asistentes',campos,'?capacitacion_id=eq.'+cap.id+'&legajo=eq.'+encodeURIComponent(legajo));
+        }
+        _asisOk=true;
+      }catch(regErr){
+        console.warn('No se pudo registrar asistencia (intento '+_i+'/3)',regErr);
+        if(_i<3) await new Promise(r=>setTimeout(r,1000*_i));
       }
-    }catch(regErr){console.warn('No se pudo registrar asistencia',regErr);}
+    }
+    // Si falló el asistente pero la respuesta SÍ se guardó, no bloqueamos: la
+    // sincronización desde Config podrá reconstruir el asistente más tarde.
   }
   const incorrectasHtml=_buildIncorrectasHtml(pqs,respuestasMap,aprobado);
   document.body.innerHTML='<div class="eval-public-wrap"><div class="eval-public-card"><div class="result-card">'

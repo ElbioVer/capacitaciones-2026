@@ -2688,7 +2688,7 @@ function buildDetail(id,resetScroll){
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
   const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
-  const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:72px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -2699,13 +2699,16 @@ function buildDetail(id,resetScroll){
   function buildRow(x, esFaltantePadron=false, index=null){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
-    // Celda de nota CON botón para ver el detalle de respuestas (solo si rindió)
+    // Botón para ver el detalle de respuestas (solo si rindió). Va en la celda de
+    // F.Evaluac. porque la columna Nota es muy angosta (40px) y la regla global
+    // .legajo-table td recorta el contenido con ellipsis (aparecía como "···").
     const verBtn=(hasNota&&x.nota!=null&&!esFaltantePadron)
-      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:#185FA5;border:1px solid #124C86;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;color:#fff;padding:2px 8px;margin-left:5px;vertical-align:middle;line-height:1.5;white-space:nowrap">👁 Ver</button>`
+      ?`<button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:#185FA5;border:1px solid #124C86;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;color:#fff;padding:2px 8px;margin-left:6px;vertical-align:middle;line-height:1.5;white-space:nowrap;display:inline-block">👁 Ver</button>`
       :'';
-    const notaCellVer=hasNota?`<td style="white-space:nowrap">${notaHtml}${verBtn}</td>`:'';
+    const notaCellVer=notaCell; // la nota queda sola en su columna angosta
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
-    const fechaEvalCell=`<td class="col-fevaluac" data-sortkey="${x.fecha_evaluacion||''}" style="font-size:10px;color:#666">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}</td>`;
+    // Celda de fecha de evaluación + botón Ver. overflow:visible para que el botón no se recorte.
+    const fechaEvalCell=`<td class="col-fevaluac" data-sortkey="${x.fecha_evaluacion||''}" style="font-size:10px;color:#666;overflow:visible;white-space:nowrap">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}${verBtn}</td>`;
     const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
     const _fAntig=getFechaAntiguedad(x.legajo);
     const antigCell=`<td data-sortkey="${_fAntig||''}" style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`;

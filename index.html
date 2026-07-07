@@ -3875,78 +3875,60 @@ function exportPlantillaAsistentes(capId){
 
 function exportFalt(capId){
   const c=caps.find(x=>x.id===capId);if(!c)return;
-  const aList=getA(capId);
-  // Legajos que ya completaron
-  const completaron=new Set(aList.filter(a=>a.completo).map(a=>String(a.legajo)));
+  // Usar EXACTAMENTE la misma fuente de verdad que la lista en pantalla:
+  // metricas(). Antes esta función recalculaba los faltantes con criterios
+  // propios y podía diferir de la lista (no combinaba padrón + lista, no
+  // soportaba departamentos múltiples "A||B", no aplicaba excluidos), por lo
+  // que a veces exportaba "no hay faltantes" aunque la lista mostrara varios.
+  const M=metricas(c);
+  const esInd=M.esInd;
+  const aList=M.lista;
+  const notaAprob=c.nota_aprobacion||(esInd?60:6);
+  const _mk=(src,legajo,nombre,cuil,un,depto,sector,estadoPad,estadoCap)=>({
+    '#Redmine':c.codigo_redmine||'',
+    'Legajo':legajo,'Nombre':nombre,
+    'CUIL':cuil||'','UN':un||'',
+    'Departamento':depto||'','Sector':sector||'',
+    'Estado Padrón':estadoPad||'','Estado Capacitación':estadoCap,
+    'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'',
+    'Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''
+  });
 
-  // Estrategia: si la cap tiene UN/Depto y hay padrón, los faltantes son
-  // todos los activos del padrón de esa UN/Depto que no completaron.
-  // Si no hay padrón o no tiene UN, usamos la lista de asistentes no completados.
-  let falt=[];
-  // Mismo criterio que buildDetail: esGlobal, filtro por UN/Depto, o INDUCCION por mes/año
-  const _esGlobalExp=padron.length&&!c.un&&!c.departamento&&c.tipo_codigo!=='INDUCCION';
-  const _tieneFiltroExp=padron.length&&(c.un||c.departamento)&&c.tipo_codigo!=='INDUCCION';
-  const _esInduccionExp=c.tipo_codigo==='INDUCCION'&&c.fecha&&padron.length;
-  if(_esGlobalExp||_tieneFiltroExp||_esInduccionExp){
-    let activosPadron=[];
-    if(_esInduccionExp){
-      const [yy,mm]=c.fecha.split('-');
-      const mesRef=parseInt(mm);const anioRef=parseInt(yy);
-      activosPadron=padron.filter(p=>{
-        if(p.estado&&p.estado!=='Vigente') return false;
-        if(!p.fecha_calculo_antiguedad) return false;
-        const parts=p.fecha_calculo_antiguedad.split('-');
-        return parseInt(parts[0])===anioRef&&parseInt(parts[1])===mesRef;
-      });
-    } else {
-      activosPadron=padron.filter(p=>{
-        if(p.estado&&p.estado!=='Vigente') return false;
-        if(!_esGlobalExp){
-          if(c.un&&p.un!==c.un) return false;
-          if(c.departamento){
-            const d=p.departamento||p.datos_extra?.Departamento||'';
-            if(d!==c.departamento) return false;
-          }
-        }
-        return true;
-      });
-    }
-    // Faltante = activo en el padrón que no completó la capacitación
-    falt=activosPadron
-      .filter(p=>!completaron.has(String(p.legajo)))
-      .map(p=>{
-        // Buscar si tiene un registro parcial en la lista
-        const reg=aList.find(a=>String(a.legajo)===String(p.legajo));
-        return{
-          '#Redmine':c.codigo_redmine||'',
-          'Legajo':p.legajo,
-          'Nombre':p.nombre,
-          'CUIL':p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
-          'UN':p.un||'',
-          'Departamento':p.departamento||p.datos_extra?.Departamento||'',
-          'Sector':p.sector||'',
-          'Estado Padrón':p.estado||'Vigente',
-          'Estado Capacitación':reg?'Pendiente':'Sin registrar',
-          'Capacitación':c.titulo,
-          'Tipo':c.tipo_codigo||'',
-          'Fecha':c.fecha?fmtF(c.fecha):'',
-          'Bimestre':c.bimestre||''
-        };
-      });
-  } else {
-    // Sin padrón: faltantes son los de la lista que no completaron
-    falt=aList.filter(a=>!a.completo).map(a=>({
-      '#Redmine':c.codigo_redmine||'',
-      'Legajo':a.legajo,'Nombre':a.nombre,
-      'CUIL':a.cuil||'','UN':a.un||'',
-      'Departamento':a.departamento||a.sector||'','Sector':a.sector||'',
-      'Estado Padrón':'','Estado Capacitación':'Pendiente',
-      'Capacitación':c.titulo,'Tipo':c.tipo_codigo||'',
-      'Fecha':c.fecha?fmtF(c.fecha):'','Bimestre':c.bimestre||''
-    }));
+  const falt=[];
+  const yaAgregados=new Set();
+
+  // 1) De la LISTA: los que están pero no completaron (mismo criterio que metricas:
+  //    completo=true y, en INDUCCION, además nota!=null).
+  aList.forEach(a=>{
+    const completo=a.completo&&(!esInd||a.nota!=null);
+    if(completo) return;
+    const lg=String(a.legajo);
+    yaAgregados.add(lg);
+    falt.push(_mk('lista',a.legajo,a.nombre,
+      a.cuil||'',a.un||'',
+      a.departamento||a.sector||'',a.sector||'',
+      '','Pendiente'));
+  });
+
+  // 2) Del PADRÓN que NO está en la lista (solo si la lista está ABIERTA, igual
+  //    que metricas: faltantes = faltantesLista + padronNoEnLista si no cerrada).
+  if(!M.listaCerrada){
+    M.padronNoEnLista.forEach(p=>{
+      const lg=String(p.legajo);
+      if(yaAgregados.has(lg)) return;
+      yaAgregados.add(lg);
+      falt.push(_mk('padron',p.legajo,p.nombre,
+        p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||'',
+        p.un||'',
+        p.departamento||p.datos_extra?.Departamento||'',
+        p.sector||'',
+        p.estado||'Vigente','Sin registrar'));
+    });
   }
 
   if(!falt.length){toast('No hay faltantes — todos completaron');return;}
+  // Ordenar por nombre para lectura cómoda
+  falt.sort((a,b)=>String(a.Nombre||'').localeCompare(String(b.Nombre||''),'es'));
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(falt);
   ws['!cols']=[{wch:12},{wch:8},{wch:28},{wch:14},{wch:18},{wch:20},{wch:16},{wch:14},{wch:16},{wch:35},{wch:10},{wch:10},{wch:22}];
   XLSX.utils.book_append_sheet(wb,ws,'Faltantes');

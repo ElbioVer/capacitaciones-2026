@@ -2427,6 +2427,8 @@ function renderConfig(){
     <p style="font-size:11px;color:#888;margin-top:4px">Agrega automáticamente como posibles y faltantes a los empleados del padrón cuya <strong>Fecha cálculo antigüedad</strong> coincida con el mes/año de cada capacitación de tipo INDUCCION.</p>
     <button class="btn-sm" style="margin-top:6px;background:#3C3489;color:#fff;border-color:#3C3489" onclick="sincronizarEvaluacionesDesdeRespuestas()">🔄 Sincronizar evaluaciones con padrón</button>
     <p style="font-size:11px;color:#888;margin-top:4px">Busca en las respuestas de evaluación a los que rindieron pero <strong>no aparecen en la lista</strong> (porque no estaban en el padrón al momento de rendir) y les carga la <strong>nota y la fecha de evaluación</strong>. Corré esto después de actualizar el padrón. Es seguro: nunca pisa notas ya cargadas ni borra respuestas.</p>
+    <button class="btn-sm" style="margin-top:6px;background:#6B4FA0;color:#fff;border-color:#6B4FA0" onclick="diagnosticarEvaluaciones()" title="Ver qué respuestas tiene cada legajo y por qué no se sincroniza">🔍 Diagnóstico de evaluaciones</button>
+    <p style="font-size:11px;color:#888;margin-top:4px">Ingresás uno o varios legajos y muestra qué respuestas tiene cada uno, a qué evaluación/capacitación apuntan, y si ya figura como asistente. Sirve para entender por qué un caso no se sincroniza.</p>
     <div style="margin-top:14px;background:#F0FBF7;border:1px solid #1D9E75;border-radius:8px;padding:10px 12px">
       <div style="font-size:12px;font-weight:600;color:#085041;margin-bottom:6px">🗄️ SQL requerido en Supabase — Nuevas columnas</div>
       <p style="font-size:11px;color:#555;margin-bottom:8px">Ejecutar una sola vez en el <strong>SQL Editor</strong> de Supabase para habilitar "Lista cerrada" y multi-departamento:</p>
@@ -4872,6 +4874,84 @@ async function sincronizarInduccion(){
   let msg=`Sincronización INDUCCION completada.\n• Agregados: ${totalAgregados}\n• Ya existían: ${totalYaExistian}`;
   if(errores) msg+=`\n• Errores: ${errores}`;
   alert(msg);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// diagnosticarEvaluaciones — herramienta temporal de diagnóstico
+// Consulta Supabase para uno o varios legajos y reporta:
+//   • cuántas respuestas_evaluacion tiene cada uno y con qué evaluacion_id
+//   • si esa evaluación existe y a qué capacitación pertenece
+//   • si el legajo ya figura como asistente de esa cap y con qué nota/fecha
+// Sirve para entender por qué la sincronización no actualiza ciertos casos.
+// ═══════════════════════════════════════════════════════════════════
+async function diagnosticarEvaluaciones(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  const entrada=prompt('Ingresá uno o varios legajos separados por coma (ej: 10677,10682,10684):','');
+  if(!entrada) return;
+  const legajos=entrada.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!legajos.length){toast('Sin legajos');return;}
+  setSyncStatus('syncing');
+  toast('Consultando Supabase...',15000);
+
+  const evById=new Map(evaluaciones.map(e=>[e.id,e]));
+  let reporte='🔍 DIAGNÓSTICO DE EVALUACIONES\n═══════════════════════════\n';
+
+  for(const lg of legajos){
+    reporte+=`\n▸ LEGAJO ${lg}\n`;
+    // 1) Respuestas registradas para este legajo (todas las evaluaciones)
+    let resp=[];
+    try{
+      resp=await api('GET','respuestas_evaluacion','',`?legajo=eq.${encodeURIComponent(lg)}&select=id,evaluacion_id,legajo,nombre,puntaje,created_at&order=id.asc`)||[];
+    }catch(e){
+      reporte+=`  ✗ Error consultando respuestas: ${(e&&e.message)||e}\n`;
+      continue;
+    }
+    if(!resp.length){
+      // Probar como número por si el legajo está guardado como int vs string
+      reporte+=`  • Respuestas encontradas: 0  ⚠️ Este legajo NO tiene ninguna respuesta en respuestas_evaluacion.\n`;
+      // ¿Figura como asistente en alguna cap?
+      const comoAsis=asistentes.filter(a=>String(a.legajo)===String(lg));
+      if(comoAsis.length){
+        reporte+=`  • Figura como asistente en ${comoAsis.length} capacitación(es):\n`;
+        comoAsis.forEach(a=>{
+          const cp=caps.find(c=>c.id===a.capacitacion_id);
+          reporte+=`      - ${cp?(cp.codigo_redmine||cp.titulo||'#'+cp.id):('#'+a.capacitacion_id)} | completo:${a.completo?'Sí':'No'} | nota:${a.nota!=null?a.nota:'—'} | fecha_eval:${a.fecha_evaluacion||'—'}\n`;
+        });
+      }
+      continue;
+    }
+    reporte+=`  • Respuestas encontradas: ${resp.length}\n`;
+    for(const r of resp){
+      const ev=evById.get(r.evaluacion_id);
+      const cap=ev?caps.find(c=>c.id===ev.capacitacion_id):null;
+      reporte+=`      · resp #${r.id} | eval_id:${r.evaluacion_id} `;
+      if(!ev){
+        reporte+=`⚠️ esa evaluación NO existe en memoria (¿borrada?)\n`;
+      }else if(!cap){
+        reporte+=`⚠️ la evaluación existe pero su capacitación (#${ev.capacitacion_id}) no está en memoria\n`;
+      }else{
+        reporte+=`→ cap: ${cap.codigo_redmine||cap.titulo||'#'+cap.id} (${cap.tipo_codigo||'?'}) | puntaje:${r.puntaje!=null?r.puntaje:'—'} | rindió:${r.created_at?r.created_at.slice(0,10):'—'}\n`;
+        // ¿Ya está como asistente en esa cap?
+        const asis=asistentes.find(a=>a.capacitacion_id===cap.id&&String(a.legajo)===String(lg));
+        if(asis){
+          reporte+=`         asistente en esa cap: SÍ | nota actual:${asis.nota!=null?asis.nota:'—'} | fecha_eval:${asis.fecha_evaluacion||'—'}\n`;
+        }else{
+          reporte+=`         asistente en esa cap: NO (habría que crearlo)\n`;
+        }
+      }
+    }
+  }
+  reporte+='\n═══════════════════════════\n💡 Si ves "esa evaluación NO existe", el problema es que la respuesta apunta a una evaluación borrada. Si el legajo aparece como asistente con nota:— pero abajo tiene una respuesta con puntaje, la sincronización debería completarla; copiá este texto y pasámelo.';
+
+  setSyncStatus('ok');
+  // Mostrar en un modal con textarea para poder copiar
+  showModal(`<div class="modal-handle"></div>
+    <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:8px">🔍 Diagnóstico de evaluaciones</div>
+    <textarea readonly style="width:100%;height:50vh;font-family:monospace;font-size:11px;border:1px solid #ddd;border-radius:8px;padding:10px;white-space:pre;overflow:auto">${esc(reporte)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-sm blue" style="flex:1" onclick="navigator.clipboard.writeText(this.parentNode.previousElementSibling.value).then(()=>toast('Copiado al portapapeles'))">📋 Copiar</button>
+      <button class="btn-sec" style="flex:1" onclick="closeModal()">Cerrar</button>
+    </div>`);
 }
 
 // ═══════════════════════════════════════════════════════════════════

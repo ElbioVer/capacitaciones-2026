@@ -146,7 +146,7 @@ select.form-input{cursor:pointer}
   .legajo-table td,.legajo-table th{padding:4px 5px;font-size:10px}
 }
 .del-btn{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:0;line-height:1}
-.ver-resp-btn:hover{opacity:1 !important}
+.ver-resp-btn:hover{background:#124C86 !important}
 .del-btn:hover{color:#A32D2D}
 .nota-chip{display:inline-block;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:600}
 .nota-ok{background:#E1F5EE;color:#085041}
@@ -2701,7 +2701,7 @@ function buildDetail(id,resetScroll){
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
     // Celda de nota CON botón para ver el detalle de respuestas (solo si rindió)
     const verBtn=(hasNota&&x.nota!=null&&!esFaltantePadron)
-      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:#EEF6FF;border:1px solid #85B7EB;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;color:#185FA5;padding:1px 6px;margin-left:5px;vertical-align:middle;line-height:1.5;white-space:nowrap">👁 Ver</button>`
+      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:#185FA5;border:1px solid #124C86;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;color:#fff;padding:2px 8px;margin-left:5px;vertical-align:middle;line-height:1.5;white-space:nowrap">👁 Ver</button>`
       :'';
     const notaCellVer=hasNota?`<td style="white-space:nowrap">${notaHtml}${verBtn}</td>`:'';
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
@@ -4252,7 +4252,7 @@ async function verRespuestasParticipante(capId, legajo){
       <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:6px">👁 Respuestas del participante</div>
       <div style="font-size:12px;color:#555;margin-bottom:10px">Legajo ${esc(legajo)} — ${esc(c.titulo)}</div>
       <div style="background:#f4f4f2;border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#888">No se encontraron respuestas registradas para este participante.</div>
-      <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+      <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal();buildDetail(${capId})">← Volver a la lista</button>`);
     return;
   }
 
@@ -4333,7 +4333,7 @@ async function verRespuestasParticipante(capId, legajo){
     </div>
     ${leyenda}
     <div style="max-height:55vh;overflow-y:auto;padding-right:4px">${filas||'<div style="font-size:12px;color:#888;text-align:center;padding:14px">Esta evaluación no tiene preguntas cargadas.</div>'}</div>
-    <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
+    <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal();buildDetail(${capId})">← Volver a la lista</button>`);
 }
 
 // ===== GESTIÓN DE RESPUESTAS DE EVALUACIÓN (mover / eliminar definitivo) =====

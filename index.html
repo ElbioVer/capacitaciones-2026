@@ -4896,26 +4896,73 @@ async function diagnosticarEvaluaciones(){
   const evById=new Map(evaluaciones.map(e=>[e.id,e]));
   let reporte='🔍 DIAGNÓSTICO DE EVALUACIONES\n═══════════════════════════\n';
 
+  // ── PANORAMA GLOBAL: cuántas respuestas hay en total y por evaluación ──
+  let totalResp=0;
+  const porEval=new Map();
+  try{
+    let offset=0;
+    while(true){
+      const lote=await api('GET','respuestas_evaluacion','',`?order=id.asc&limit=1000&offset=${offset}&select=id,evaluacion_id,legajo`);
+      if(!lote||!lote.length) break;
+      totalResp+=lote.length;
+      for(const r of lote){porEval.set(r.evaluacion_id,(porEval.get(r.evaluacion_id)||0)+1);}
+      if(lote.length<1000) break;
+      offset+=1000;
+    }
+  }catch(e){reporte+=`⚠️ Error leyendo panorama global: ${(e&&e.message)||e}\n`;}
+  reporte+=`\n📊 TOTAL de respuestas en la base: ${totalResp}\n`;
+  if(porEval.size){
+    reporte+=`Respuestas por evaluación:\n`;
+    [...porEval.entries()].sort((a,b)=>b[1]-a[1]).forEach(([evId,cnt])=>{
+      const ev=evById.get(evId);
+      const cap=ev?caps.find(c=>c.id===ev.capacitacion_id):null;
+      reporte+=`   · eval ${evId} (${cap?(cap.codigo_redmine||cap.titulo||'#'+cap.id):'cap desconocida'}${cap?' · '+(cap.tipo_codigo||'?'):''}): ${cnt} respuestas\n`;
+    });
+  }
+  reporte+='───────────────────────────\n';
+
   for(const lg of legajos){
     reporte+=`\n▸ LEGAJO ${lg}\n`;
-    // 1) Respuestas registradas para este legajo (todas las evaluaciones)
+    // Nombre en el padrón (para buscar respuestas por nombre si no matchea legajo)
+    const emp=padron.find(p=>String(p.legajo)===String(lg));
+    const nombrePad=emp?emp.nombre:null;
+    if(nombrePad) reporte+=`  • Nombre en padrón: ${nombrePad}\n`;
+
+    // 1) Respuestas por legajo exacto
     let resp=[];
     try{
       resp=await api('GET','respuestas_evaluacion','',`?legajo=eq.${encodeURIComponent(lg)}&select=id,evaluacion_id,legajo,nombre,puntaje,created_at&order=id.asc`)||[];
-    }catch(e){
-      reporte+=`  ✗ Error consultando respuestas: ${(e&&e.message)||e}\n`;
-      continue;
+    }catch(e){reporte+=`  ✗ Error consultando respuestas: ${(e&&e.message)||e}\n`;continue;}
+
+    // 1b) Si no hay por legajo, buscar por nombre (por si el legajo se guardó distinto)
+    let respPorNombre=[];
+    if(!resp.length&&nombrePad){
+      try{
+        const apellido=nombrePad.split(/[.\s]/)[0];
+        if(apellido&&apellido.length>=3){
+          respPorNombre=await api('GET','respuestas_evaluacion','',`?nombre=ilike.*${encodeURIComponent(apellido)}*&select=id,evaluacion_id,legajo,nombre,puntaje,created_at&order=id.asc`)||[];
+        }
+      }catch(e){/* silencioso */}
     }
+
     if(!resp.length){
-      // Probar como número por si el legajo está guardado como int vs string
-      reporte+=`  • Respuestas encontradas: 0  ⚠️ Este legajo NO tiene ninguna respuesta en respuestas_evaluacion.\n`;
-      // ¿Figura como asistente en alguna cap?
+      reporte+=`  • Respuestas por legajo exacto: 0\n`;
+      if(respPorNombre.length){
+        reporte+=`  ⚠️ Pero SÍ hay ${respPorNombre.length} respuesta(s) con un nombre parecido (posible legajo guardado distinto):\n`;
+        respPorNombre.forEach(r=>{
+          const ev=evById.get(r.evaluacion_id);
+          const cap=ev?caps.find(c=>c.id===ev.capacitacion_id):null;
+          reporte+=`      · resp #${r.id} | legajo guardado:"${r.legajo}" | nombre:"${r.nombre}" | eval:${r.evaluacion_id} (${cap?(cap.codigo_redmine||cap.tipo_codigo||'#'+cap.id):'?'}) | puntaje:${r.puntaje!=null?r.puntaje:'—'} | ${r.created_at?r.created_at.slice(0,10):'—'}\n`;
+        });
+      }else if(nombrePad){
+        reporte+=`  • Tampoco hay respuestas con nombre parecido a "${nombrePad}".\n`;
+      }
       const comoAsis=asistentes.filter(a=>String(a.legajo)===String(lg));
       if(comoAsis.length){
         reporte+=`  • Figura como asistente en ${comoAsis.length} capacitación(es):\n`;
         comoAsis.forEach(a=>{
           const cp=caps.find(c=>c.id===a.capacitacion_id);
-          reporte+=`      - ${cp?(cp.codigo_redmine||cp.titulo||'#'+cp.id):('#'+a.capacitacion_id)} | completo:${a.completo?'Sí':'No'} | nota:${a.nota!=null?a.nota:'—'} | fecha_eval:${a.fecha_evaluacion||'—'}\n`;
+          reporte+=`      - ${cp?(cp.codigo_redmine||cp.titulo||'#'+cp.id):('#'+a.capacitacion_id)}${cp?' ('+(cp.tipo_codigo||'?')+')':''} | completo:${a.completo?'Sí':'No'} | nota:${a.nota!=null?a.nota:'—'} | fecha_eval:${a.fecha_evaluacion||'—'}\n`;
         });
       }
       continue;
@@ -4925,26 +4972,20 @@ async function diagnosticarEvaluaciones(){
       const ev=evById.get(r.evaluacion_id);
       const cap=ev?caps.find(c=>c.id===ev.capacitacion_id):null;
       reporte+=`      · resp #${r.id} | eval_id:${r.evaluacion_id} `;
-      if(!ev){
-        reporte+=`⚠️ esa evaluación NO existe en memoria (¿borrada?)\n`;
-      }else if(!cap){
-        reporte+=`⚠️ la evaluación existe pero su capacitación (#${ev.capacitacion_id}) no está en memoria\n`;
-      }else{
+      if(!ev){reporte+=`⚠️ esa evaluación NO existe en memoria (¿borrada?)\n`;}
+      else if(!cap){reporte+=`⚠️ la evaluación existe pero su capacitación (#${ev.capacitacion_id}) no está en memoria\n`;}
+      else{
         reporte+=`→ cap: ${cap.codigo_redmine||cap.titulo||'#'+cap.id} (${cap.tipo_codigo||'?'}) | puntaje:${r.puntaje!=null?r.puntaje:'—'} | rindió:${r.created_at?r.created_at.slice(0,10):'—'}\n`;
-        // ¿Ya está como asistente en esa cap?
         const asis=asistentes.find(a=>a.capacitacion_id===cap.id&&String(a.legajo)===String(lg));
-        if(asis){
-          reporte+=`         asistente en esa cap: SÍ | nota actual:${asis.nota!=null?asis.nota:'—'} | fecha_eval:${asis.fecha_evaluacion||'—'}\n`;
-        }else{
-          reporte+=`         asistente en esa cap: NO (habría que crearlo)\n`;
-        }
+        reporte+=asis
+          ?`         asistente en esa cap: SÍ | nota actual:${asis.nota!=null?asis.nota:'—'} | fecha_eval:${asis.fecha_evaluacion||'—'}\n`
+          :`         asistente en esa cap: NO (habría que crearlo)\n`;
       }
     }
   }
-  reporte+='\n═══════════════════════════\n💡 Si ves "esa evaluación NO existe", el problema es que la respuesta apunta a una evaluación borrada. Si el legajo aparece como asistente con nota:— pero abajo tiene una respuesta con puntaje, la sincronización debería completarla; copiá este texto y pasámelo.';
+  reporte+='\n═══════════════════════════\n💡 Copiá este texto y pasámelo para analizarlo.';
 
   setSyncStatus('ok');
-  // Mostrar en un modal con textarea para poder copiar
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:700;color:#1A2F6E;margin-bottom:8px">🔍 Diagnóstico de evaluaciones</div>
     <textarea readonly style="width:100%;height:50vh;font-family:monospace;font-size:11px;border:1px solid #ddd;border-radius:8px;padding:10px;white-space:pre;overflow:auto">${esc(reporte)}</textarea>

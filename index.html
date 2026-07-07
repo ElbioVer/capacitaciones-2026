@@ -2699,9 +2699,9 @@ function buildDetail(id,resetScroll){
   function buildRow(x, esFaltantePadron=false, index=null){
     const notaHtml=hasNota?(x.nota!=null?`<span class="nota-chip ${x.nota>=(nota_aprobacion)?'nota-ok':'nota-fail'}">${x.nota}${x.nota<nota_aprobacion?' ✗':''}</span>`:'<span style="color:#bbb">—</span>'):'';
     const notaCell=hasNota?`<td>${notaHtml}</td>`:'';
-    // Celda de nota CON botón 👁 para ver el detalle de respuestas (solo si rindió)
+    // Celda de nota CON botón para ver el detalle de respuestas (solo si rindió)
     const verBtn=(hasNota&&x.nota!=null&&!esFaltantePadron)
-      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;vertical-align:middle;opacity:.7">👁</button>`
+      ?` <button class="ver-resp-btn" title="Ver respuestas contestadas" onclick="verRespuestasParticipante(${id},'${esc(String(x.legajo)).replace(/'/g,"\\'")}')" style="background:#EEF6FF;border:1px solid #85B7EB;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;color:#185FA5;padding:1px 6px;margin-left:5px;vertical-align:middle;line-height:1.5;white-space:nowrap">👁 Ver</button>`
       :'';
     const notaCellVer=hasNota?`<td style="white-space:nowrap">${notaHtml}${verBtn}</td>`:'';
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;

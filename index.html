@@ -2687,8 +2687,9 @@ function buildDetail(id,resetScroll){
   const hasNota=t.tiene_evaluacion;
   const colNota=hasNota?'<th style="width:40px">Nota</th>':'';
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
+  const colSel=canManageParticipants()?`<th style="width:24px;text-align:center"><input type="checkbox" id="chk-todos-asis-${id}" onchange="toggleTodosAsis(this,${id})" title="Seleccionar/deseleccionar todos (de la vista actual)"></th>`:'';
   const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
-  const tableHead=`<thead><tr><th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr>${colSel}<th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -2716,15 +2717,17 @@ function buildDetail(id,resetScroll){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
         :'';
-      return`<tr style="background:#FFFAF0">${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
+      const selPlaceholder=canManageParticipants()?'<td></td>':'';
+      return`<tr style="background:#FFFAF0">${selPlaceholder}${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
+    const selCell=canManageParticipants()?`<td style="text-align:center"><input type="checkbox" class="chk-asis-item" value="${x.id}" ${getAsisSel(id).has(x.id)?'checked':''} onchange="toggleSelAsis(${x.id},${id},this.checked)"></td>`:'';
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
     const compBadge=canManageParticipants()
       ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
       :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
     const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
-    return`<tr>${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCellVer}${fechaEvalCell}${delCell}</tr>`;
+    return`<tr>${selCell}${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCellVer}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view
@@ -2765,6 +2768,9 @@ function buildDetail(id,resetScroll){
       </button>`:''}
       ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
         🚫 Pasar todos a Excluidos (${faltantesSolopadron.length})
+      </button>`:''}
+      ${canManageParticipants()?`<button class="btn-asis-filter" id="btn-elim-sel-${id}" onclick="eliminarAsisSeleccionados(${id})" style="display:${getAsisSel(id).size>0?'':'none'};font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#B91C1C;color:#fff;cursor:pointer;font-weight:600" title="Eliminar los participantes tildados">
+        🗑 Eliminar seleccionados (<span id="lbl-cant-sel-${id}">${getAsisSel(id).size}</span>)
       </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
@@ -3790,7 +3796,17 @@ function filtrarAsistentes(vista, capId){
   // Mostrar filas de la vista
   const rowsHtml=data[vista]||data.todos;
   tbody.innerHTML=rowsHtml;
-  
+
+  // Re-sincronizar checkboxes de selección con el estado guardado (el HTML cacheado
+  // pudo haberse generado antes de que el usuario tildara/destildara filas)
+  const _selSet=getAsisSel(capId);
+  tbody.querySelectorAll('.chk-asis-item').forEach(chk=>{chk.checked=_selSet.has(Number(chk.value));});
+  const _chkTodos=document.getElementById(`chk-todos-asis-${capId}`);
+  if(_chkTodos){
+    const _items=[...tbody.querySelectorAll('.chk-asis-item')];
+    _chkTodos.checked=_items.length>0&&_items.every(c=>c.checked);
+  }
+
   // Actualizar título de la sección según vista activa
   const titleEl=document.querySelector(`[data-capid-title="${capId}"]`);
   if(titleEl){
@@ -3803,6 +3819,71 @@ function filtrarAsistentes(vista, capId){
   }
 }
 
+// ===== SELECCIÓN MÚLTIPLE DE ASISTENTES (para depurar/eliminar en lote) =====
+let _asisSel={}; // capId -> Set de ids de asistentes tildados
+function getAsisSel(capId){
+  if(!_asisSel[capId]) _asisSel[capId]=new Set();
+  return _asisSel[capId];
+}
+function toggleSelAsis(aid,capId,checked){
+  const sel=getAsisSel(capId);
+  if(checked) sel.add(aid); else sel.delete(aid);
+  actualizarContadorAsis(capId);
+}
+function toggleTodosAsis(chk,capId){
+  const sel=getAsisSel(capId);
+  const marcar=chk.checked;
+  document.querySelectorAll(`#tbody-asis-${capId} .chk-asis-item`).forEach(c=>{
+    const v=Number(c.value);
+    if(marcar) sel.add(v); else sel.delete(v);
+    c.checked=marcar;
+  });
+  actualizarContadorAsis(capId);
+}
+function actualizarContadorAsis(capId){
+  const n=getAsisSel(capId).size;
+  const btn=document.getElementById(`btn-elim-sel-${capId}`);
+  const lbl=document.getElementById(`lbl-cant-sel-${capId}`);
+  if(btn) btn.style.display=n>0?'':'none';
+  if(lbl) lbl.textContent=n;
+}
+async function eliminarAsisSeleccionados(capId){
+  if(!canManageParticipants()) return;
+  const sel=getAsisSel(capId);
+  const ids=[...sel];
+  if(!ids.length){toast('No hay participantes seleccionados');return;}
+  const c=caps.find(x=>x.id===capId);
+  const n=ids.length;
+  if(!confirm(`⚠️ Se eliminarán ${n} participante${n!==1?'s':''} seleccionado${n!==1?'s':''} de:\n\n"${c?c.titulo:''}"\n\nEsta acción no se puede deshacer.\n\n¿Continuar?`)) return;
+  try{
+    setSyncStatus('syncing');
+    let ok=0,err=0;
+    for(const aid of ids){
+      try{
+        await api('DELETE','asistentes','',`?id=eq.${aid}`);
+        asistentes=asistentes.filter(a=>a.id!==aid);
+        ok++;
+      }catch(e){err++;console.error('Error eliminando asistente',aid,e);}
+    }
+    sel.clear();
+    // Actualizar participantes_esperados si no es INDUCCION
+    if(c&&c.tipo_codigo!=='INDUCCION'){
+      const nuevoTotal=getA(capId).length;
+      await api('PATCH','capacitaciones',{participantes_esperados:nuevoTotal},`?id=eq.${capId}`);
+      const cIdx=caps.findIndex(x=>x.id===capId);
+      if(cIdx>=0) caps[cIdx].participantes_esperados=nuevoTotal;
+    }
+    setSyncStatus('ok');
+    toast(`${ok} participante${ok!==1?'s':''} eliminado${ok!==1?'s':''}${err?' · '+err+' error'+(err>1?'es':''):''}`);
+    window._suppressReload=Date.now()+8000;
+    buildDetail(capId);
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    toast('Error al eliminar: '+e.message);
+  }
+}
+
 async function deleteA(aid,capId){
   if(!canManageParticipants()||!confirm('¿Eliminar este participante?'))return;
   try{
@@ -3811,6 +3892,8 @@ async function deleteA(aid,capId){
     toast('Eliminado');
     // Suprimir auto-reload 8s para que el array local no sea pisado por loadAll
     window._suppressReload=Date.now()+8000;
+    // También sacar de la selección si estaba tildado
+    getAsisSel(capId).delete(aid);
     buildDetail(capId);
     renderContent();
   }catch(e){toast('Error');}

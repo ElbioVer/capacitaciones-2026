@@ -2717,7 +2717,7 @@ function buildDetail(id,resetScroll){
       const delPadronCell=canManageParticipants()
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
         :'';
-      const selPlaceholder=canManageParticipants()?'<td></td>':'';
+      const selPlaceholder=canManageParticipants()?`<td style="text-align:center"><input type="checkbox" class="chk-padron-sel" value="${esc(String(x.legajo))}" ${getPadronSel(id).has(String(x.legajo))?'checked':''} onchange="togglePadronSel('${esc(String(x.legajo)).replace(/'/g,"\\'")}',${id},this.checked)"></td>`:'';
       return`<tr style="background:#FFFAF0">${selPlaceholder}${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const selCell=canManageParticipants()?`<td style="text-align:center"><input type="checkbox" class="chk-asis-item" value="${x.id}" ${getAsisSel(id).has(x.id)?'checked':''} onchange="toggleSelAsis(${x.id},${id},this.checked)"></td>`:'';
@@ -2765,6 +2765,9 @@ function buildDetail(id,resetScroll){
       </button>`:''}
       ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-todos-${id}" onclick="pasarTodosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
         ✓ Pasar todos a Lista (${faltantesSolopadron.length})
+      </button>`:''}
+      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-sel-${id}" onclick="pasarSeleccionadosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #0F6E56;background:#0F6E56;color:#fff;cursor:pointer;font-weight:600" title="Pasar a la lista solo los participantes tildados">
+        ✓ Pasar seleccionados a Lista (<span id="lbl-cant-psel-${id}">0</span>)
       </button>`:''}
       ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
         🚫 Pasar todos a Excluidos (${faltantesSolopadron.length})
@@ -3795,9 +3798,14 @@ function filtrarAsistentes(vista, capId){
   // pudo haberse generado antes de que el usuario tildara/destildara filas)
   const _selSet=getAsisSel(capId);
   tbody.querySelectorAll('.chk-asis-item').forEach(chk=>{chk.checked=_selSet.has(Number(chk.value));});
+  // Resync selección del padrón (vista "No en lista", selección por legajo) + botón
+  const _pselSet=getPadronSel(capId);
+  tbody.querySelectorAll('.chk-padron-sel').forEach(chk=>{chk.checked=_pselSet.has(String(chk.value));});
+  const pasarSelBtn=document.getElementById(`btn-pasar-sel-${capId}`);
+  if(pasarSelBtn) pasarSelBtn.style.display=(vista==='noenlista'&&_pselSet.size>0)?'':'none';
   const _chkTodos=document.getElementById(`chk-todos-asis-${capId}`);
   if(_chkTodos){
-    const _items=[...tbody.querySelectorAll('.chk-asis-item')];
+    const _items=[...tbody.querySelectorAll('.chk-asis-item'),...tbody.querySelectorAll('.chk-padron-sel')];
     _chkTodos.checked=_items.length>0&&_items.every(c=>c.checked);
   }
 
@@ -3825,14 +3833,79 @@ function toggleSelAsis(aid,capId,checked){
   actualizarContadorAsis(capId);
 }
 function toggleTodosAsis(chk,capId){
-  const sel=getAsisSel(capId);
   const marcar=chk.checked;
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  const padronItems=tbody?[...tbody.querySelectorAll('.chk-padron-sel')]:[];
+  // En la vista "No en lista" solo hay filas del padrón (selección por legajo).
+  if(padronItems.length){
+    const psel=getPadronSel(capId);
+    padronItems.forEach(c=>{ const v=String(c.value); if(marcar) psel.add(v); else psel.delete(v); c.checked=marcar; });
+    actualizarContadorPadron(capId);
+    return;
+  }
+  const sel=getAsisSel(capId);
   document.querySelectorAll(`#tbody-asis-${capId} .chk-asis-item`).forEach(c=>{
     const v=Number(c.value);
     if(marcar) sel.add(v); else sel.delete(v);
     c.checked=marcar;
   });
   actualizarContadorAsis(capId);
+}
+// ===== SELECCIÓN DEL PADRÓN (vista "No en lista", por legajo) =====
+let _padronSel={}; // capId -> Set de legajos (string)
+function getPadronSel(capId){ if(!_padronSel[capId]) _padronSel[capId]=new Set(); return _padronSel[capId]; }
+function togglePadronSel(legajo,capId,checked){
+  const sel=getPadronSel(capId); legajo=String(legajo);
+  if(checked) sel.add(legajo); else sel.delete(legajo);
+  actualizarContadorPadron(capId);
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  const _chkTodos=document.getElementById(`chk-todos-asis-${capId}`);
+  if(tbody&&_chkTodos){
+    const items=[...tbody.querySelectorAll('.chk-padron-sel')];
+    _chkTodos.checked=items.length>0&&items.every(c=>c.checked);
+  }
+}
+function actualizarContadorPadron(capId){
+  const n=getPadronSel(capId).size;
+  const vista=window[`_asisVista_${capId}`];
+  const btn=document.getElementById(`btn-pasar-sel-${capId}`);
+  const lbl=document.getElementById(`lbl-cant-psel-${capId}`);
+  if(btn) btn.style.display=(vista==='noenlista'&&n>0)?'':'none';
+  if(lbl) lbl.textContent=n;
+}
+async function pasarSeleccionadosALista(capId){
+  if(!canManageParticipants()) return;
+  const sel=getPadronSel(capId);
+  const legajosSel=new Set([...sel].map(String));
+  if(!legajosSel.size){toast('No hay participantes seleccionados');return;}
+  const datos=(window[`_noEnListaDatos_${capId}`]||[]).filter(p=>legajosSel.has(String(p.legajo)));
+  if(!datos.length){toast('No hay participantes seleccionados');return;}
+  const capObj=caps.find(x=>x.id===capId);
+  if(!capObj){toast('Capacitación no encontrada');return;}
+  if(capObj.lista_cerrada){toast('La lista está cerrada, abrila primero para agregar participantes');return;}
+  if(!confirm(`Se agregarán ${datos.length} persona${datos.length!==1?'s seleccionadas':' seleccionada'} a la lista de "${capObj.titulo}".\n\n¿Continuar?`)) return;
+  toast('Agregando '+datos.length+' participantes...',8000);
+  const a=getA(capId);
+  const legajosExistentes=new Set(a.map(x=>String(x.legajo)));
+  let ok=0,err=0;
+  for(const p of datos){
+    const legajo=String(p.legajo);
+    if(legajosExistentes.has(legajo)) continue;
+    const nombre=p.nombre||'';
+    const un=p.un||'';
+    const sector=p.sector||'';
+    const depto=p.departamento||p.datos_extra?.Departamento||p.datos_extra?.departamento||'';
+    const cuil=p.cuil||p.datos_extra?.CUIL||p.datos_extra?.Cuil||p.datos_extra?.cuil||'';
+    try{
+      const r=await api('POST','asistentes',{capacitacion_id:capId,legajo,nombre,un,sector,departamento:depto,cuil,completo:false,en_meta:true},'');
+      const nv=Array.isArray(r)?r[0]:r;
+      if(nv){asistentes.push(nv);legajosExistentes.add(legajo);ok++;}
+    }catch(e){err++;console.warn('Error agregando',legajo,e);}
+  }
+  sel.clear();
+  toast(`✓ ${ok} agregado${ok!==1?'s':''} a la lista`+(err?` · ${err} con error`:''));
+  buildDetail(capId);
+  renderContent();
 }
 function actualizarContadorAsis(capId){
   const n=getAsisSel(capId).size;

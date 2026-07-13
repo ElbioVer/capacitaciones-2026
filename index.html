@@ -3064,19 +3064,13 @@ function _aplicarOrdenTbody(capId, campo, dir, updateIndicators){
   const tbody=document.getElementById('tbody-asis-'+capId);
   if(!tbody) return;
   const rows=[...tbody.querySelectorAll('tr')];
-  // Los índices fijos (legajo, nombre, depto) no dependen de columnas opcionales.
-  // Para las fechas usamos cellIndex real del <th> correspondiente, porque la
-  // columna F.Evaluac. se corre según exista o no la columna Nota.
-  const thIdMap={antig:'th-antig-', feval:'th-feval-'};
-  let idx;
+  // Usamos SIEMPRE el cellIndex real del <th> correspondiente. Los índices no
+  // pueden ser fijos porque columnas opcionales (checkbox de selección para
+  // quienes gestionan participantes, y la columna Nota) corren las posiciones.
+  const thIdMap={legajo:'th-legajo-', nombre:'th-nombre-', depto:'th-depto-', antig:'th-antig-', feval:'th-feval-'};
   const esFecha=(campo==='antig'||campo==='feval');
-  if(esFecha){
-    const th=document.getElementById(thIdMap[campo]+capId);
-    idx=th?th.cellIndex:null;
-  }else{
-    const colIdx={legajo:1, nombre:2, depto:4};
-    idx=colIdx[campo]??1;
-  }
+  const th=document.getElementById((thIdMap[campo]||'th-legajo-')+capId);
+  const idx=th?th.cellIndex:null;
   if(idx==null) return;
   rows.sort((a,b)=>{
     const cellA=a.cells[idx], cellB=b.cells[idx];
@@ -6944,8 +6938,8 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'.tema{border-bottom:1px solid #000;padding:4px 6px;font-size:10px;display:flex;align-items:center;min-height:8mm}'
     +'.tema b{margin-right:4px}'
     +'.tema .val{border-bottom:1px solid #999;flex:1;min-height:12px}'
-    +'.qr-cont{display:flex;flex:1}'
-    +'.qr-box{width:52mm;border-right:1px solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px}'
+    +'.qr-cont{display:flex;flex:1;justify-content:center;align-items:center}'
+    +'.qr-box{width:52mm;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px}'
     +'.qr-box img{width:44mm;height:44mm}'
     +'.qr-box .cap{font-size:8px;text-align:center;color:#333;margin-top:2px}'
     +'.contenido{flex:1;padding:4px 6px;font-size:9px}'
@@ -6966,10 +6960,9 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'<div class="main">'
     +'<div class="col-tipo"><div class="tit">TIPO DE REGISTRO</div><div class="dc">Distribuci\u00f3n Controlada</div>'+tiposHtml+'</div>'
     +'<div class="col-cont">'
-    +'<div class="tema"><b>TEMA:</b><span class="val"></span></div>'
+    +'<div class="tema" style="justify-content:center"><span class="val" style="flex:0 1 90%"></span></div>'
     +'<div class="qr-cont">'
     +'<div class="qr-box"><img src="'+qrDataUrl+'" alt="QR"><div class="cap">Escane\u00e1 el QR para registrar tu asistencia</div></div>'
-    +'<div class="contenido"><b>CONTENIDO / RESE\u00d1A:</b></div>'
     +'</div></div></div>'
     +'<table class="tabla-firmas"><thead><tr><th style="width:8mm">N\u00ba</th><th style="width:18mm">LEGAJO</th><th style="width:24mm">DNI</th><th>APELLIDO Y NOMBRES</th><th style="width:38mm">FIRMA</th><th style="width:14mm">CALIF.</th></tr></thead><tbody>'+filas+'</tbody></table>'
     +'<table class="pie"><thead><tr><th style="width:26mm"></th><th>EXPOSITOR</th><th>GCIA/RESP</th><th>RRHH</th></tr></thead><tbody>'
@@ -7225,7 +7218,7 @@ function renderIndicadores(data, remo, cuatri){
         <div style="overflow-x:auto;min-width:0">
           <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
             <thead>${tableHead()}</thead>
-            <tbody>${tableRows(data)}</tbody>
+            <tbody>${tableRows(data,'general')}</tbody>
           </table>
         </div>
         <div style="min-width:0;position:relative;height:260px"><canvas id="chart-ind-general" style="position:absolute;inset:0"></canvas></div>
@@ -7241,7 +7234,7 @@ function renderIndicadores(data, remo, cuatri){
         <div style="overflow-x:auto;min-width:0">
           <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0">
             <thead>${tableHead()}</thead>
-            <tbody>${tableRows(remo)}</tbody>
+            <tbody>${tableRows(remo,'remo')}</tbody>
           </table>
         </div>
         <div style="min-width:0;position:relative;height:260px"><canvas id="chart-ind-remo" style="position:absolute;inset:0"></canvas></div>
@@ -7275,22 +7268,147 @@ function renderIndicadores(data, remo, cuatri){
 
 
 // ===== tableRows =====
-function tableRows(rows){
+function tableRows(rows, scope){
+    scope = scope||'general';
     return rows.map((d,i)=>{
       const pend = Math.max(0, d.objetivo - d.realizado);
       const sinPlan = d.objetivo===0;
       const pct = sinPlan ? null : (d.realizado/d.objetivo*100).toFixed(1);
       const color = sinPlan?'#bbb':parseFloat(pct)>=75?'#0F6E56':parseFloat(pct)>=50?'#7A5000':'#CC0000';
       const pctLabel = sinPlan ? '<span style="color:#bbb;font-weight:400">Sin plan</span>' : pct+'%';
+      // Las celdas de HH son clickeables para ver/exportar el detalle que las compone.
+      const hasData = (d.objetivo>0 || d.realizado>0);
+      const cell=(tipo,txt,txtColor)=>{
+        const base=`padding:5px 8px;font-size:11px;text-align:right;color:${txtColor}`;
+        if(!hasData) return `<td style="${base}">${txt}</td>`;
+        return `<td style="${base};cursor:pointer;text-decoration:underline dotted #9aa;text-underline-offset:2px" title="Ver el detalle de capacitaciones que componen este valor" onclick="verDetalleIndicador('${scope}',${d.mes},'${tipo}')">${txt}</td>`;
+      };
       return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
         <td style="padding:5px 8px;font-size:11px;font-weight:600;color:#1A2F6E">${d.m}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${sinPlan?'#bbb':'inherit'}">${sinPlan?'—':d.objetivo.toLocaleString()}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${sinPlan?'#bbb':'inherit'}">${sinPlan?'—':d.realizado.toLocaleString()}</td>
-        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${sinPlan?'#bbb':'inherit'}">${sinPlan?'—':pend.toLocaleString()}</td>
+        ${cell('objetivo', sinPlan?'—':d.objetivo.toLocaleString(), sinPlan?'#bbb':'inherit')}
+        ${cell('realizado', sinPlan?'—':d.realizado.toLocaleString(), sinPlan?'#bbb':'inherit')}
+        ${cell('pendiente', sinPlan?'—':pend.toLocaleString(), sinPlan?'#bbb':'inherit')}
         <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:700;color:${color}">${pctLabel}</td>
       </tr>`;
     }).join('');
   }
+
+// ===== Detalle de indicadores (Cap General / REMO) =====
+// Replica EXACTAMENTE la lógica de getIndicadoresData()/getIndicadoresRemo()
+// para que los totales del detalle reconcilien con los de la tabla.
+function _detalleIndicadorCaps(scope, mesNum){
+  const year=new Date().getFullYear();
+  return getFiltered().filter(cap=>{
+    if(scope==='remo' && cap.tipo_codigo!=='REMO') return false;
+    const ff=fechaFinCap(cap)||cap.fecha;
+    if(!ff) return false;
+    const parts=ff.split('-');
+    return parseInt(parts[1])===mesNum && parseInt(parts[0])===year;
+  }).map(cap=>{
+    const dur=Number(cap.duracion||1);
+    let esp;
+    if(scope==='remo'){
+      esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
+    }else{
+      esp=cap.participantes_esperados||0;
+    }
+    const comp=getA(cap.id).filter(a=>a.completo).length;
+    const objHH=esp*dur, realHH=comp*dur, pendHH=Math.max(0,objHH-realHH);
+    return {cap, dur, esp, comp, objHH, realHH, pendHH};
+  });
+}
+
+function verDetalleIndicador(scope, mesNum, tipo){
+  const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const filas=_detalleIndicadorCaps(scope,mesNum);
+  const mesLbl=MESES[mesNum-1]+' '+new Date().getFullYear();
+  const scopeLbl=scope==='remo'?'Cap. REMO':'Cap. General';
+  const tipoLbl=({objetivo:'Objetivo Hs.',realizado:'Hs. Realizadas',pendiente:'Hs. Pendientes'})[tipo]||'';
+  const hl=({objetivo:'obj',realizado:'real',pendiente:'pend'})[tipo];
+  const hc=(k)=>hl===k?'background:#FFF6D6':'';
+  const tEsp=filas.reduce((a,r)=>a+r.esp,0), tComp=filas.reduce((a,r)=>a+r.comp,0);
+  const tObj=filas.reduce((a,r)=>a+r.objHH,0), tReal=filas.reduce((a,r)=>a+r.realHH,0), tPend=filas.reduce((a,r)=>a+r.pendHH,0);
+  let body;
+  if(!filas.length){
+    body='<div style="padding:16px;text-align:center;color:#888;font-size:12px">No hay capacitaciones que compongan este valor para el mes seleccionado.</div>';
+  }else{
+    const rws=filas.map((r,i)=>{
+      const c=r.cap;
+      return `<tr style="background:${i%2===0?'#F5F8FF':'#fff'}">
+        <td style="padding:5px 8px;font-size:11px;border-bottom:1px solid #eee">${esc(c.titulo||'—')}${c.codigo_redmine?` <span style=\"font-size:9px;color:#185FA5;font-weight:600\">${esc(c.codigo_redmine)}</span>`:''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;border-bottom:1px solid #eee">${esc(c.tipo_codigo||'—')}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;border-bottom:1px solid #eee">${fmtF(fechaFinCap(c)||c.fecha)}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee">${r.dur}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee">${r.esp}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee">${r.comp}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee;${hc('obj')}">${r.objHH.toLocaleString()}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee;${hc('real')}">${r.realHH.toLocaleString()}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee;${hc('pend')}">${r.pendHH.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+    const totalRow=`<tr style="background:#1A2F6E;color:#fff;font-weight:700">
+        <td style="padding:6px 8px;font-size:11px" colspan="3">TOTAL (${filas.length} capacitaciones)</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right">—</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right">${tEsp.toLocaleString()}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right">${tComp.toLocaleString()}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right;${hc('obj')?'background:#3a4d8f':''}">${tObj.toLocaleString()}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right;${hc('real')?'background:#3a4d8f':''}">${tReal.toLocaleString()}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:right;${hc('pend')?'background:#3a4d8f':''}">${tPend.toLocaleString()}</td>
+      </tr>`;
+    body=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
+      <thead><tr style="background:#1A2F6E;color:#fff">
+        <th style="padding:6px 8px;font-size:11px;text-align:left">Capacitación</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:center">Tipo</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:center">Fecha</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">Dur. Hs.</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">Esperados</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">Completados</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">HH Objetivo</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">HH Realizadas</th>
+        <th style="padding:6px 8px;font-size:11px;text-align:right">HH Pendientes</th>
+      </tr></thead><tbody>${rws}${totalRow}</tbody></table></div>`;
+  }
+  showModal(`<div style="max-width:920px">
+      <div style="font-size:15px;font-weight:700;color:#1A2F6E;margin-bottom:2px">${scopeLbl} — Detalle de ${tipoLbl}</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px">${mesLbl} · Desglose por capacitación (los datos resaltados corresponden al valor sobre el que hiciste clic)</div>
+      ${body}
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        ${filas.length?`<button class="btn-green" onclick="exportDetalleIndicadorXLSX('${scope}',${mesNum})">⬇ Exportar a Excel</button>`:''}
+        <button class="btn-gray" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div>`);
+}
+
+function exportDetalleIndicadorXLSX(scope, mesNum){
+  const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const filas=_detalleIndicadorCaps(scope,mesNum);
+  if(!filas.length){toast('No hay datos para exportar');return;}
+  const scopeLbl=scope==='remo'?'REMO':'General';
+  const rows=filas.map(r=>({
+    'Capacitación':r.cap.titulo||'',
+    'Código Redmine':r.cap.codigo_redmine||'',
+    'Tipo':r.cap.tipo_codigo||'',
+    'Fecha':fmtF(fechaFinCap(r.cap)||r.cap.fecha),
+    'Duración (Hs)':r.dur,
+    'Participantes esperados':r.esp,
+    'Completados':r.comp,
+    'HH Objetivo':r.objHH,
+    'HH Realizadas':r.realHH,
+    'HH Pendientes':r.pendHH
+  }));
+  rows.push({
+    'Capacitación':'TOTAL ('+filas.length+' capacitaciones)','Código Redmine':'','Tipo':'','Fecha':'','Duración (Hs)':'',
+    'Participantes esperados':filas.reduce((a,r)=>a+r.esp,0),
+    'Completados':filas.reduce((a,r)=>a+r.comp,0),
+    'HH Objetivo':filas.reduce((a,r)=>a+r.objHH,0),
+    'HH Realizadas':filas.reduce((a,r)=>a+r.realHH,0),
+    'HH Pendientes':filas.reduce((a,r)=>a+r.pendHH,0)
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'Detalle');
+  XLSX.writeFile(wb,`detalle_${scopeLbl}_${MESES[mesNum-1]}_${new Date().getFullYear()}.xlsx`);
+}
 
 
 // ===== tableHead =====

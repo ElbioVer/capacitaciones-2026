@@ -7181,13 +7181,12 @@ function renderGantt(){
 }
 
 // Meta de personas para HH objetivo (fuente unica de verdad).
-// INDUCCION: participantes_esperados suele ser 0 (la meta se calcula desde el padron/lista),
-// por eso usamos metricas().esperados. Otros tipos: participantes_esperados si esta cargado, si no la lista.
+// Vale para cualquier tipo (INDUCCION, IND.SST, REMO, etc.). Tomamos el mayor entre
+// las personas reales en la lista (metricas().esperados) y participantes_esperados cargado.
+// En INDUCCION/IND.SST participantes_esperados suele quedar en 0/1, por eso la lista manda.
 function espMetaCap(cap){
   const M = metricas(cap);
-  const esInd = cap.tipo_codigo==='INDUCCION';
-  if(esInd) return M.esperados;
-  return (cap.participantes_esperados && cap.participantes_esperados>0) ? cap.participantes_esperados : M.esperados;
+  return Math.max(M.esperados||0, cap.participantes_esperados||0);
 }
 
 // ===== getIndicadoresData =====

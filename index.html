@@ -7180,6 +7180,16 @@ function renderGantt(){
   </div>`;
 }
 
+// Meta de personas para HH objetivo (fuente unica de verdad).
+// INDUCCION: participantes_esperados suele ser 0 (la meta se calcula desde el padron/lista),
+// por eso usamos metricas().esperados. Otros tipos: participantes_esperados si esta cargado, si no la lista.
+function espMetaCap(cap){
+  const M = metricas(cap);
+  const esInd = cap.tipo_codigo==='INDUCCION';
+  if(esInd) return M.esperados;
+  return (cap.participantes_esperados && cap.participantes_esperados>0) ? cap.participantes_esperados : M.esperados;
+}
+
 // ===== getIndicadoresData =====
 function getIndicadoresData(){
   // Calcular datos por mes para todas las caps filtradas
@@ -7198,8 +7208,8 @@ function getIndicadoresData(){
       return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
     });
     const objetivo = capsDelMes.reduce((s,cap) => {
-      // HH objetivo = participantes_esperados (meta) × duración
-      const meta = cap.participantes_esperados||0;
+      // HH objetivo = esperados (fuente única: metricas) × duración
+      const meta = espMetaCap(cap);
       return s + meta * Number(cap.duracion||1);
     }, 0);
     const realizado = capsDelMes.reduce((s,cap) => {
@@ -7226,7 +7236,7 @@ function getIndicadoresRemo(){
       return parseInt(parts[1]) === mes && parseInt(parts[0]) === year;
     });
     const objetivo = capsRemo.reduce((s,cap) => {
-      const esp = (cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
+      const esp = espMetaCap(cap);
       return s + esp * Number(cap.duracion||1);
     }, 0);
     const realizado = capsRemo.reduce((s,cap) => {
@@ -7379,12 +7389,7 @@ function _detalleIndicadorCaps(scope, mesNum){
     return parseInt(parts[1])===mesNum && parseInt(parts[0])===year;
   }).map(cap=>{
     const dur=Number(cap.duracion||1);
-    let esp;
-    if(scope==='remo'){
-      esp=(cap.participantes_esperados&&cap.participantes_esperados>0)?cap.participantes_esperados:getA(cap.id).length;
-    }else{
-      esp=cap.participantes_esperados||0;
-    }
+    const esp=espMetaCap(cap);
     const comp=getA(cap.id).filter(a=>a.completo).length;
     const objHH=esp*dur, realHH=comp*dur, pendHH=Math.max(0,objHH-realHH);
     return {cap, dur, esp, comp, objHH, realHH, pendHH};

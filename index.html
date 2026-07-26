@@ -578,9 +578,37 @@ function showApp(){
   const _pares0=getMisPares();
   if(_pares0&&_pares0.length===1){ fltUN=_pares0[0].un||''; fltSec=_pares0[0].sector||''; }
   else if(!_pares0&&!isAdmin()&&currentUser.un){ fltUN=currentUser.un; if(currentUser.sector) fltSec=currentUser.sector; }
+  hidratarDesdeCache();
   loadAll();
 }
 
+const CACHE_PREFIX='capCache_';
+function cacheKey(){ return CACHE_PREFIX+((currentUser&&currentUser.email)||'anon'); }
+function guardarCache(){
+  try{
+    const snap={ v:1, ts:Date.now(),
+      caps:caps, asistentes:asistentes, uns:uns, sectores:sectores, departamentos:departamentos,
+      tipos:tipos, materiales:materiales, evaluaciones:evaluaciones, preguntas:preguntas, padron:padron,
+      usuarios:(isAdmin()?usuarios:[]) };
+    localStorage.setItem(cacheKey(), JSON.stringify(snap));
+  }catch(e){ /* sin espacio u otro: la caché es opcional, se ignora */ }
+}
+function hidratarDesdeCache(){
+  try{
+    const raw=localStorage.getItem(cacheKey());
+    if(!raw) return false;
+    const s=JSON.parse(raw);
+    if(!s||!Array.isArray(s.caps)||!s.caps.length) return false;
+    caps=s.caps||[]; asistentes=s.asistentes||[]; uns=s.uns||[]; sectores=s.sectores||[];
+    departamentos=s.departamentos||[]; tipos=s.tipos||[]; materiales=s.materiales||[];
+    evaluaciones=s.evaluaciones||[]; preguntas=s.preguntas||[]; padron=s.padron||[];
+    if(isAdmin()) usuarios=s.usuarios||[];
+    aplicarEstadosEnMemoria(); updateSub(); populateFilters(); renderContent();
+    const sub=document.getElementById('hdr-sub'); if(sub) sub.textContent='Mostrando \u00faltima copia \u2014 actualizando...';
+    setSyncStatus('syncing');
+    return true;
+  }catch(e){ return false; }
+}
 async function recargarPantalla(){
   const b=document.getElementById('btn-recargar');
   if(b){ if(b.dataset.busy==='1') return; b.dataset.busy='1'; b.disabled=true; b.textContent='\u23f3 Actualizando...'; }
@@ -607,17 +635,19 @@ async function loadAll(){
     const res=await Promise.all(queries);
     caps=res[0]||[];uns=res[2]||[];sectores=res[3]||[];
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
-    // Cargar asistentes con paginación (soporta miles de registros)
+    // Cargar asistentes con paginación PARALELA por lotes (más rápido)
     let asisAcum=res[1]||[];
-    let offset=1000;
-    while(asisAcum.length===offset){
-      try{
-        const sig=await api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${offset}`);
-        if(!sig||!sig.length) break;
-        asisAcum=[...asisAcum,...sig];
-        offset+=1000;
-        if(offset>20000) break; // tope de seguridad
-      }catch(e){break;}
+    if((res[1]||[]).length===1000){
+      let base=1000; const BATCH=5; let seguir=true;
+      while(seguir && base<=20000){
+        const lote=[];
+        for(let k=0;k<BATCH;k++){ lote.push(api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${base+k*1000}`)); }
+        let partes;
+        try{ partes=await Promise.all(lote); }catch(e){ break; }
+        for(const p of partes){ if(p&&p.length){ asisAcum=asisAcum.concat(p); } }
+        seguir = partes.every(p=>p&&p.length===1000);
+        base += BATCH*1000;
+      }
     }
     asistentes=asisAcum;
     // Cargar padrón con paginación para soportar hasta 2000 registros
@@ -634,6 +664,7 @@ async function loadAll(){
     // Extraer departamentos únicos del padrón
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
     aplicarEstadosEnMemoria();
+    guardarCache();
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
   }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
 }

@@ -340,6 +340,7 @@ select.form-input{cursor:pointer}
     <div class="header-row" style="padding:8px 14px;background:#fff">
       <div class="header-right" style="width:100%;justify-content:flex-end">
         <button class="btn-green" id="btn-nueva" onclick="openNewCap()" style="display:none">+ Nueva</button>
+        <button class="btn-gray" id="btn-recargar" onclick="recargarPantalla()" title="Recargar datos desde el servidor">🔄 Actualizar</button>
         <div id="user-avatar" class="user-avatar">?</div>
         <button class="btn-gray" onclick="doLogout()">Salir</button>
       </div>
@@ -580,6 +581,13 @@ function showApp(){
   loadAll();
 }
 
+async function recargarPantalla(){
+  const b=document.getElementById('btn-recargar');
+  if(b){ if(b.dataset.busy==='1') return; b.dataset.busy='1'; b.disabled=true; b.textContent='\u23f3 Actualizando...'; }
+  try{ await loadAll(); toast('\u2713 Pantalla actualizada'); }
+  catch(e){ toast('No se pudo actualizar. Revis\u00e1 la conexi\u00f3n.'); }
+  finally{ if(b){ b.dataset.busy='0'; b.disabled=false; b.textContent='\ud83d\udd04 Actualizar'; } }
+}
 async function loadAll(){
   setSyncStatus('syncing');
   document.getElementById('hdr-sub').textContent='Sincronizando...';

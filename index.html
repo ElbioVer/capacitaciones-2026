@@ -2828,14 +2828,11 @@ function buildDetail(id,resetScroll){
       ${faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-sel-${id}" onclick="pasarSeleccionadosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #0F6E56;background:#0F6E56;color:#fff;cursor:pointer;font-weight:600" title="Pasar a la lista solo los participantes tildados">
         ✓ Pasar seleccionados a Lista (<span id="lbl-cant-psel-${id}">0</span>)
       </button>`:''}
-      ${faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
-        🚫 Pasar todos a Excluidos (${faltantesSolopadron.length})
-      </button>`:''}
       ${canManageParticipants()?`<button class="btn-asis-filter" id="btn-elim-sel-${id}" onclick="eliminarAsisSeleccionados(${id})" style="display:${getAsisSel(id).size>0?'':'none'};font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#B91C1C;color:#fff;cursor:pointer;font-weight:600" title="Eliminar los participantes tildados">
         🗑 Eliminar seleccionados (<span id="lbl-cant-sel-${id}">${getAsisSel(id).size}</span>)
       </button>`:''}
       ${canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-sel-${id}" onclick="excluirPadronSeleccionados(${id})" style="display:${getPadronSel(id).size>0?'':'none'};font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir del padron (restaurable desde Excluidos) los tildados con sticker Padron">
-        🚫 Eliminar del padrón (<span id="lbl-cant-xsel-${id}">${getPadronSel(id).size}</span>)
+        🚫 Excluir de capacitación (<span id="lbl-cant-xsel-${id}">${getPadronSel(id).size}</span>)
       </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
@@ -3847,11 +3844,9 @@ function filtrarAsistentes(vista, capId){
       limpBtn.title='Eliminar todos los participantes';
     }
   }
-  // Mostrar/ocultar botones "Pasar todos a Lista" y "Pasar todos a Excluidos" solo en vista noenlista
+  // Mostrar/ocultar boton "Pasar todos a Lista" solo en vista noenlista
   const pasarBtn=document.getElementById(`btn-pasar-todos-${capId}`);
   if(pasarBtn) pasarBtn.style.display=(vista==='noenlista')?'':'none';
-  const exclBtn=document.getElementById(`btn-excluir-todos-${capId}`);
-  if(exclBtn) exclBtn.style.display=(vista==='noenlista')?'':'none';
   // Mostrar filas de la vista
   const rowsHtml=data[vista]||data.todos;
   tbody.innerHTML=rowsHtml;
@@ -3865,6 +3860,8 @@ function filtrarAsistentes(vista, capId){
   tbody.querySelectorAll('.chk-padron-sel').forEach(chk=>{chk.checked=_pselSet.has(String(chk.value));});
   const pasarSelBtn=document.getElementById(`btn-pasar-sel-${capId}`);
   if(pasarSelBtn) pasarSelBtn.style.display=(vista==='noenlista'&&_pselSet.size>0)?'':'none';
+  const exclSelBtn=document.getElementById(`btn-excluir-sel-${capId}`);
+  if(exclSelBtn) exclSelBtn.style.display=(_pselSet.size>0)?'':'none';
   const _chkTodos=document.getElementById(`chk-todos-asis-${capId}`);
   if(_chkTodos){
     const _items=[...tbody.querySelectorAll('.chk-asis-item'),...tbody.querySelectorAll('.chk-padron-sel')];

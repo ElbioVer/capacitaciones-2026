@@ -703,6 +703,21 @@ function getAUnica(capId){
 // Devuelve TODAS las métricas de una capacitación de forma coherente
 function exclSet(cap){ return new Set((Array.isArray(cap&&cap.excluidos)?cap.excluidos:[]).map(String)); }
 
+// Ingreso dentro de la PRIMERA QUINCENA (hasta el dia 15) del mes de inicio de la cap.
+// Se usa cuando la lista esta cerrada para decidir que candidatos del padron siguen admitiendose.
+function dentroPrimeraQuincena(cap, fechaIngreso){
+  if(!cap||!cap.fecha||!fechaIngreso) return false;
+  const cp=String(cap.fecha).split('-'); if(cp.length<2) return false;
+  const yr=parseInt(cp[0],10), mo=parseInt(cp[1],10);
+  const fp=String(fechaIngreso).split('-'); if(fp.length<3) return false;
+  const fy=parseInt(fp[0],10), fm=parseInt(fp[1],10), fd=parseInt(fp[2],10);
+  if(isNaN(fy)||isNaN(fm)||isNaN(fd)||isNaN(yr)||isNaN(mo)) return false;
+  if(fy<yr) return true;
+  if(fy>yr) return false;
+  if(fm<mo) return true;
+  if(fm>mo) return false;
+  return fd<=15;
+}
 function metricas(cap){
   const esInd=cap.tipo_codigo==='INDUCCION';
   const listaCerrada=!!cap.lista_cerrada;
@@ -744,14 +759,19 @@ function metricas(cap){
   if(_exc.size) padronRef=padronRef.filter(p=>!_exc.has(String(p.legajo)));
   const posibles=padronRef.length;
   // Padrón que NO está en la lista (solo relevante si lista abierta)
-  const padronNoEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  let padronNoEnLista=padronRef.filter(p=>!legajosEnLista.has(String(p.legajo)));
+  // Lista CERRADA: del padron solo se admiten (como posibles/faltantes y para agregar)
+  // los que ingresaron dentro de la 1a quincena (hasta el 15) del mes de inicio de la cap.
+  if(listaCerrada){
+    padronNoEnLista=padronNoEnLista.filter(p=>dentroPrimeraQuincena(cap,p.fecha_calculo_antiguedad));
+  }
   // ESPERADOS = personas únicas en la lista (fuente de verdad)
   const esperados=a.length;
   // FALTANTES:
   //  - de la lista: esperados que no completaron
   //  - si lista ABIERTA: + padrón que no está en lista
   const faltantesLista=esperados-comp;
-  const faltantes=listaCerrada?faltantesLista:(faltantesLista+padronNoEnLista.length);
+  const faltantes=faltantesLista+padronNoEnLista.length;
   const pct=esperados?Math.round(comp/esperados*100):0;
   return {
     lista:a, esInd, listaCerrada,
@@ -2799,20 +2819,23 @@ function buildDetail(id,resetScroll){
       <button class="btn-asis-filter" onclick="filtrarAsistentes('faltantes',${id})" id="fab-falt-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #EF9F27;background:#fff;color:#854F0B;cursor:pointer;font-weight:600">
         ⚠ Faltantes (${faltantesReal})
       </button>
-      ${!listaCerrada&&faltantesSolopadron.length?`<button class="btn-asis-filter" onclick="filtrarAsistentes('noenlista',${id})" id="fab-noenlista-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #aaa;background:#fff;color:#555;cursor:pointer;font-weight:600">
+      ${faltantesSolopadron.length?`<button class="btn-asis-filter" onclick="filtrarAsistentes('noenlista',${id})" id="fab-noenlista-${id}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #aaa;background:#fff;color:#555;cursor:pointer;font-weight:600">
         📋 No en lista (${faltantesSolopadron.length})
       </button>`:''}
-      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-todos-${id}" onclick="pasarTodosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
+      ${faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-todos-${id}" onclick="pasarTodosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #1D9E75;background:#1D9E75;color:#fff;cursor:pointer;font-weight:600">
         ✓ Pasar todos a Lista (${faltantesSolopadron.length})
       </button>`:''}
-      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-sel-${id}" onclick="pasarSeleccionadosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #0F6E56;background:#0F6E56;color:#fff;cursor:pointer;font-weight:600" title="Pasar a la lista solo los participantes tildados">
+      ${faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-pasar-sel-${id}" onclick="pasarSeleccionadosALista(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #0F6E56;background:#0F6E56;color:#fff;cursor:pointer;font-weight:600" title="Pasar a la lista solo los participantes tildados">
         ✓ Pasar seleccionados a Lista (<span id="lbl-cant-psel-${id}">0</span>)
       </button>`:''}
-      ${!listaCerrada&&faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
+      ${faltantesSolopadron.length&&canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-todos-${id}" onclick="pasarTodosAExcluidos(${id})" style="display:none;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir de los Posibles a todos los que no están en lista (restaurables desde 🚫 Excluidos)">
         🚫 Pasar todos a Excluidos (${faltantesSolopadron.length})
       </button>`:''}
       ${canManageParticipants()?`<button class="btn-asis-filter" id="btn-elim-sel-${id}" onclick="eliminarAsisSeleccionados(${id})" style="display:${getAsisSel(id).size>0?'':'none'};font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#B91C1C;color:#fff;cursor:pointer;font-weight:600" title="Eliminar los participantes tildados">
         🗑 Eliminar seleccionados (<span id="lbl-cant-sel-${id}">${getAsisSel(id).size}</span>)
+      </button>`:''}
+      ${canManageParticipants()?`<button class="btn-asis-filter" id="btn-excluir-sel-${id}" onclick="excluirPadronSeleccionados(${id})" style="display:${getPadronSel(id).size>0?'':'none'};font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #B91C1C;background:#fff;color:#B91C1C;cursor:pointer;font-weight:600" title="Excluir del padron (restaurable desde Excluidos) los tildados con sticker Padron">
+        🚫 Eliminar del padrón (<span id="lbl-cant-xsel-${id}">${getPadronSel(id).size}</span>)
       </button>`:''}
     </div>
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
@@ -3911,6 +3934,10 @@ function actualizarContadorPadron(capId){
   const lbl=document.getElementById(`lbl-cant-psel-${capId}`);
   if(btn) btn.style.display=(vista==='noenlista'&&n>0)?'':'none';
   if(lbl) lbl.textContent=n;
+  const btnX=document.getElementById(`btn-excluir-sel-${capId}`);
+  const lblX=document.getElementById(`lbl-cant-xsel-${capId}`);
+  if(btnX) btnX.style.display=n>0?'':'none';
+  if(lblX) lblX.textContent=n;
 }
 async function pasarSeleccionadosALista(capId){
   if(!canManageParticipants()) return;
@@ -3921,7 +3948,7 @@ async function pasarSeleccionadosALista(capId){
   if(!datos.length){toast('No hay participantes seleccionados');return;}
   const capObj=caps.find(x=>x.id===capId);
   if(!capObj){toast('Capacitación no encontrada');return;}
-  if(capObj.lista_cerrada){toast('La lista está cerrada, abrila primero para agregar participantes');return;}
+  // Con lista cerrada, _noEnListaDatos ya viene filtrado a la 1a quincena; solo esos se pueden agregar.
   if(!confirm(`Se agregarán ${datos.length} persona${datos.length!==1?'s seleccionadas':' seleccionada'} a la lista de "${capObj.titulo}".\n\n¿Continuar?`)) return;
   toast('Agregando '+datos.length+' participantes...',8000);
   const a=getA(capId);
@@ -3945,6 +3972,37 @@ async function pasarSeleccionadosALista(capId){
   toast(`✓ ${ok} agregado${ok!==1?'s':''} a la lista`+(err?` · ${err} con error`:''));
   buildDetail(capId);
   renderContent();
+}
+async function excluirPadronSeleccionados(capId){
+  if(!canManageParticipants()) return;
+  const sel=getPadronSel(capId);
+  const legajosSel=[...sel].map(String);
+  if(!legajosSel.length){toast('No hay participantes del padron seleccionados');return;}
+  const c=caps.find(x=>x.id===capId);
+  if(!c){toast('Capacitacion no encontrada');return;}
+  const n=legajosSel.length;
+  if(!confirm(`Se excluiran ${n} participante${n!==1?'s':''} del padron de los Posibles de "${c.titulo}".\n\nDejaran de aparecer como Posibles y no contaran como faltantes.\nPodes restaurarlos desde el boton "Excluidos".\n\n¿Continuar?`)) return;
+  try{
+    setSyncStatus('syncing');
+    const excl=Array.isArray(c.excluidos)?c.excluidos.slice():[];
+    const yaExcl=new Set(excl.map(String));
+    let nuevos=0;
+    for(const l of legajosSel){ if(!yaExcl.has(l)){excl.push(l);yaExcl.add(l);nuevos++;} }
+    await api('PATCH','capacitaciones',{excluidos:excl},`?id=eq.${capId}`);
+    c.excluidos=excl;
+    sel.clear();
+    setSyncStatus('ok');
+    toast(`${nuevos} excluido${nuevos!==1?'s':''} del padron - total: ${excl.length}`);
+    window._suppressReload=Date.now()+8000;
+    buildDetail(capId);
+    renderContent();
+  }catch(e){
+    setSyncStatus('error');
+    const msg=(e&&e.message)?e.message:'';
+    if(msg.toLowerCase().includes('excluidos')||msg.includes('column')){
+      alert('Falta la columna "excluidos" en la tabla capacitaciones.\n\nEjecuta una sola vez en el SQL Editor de Supabase:\n\nALTER TABLE capacitaciones ADD COLUMN IF NOT EXISTS excluidos jsonb DEFAULT \'[]\'::jsonb;');
+    } else { toast('Error: '+msg.slice(0,120)); }
+  }
 }
 function actualizarContadorAsis(capId){
   const n=getAsisSel(capId).size;
@@ -6229,7 +6287,7 @@ async function pasarTodosALista(capId){
   if(!datos.length){toast('No hay participantes del padrón fuera de la lista');return;}
   const capObj=caps.find(x=>x.id===capId);
   if(!capObj){toast('Capacitación no encontrada');return;}
-  if(capObj.lista_cerrada){toast('La lista está cerrada, abrila primero para agregar participantes');return;}
+  // Con lista cerrada, _noEnListaDatos ya viene filtrado a la 1a quincena; solo esos se pueden agregar.
 
   if(!confirm(`Se agregarán ${datos.length} persona${datos.length!==1?'s':''} del padrón a la lista de "${capObj.titulo}".\n\n¿Continuar?`)) return;
 
@@ -7016,6 +7074,9 @@ function _abrirRegistroFirmas(c,qrDataUrl){
   const fechaTxt=String(_hoy.getDate()).padStart(2,'0')+'/'+String(_hoy.getMonth()+1).padStart(2,'0')+'/'+_hoy.getFullYear();
   const horasTxt=(c.duracion!=null&&c.duracion!=='')?String(c.duracion):'';
   const unTxt=c.un||'';
+  // Titulo de la capacitacion + Codigo Redmine para el vertice superior (junto al QR)
+  const tituloTxt=c.titulo||'';
+  const redmineTxt=c.codigo_redmine?String(c.codigo_redmine):'';
   const tiposReg=['Remo','Inducción','Ambiente','SST','Cap. Externa','Varios','Cap. Calificación'];
   const tiposHtml=tiposReg.map(tp=>'<div class="tipo-item"><span class="chk"></span>'+tp+'</div>').join('');
   let filas='';
@@ -7075,6 +7136,7 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'<div class="tema" style="justify-content:center"><b>TEMA</b></div>'
     +'<div class="qr-cont">'
     +'<div class="qr-box"><img src="'+qrDataUrl+'" alt="QR"><div class="cap">Escane\u00e1 el QR para registrar tu asistencia</div></div>'
+    +'<div class="contenido" style="display:flex;align-items:flex-start"><div style="color:#E30613;font-weight:bold;font-size:11px;line-height:1.4;padding-top:2px">'+esc(tituloTxt)+(redmineTxt?' – '+esc(redmineTxt):'')+'</div></div>'
     +'</div></div></div>'
     +'<table class="tabla-firmas"><thead><tr><th style="width:8mm">N\u00ba</th><th style="width:18mm">LEGAJO</th><th style="width:24mm">DNI</th><th>APELLIDO Y NOMBRES</th><th style="width:38mm">FIRMA</th><th style="width:14mm">CALIF.</th></tr></thead><tbody>'+filas+'</tbody></table>'
     +'<table class="pie"><thead><tr><th style="width:26mm"></th><th>EXPOSITOR</th><th>GCIA/RESP</th><th>RRHH</th></tr></thead><tbody>'

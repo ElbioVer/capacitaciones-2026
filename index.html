@@ -703,6 +703,17 @@ function getAUnica(capId){
 // Devuelve TODAS las métricas de una capacitación de forma coherente
 function exclSet(cap){ return new Set((Array.isArray(cap&&cap.excluidos)?cap.excluidos:[]).map(String)); }
 
+// Estado actual del empleado según el Padrón (fuente única de verdad, se recalcula en cada render)
+function estadoDeLegajo(legajo){
+  const emp=padron.find(p=>String(p.legajo)===String(legajo));
+  return emp?(emp.estado||'Vigente'):null;
+}
+function estadoBadgeHtml(estado){
+  if(!estado||estado==='Vigente') return '<span class="badge realizada" style="font-size:9px">Vigente</span>';
+  if(estado==='Renuncia') return '<span class="badge" style="font-size:9px;background:#E8B86D;color:#7A4F00">'+esc(estado)+'</span>';
+  return '<span class="badge vencida" style="font-size:9px">'+esc(estado)+'</span>';
+}
+
 // Ingreso dentro de la PRIMERA QUINCENA (hasta el dia 15) del mes de inicio de la cap.
 // Se usa cuando la lista esta cerrada para decidir que candidatos del padron siguen admitiendose.
 function dentroPrimeraQuincena(cap, fechaIngreso){
@@ -765,8 +776,19 @@ function metricas(cap){
   if(listaCerrada){
     padronNoEnLista=padronNoEnLista.filter(p=>dentroPrimeraQuincena(cap,p.fecha_calculo_antiguedad));
   }
-  // ESPERADOS = personas únicas en la lista (fuente de verdad)
-  const esperados=a.length;
+  // EXCLUIDOS POR BAJA: de la lista, no completaron Y su estado actual en el
+  // Padrón ya no es "Vigente" (Renuncia/Despido/Suspendido/etc). No cuentan
+  // como esperados ni como faltantes — se recalcula en cada render, así que si
+  // el empleado vuelve a estar Vigente, deja de excluirse automáticamente.
+  const excluidosBaja=a.filter(x=>{
+    const completoOk=x.completo&&(!esInd||x.nota!=null);
+    if(completoOk) return false;
+    const est=estadoDeLegajo(x.legajo);
+    return est&&est!=='Vigente';
+  });
+  const excluidosBajaSet=new Set(excluidosBaja.map(x=>String(x.legajo)));
+  // ESPERADOS = personas únicas en la lista, menos las excluidas por baja
+  const esperados=a.length-excluidosBaja.length;
   // FALTANTES:
   //  - de la lista: esperados que no completaron
   //  - si lista ABIERTA: + padrón que no está en lista
@@ -776,7 +798,8 @@ function metricas(cap){
   return {
     lista:a, esInd, listaCerrada,
     posibles, esperados, comp, faltantes,
-    padronRef, padronNoEnLista, legajosEnLista, pct
+    padronRef, padronNoEnLista, legajosEnLista, pct,
+    excluidosBajaSet
   };
 }
 function getMat(capId){return materiales.filter(m=>m.capacitacion_id===capId);}
@@ -2748,7 +2771,8 @@ function buildDetail(id,resetScroll){
   const colDel=canManageParticipants()?'<th style="width:24px"></th>':'';
   const colSel=canManageParticipants()?`<th style="width:24px;text-align:center"><input type="checkbox" id="chk-todos-asis-${id}" onchange="toggleTodosAsis(this,${id})" title="Seleccionar/deseleccionar todos (de la vista actual)"></th>`:'';
   const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
-  const tableHead=`<thead><tr>${colSel}<th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const colEstado=`<th style="width:70px" title="Estado del empleado según el Padrón">Estado</th>`;
+  const tableHead=`<thead><tr>${colSel}<th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}${colEstado}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -2777,16 +2801,26 @@ function buildDetail(id,resetScroll){
         ?`<td><button class="del-btn" title="Quitar del padrón para esta capacitación" onclick="quitarDePadron(${id},'${esc(x.legajo)}','${esc(x.nombre).replace(/'/g,"\\'")}','${esc(x.cuil||'')}','${esc(x.departamento||x.datos_extra?.Departamento||'')}','${esc(x.un||'')}','${esc(x.sector||'')}')">×</button></td>`
         :'';
       const selPlaceholder=canManageParticipants()?`<td style="text-align:center"><input type="checkbox" class="chk-padron-sel" value="${esc(String(x.legajo))}" ${getPadronSel(id).has(String(x.legajo))?'checked':''} onchange="togglePadronSel('${esc(String(x.legajo)).replace(/'/g,"\\'")}',${id},this.checked)"></td>`:'';
-      return`<tr style="background:#FFFAF0">${selPlaceholder}${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
+      // Quienes vienen del padrón como "posibles" siempre son Vigente (ya se filtran antes), por eso el guion.
+      const estadoCellPadron=`<td style="font-size:10px;color:#bbb">—</td>`;
+      return`<tr style="background:#FFFAF0">${selPlaceholder}${numCell}<td style="color:#888;font-size:10px">${esc(x.legajo)}</td><td class="col-nombre" style="color:#888;font-size:11px;white-space:normal;word-break:break-word">${esc(x.nombre)}<span style="font-size:9px;background:#FFF8E8;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Padrón</span></td>${cuilCell}<td style="font-size:10px;color:#888">${esc(x.departamento||x.datos_extra?.Departamento||'')}</td>${antigCell}${estadoCellPadron}<td><span class="badge pendiente">No</span></td>${notaCell}${fechaEvalCell}${delPadronCell}</tr>`;
     }
     const selCell=canManageParticipants()?`<td style="text-align:center"><input type="checkbox" class="chk-asis-item" value="${x.id}" ${getAsisSel(id).has(x.id)?'checked':''} onchange="toggleSelAsis(${x.id},${id},this.checked)"></td>`:'';
     const delCell=canManageParticipants()?`<td><button class="del-btn" title="Eliminar participante" onclick="deleteA(${x.id},${id})">×</button></td>`:'';
-    const compBadge=canManageParticipants()
-      ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
-      :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`;
+    const _estado=estadoDeLegajo(x.legajo);
+    const _noVigente=_estado&&_estado!=='Vigente';
+    const _completoOk=x.completo&&(!esInduccion||x.nota!=null);
+    const _excluidoBaja=_noVigente&&!_completoOk;
+    const estadoCell=`<td style="font-size:10px">${_noVigente?estadoBadgeHtml(_estado):'<span style="color:#bbb">—</span>'}</td>`;
+    const compBadge=_excluidoBaja
+      ?`<span class="badge vencida" style="font-size:10px" title="Estado: ${esc(_estado)} — excluido del cálculo de esperados/faltantes">Excluido</span>`
+      :(canManageParticipants()
+        ?`<span class="badge ${x.completo?'realizada':'pendiente'}" style="cursor:pointer;user-select:none" onclick="toggleCompleto(${x.id},${id},${!x.completo})">${x.completo?'Sí':'No'}</span>`
+        :`<span class="badge ${x.completo?'realizada':'pendiente'}">${x.completo?'Sí':'No'}</span>`);
     const extBadge=x.en_meta===false?`<span style="font-size:9px;background:#E8F0FB;color:#185FA5;border:1px solid #85B7EB;border-radius:3px;padding:1px 4px;margin-left:4px">Ext.</span>`:'';
     const agregadoBadge=x.agregado_post_cierre?`<span style="font-size:9px;background:#FFF3E0;color:#854F0B;border:1px solid #EF9F27;border-radius:3px;padding:1px 4px;margin-left:4px">Agregado</span>`:'';
-    return`<tr>${selCell}${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}<td>${compBadge}</td>${notaCellVer}${fechaEvalCell}${delCell}</tr>`;
+    const trStyle=_noVigente?' style="background:#FDECEC"':'';
+    return`<tr${trStyle}>${selCell}${numCell}<td>${esc(x.legajo)}</td><td class="col-nombre">${esc(x.nombre)}${extBadge}${agregadoBadge}</td>${cuilCell}<td style="font-size:10px">${esc(x.departamento||x.sector||'')}</td>${antigCell}${estadoCell}<td>${compBadge}</td>${notaCellVer}${fechaEvalCell}${delCell}</tr>`;
   }
 
   // Armar filas según vista — se controla con JS en el cliente via data-view
@@ -4147,6 +4181,7 @@ function exportFalt(capId){
     const completo=a.completo&&(!esInd||a.nota!=null);
     if(completo) return;
     const lg=String(a.legajo);
+    if(M.excluidosBajaSet&&M.excluidosBajaSet.has(lg)) return; // de baja: excluido del cálculo
     yaAgregados.add(lg);
     falt.push(_mk('lista',a.legajo,a.nombre,
       a.cuil||'',a.un||'',

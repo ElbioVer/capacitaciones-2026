@@ -1487,11 +1487,17 @@ async function cargarParticipantesDesdePadron(capId, un, departamento){
       // Mostrar progreso si hay muchos
       if(nuevos.length>LOTE) toast(`Cargando... ${Math.min(insertados,nuevos.length)}/${nuevos.length}`);
     }
-    // Actualizar participantes_esperados con el total real
+    // Actualizar participantes_esperados con el total real — EXCEPTO en
+    // INDUCCION, donde la meta se calcula siempre en vivo desde la lista
+    // (participantes_esperados quedaría desactualizado apenas alguien salga
+    // de la lista más adelante, ya que este campo nunca baja solo).
+    const capObjAct=caps.find(x=>x.id===capId);
     const totalAsis=getA(capId).length;
-    await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
-    const capIdx=caps.findIndex(x=>x.id===capId);
-    if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
+    if((capObjAct?.tipo_codigo||'')!=='INDUCCION'){
+      await api('PATCH','capacitaciones',{participantes_esperados:totalAsis},`?id=eq.${capId}`);
+      const capIdx=caps.findIndex(x=>x.id===capId);
+      if(capIdx>=0) caps[capIdx].participantes_esperados=totalAsis;
+    }
     toast(`✓ ${insertados} participantes cargados — Meta: ${totalAsis}`);
   }catch(e){
     console.warn('Error cargando participantes desde padrón:',e);
@@ -7319,6 +7325,12 @@ function renderGantt(){
 // En INDUCCION/IND.SST participantes_esperados suele quedar en 0/1, por eso la lista manda.
 function espMetaCap(cap){
   const M = metricas(cap);
+  // INDUCCION/IND.SST: la meta SIEMPRE sale de la lista real (dinámica desde el
+  // padrón). Si se usara participantes_esperados acá, un valor viejo/ratcheado
+  // (que solo sube, nunca baja cuando alguien sale de la lista) dejaría la
+  // "meta" de los indicadores mostrando más gente de la que hoy figura en la
+  // lista — que es justo el desfasaje que reportó Elbio (58 vs 57 reales).
+  if((cap.tipo_codigo||'')==='INDUCCION') return M.esperados||0;
   return Math.max(M.esperados||0, cap.participantes_esperados||0);
 }
 

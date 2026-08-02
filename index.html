@@ -669,6 +669,41 @@ async function loadAll(){
   }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
 }
 
+// ===== REFRESCO LIVIANO (auto-refresh) =====
+// Solo re-descarga las tablas que cambian durante la jornada: capacitaciones y
+// asistentes. El padrón, sectores, unidades de negocio, tipos, materiales,
+// evaluaciones y preguntas casi nunca cambian en caliente — se traen una vez con
+// loadAll() al iniciar sesión o al recargar la página, y con eso alcanza.
+async function loadLive(){
+  setSyncStatus('syncing');
+  try{
+    const [capsNew, asisPage1] = await Promise.all([
+      api('GET','capacitaciones','','?order=fecha.asc'),
+      api('GET','asistentes','','?order=id.asc&limit=1000&offset=0')
+    ]);
+    caps = capsNew || [];
+    let asisAcum = asisPage1 || [];
+    if(asisAcum.length===1000){
+      let base=1000; const BATCH=5; let seguir=true;
+      while(seguir && base<=20000){
+        const lote=[];
+        for(let k=0;k<BATCH;k++){ lote.push(api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${base+k*1000}`)); }
+        let partes;
+        try{ partes=await Promise.all(lote); }catch(e){ break; }
+        for(const p of partes){ if(p&&p.length){ asisAcum=asisAcum.concat(p); } }
+        seguir = partes.every(p=>p&&p.length===1000);
+        base += BATCH*1000;
+      }
+    }
+    asistentes = asisAcum;
+    aplicarEstadosEnMemoria();
+    guardarCache();
+    setSyncStatus('ok'); updateSub(); populateFilters(); renderContent();
+  }catch(e){
+    setSyncStatus('error');
+  }
+}
+
 function updateSub(){
   const total=caps.length,ok=caps.filter(c=>c.estado==='Realizada').length;
   // pct de capacitaciones realizadas (estado)
@@ -8394,19 +8429,45 @@ async function importarMasivaParticipantes(event){
 }
 
 
-setInterval(()=>{
-  if(!currentUser) return;
+// ===== AUTO-REFRESH (optimizado para egress) =====
+// Antes: loadAll() completo cada 30 s = la base entera, incluso con la pestaña en
+// segundo plano. Eso generaba ~780 MB/día de egress y agotó la cuota del plan Free.
+// Ahora: cada 5 min, solo con la pestaña visible, y solo las tablas que cambian.
+const REFRESH_MS = 300000; // 5 minutos
+
+let _refreshTimer = null;
+
+function _puedeRefrescar(){
+  if(!currentUser) return false;
+  if(document.hidden) return false;                       // pestaña en segundo plano
   // No recargar si hay un modal abierto (evita perder contexto de trabajo)
   const modal=document.getElementById('modal-overlay');
-  if(modal&&modal.classList.contains('open')) return;
+  if(modal&&modal.classList.contains('open')) return false;
   // No recargar si se acaba de eliminar un participante
-  if(window._suppressReload&&Date.now()<window._suppressReload) return;
+  if(window._suppressReload&&Date.now()<window._suppressReload) return false;
   // No recargar en pestañas de trabajo donde el rerender interrumpe: Config (limpieza de plan,
   // texto de WhatsApp) y Padrón (edición de contactos, scroll horizontal). Ahí el auto-refresh
   // haría perder la selección, el scroll o el foco mientras el usuario opera.
-  if(currentTab==='config'||currentTab==='padron') return;
-  loadAll();
-},30000);
+  if(currentTab==='config'||currentTab==='padron') return false;
+  return true;
+}
+
+function _startRefresh(){
+  if(_refreshTimer) return;
+  _refreshTimer=setInterval(()=>{ if(_puedeRefrescar()) loadLive(); }, REFRESH_MS);
+}
+function _stopRefresh(){
+  if(_refreshTimer){ clearInterval(_refreshTimer); _refreshTimer=null; }
+}
+
+// Al ocultar la pestaña se corta el timer. Al volver, refresca una vez y reanuda:
+// el usuario ve datos frescos al instante sin pagar egress mientras no está mirando.
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ _stopRefresh(); }
+  else { if(_puedeRefrescar()) loadLive(); _startRefresh(); }
+});
+
+_startRefresh();
 
 // Validación de CDN al arranque (solo consola, sin cartel visual)
 (function checkCDNs(){

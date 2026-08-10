@@ -346,6 +346,7 @@ select.form-input{cursor:pointer}
       </div>
     </div>
   </div>
+  <div id="data-warn" style="display:none;background:#FCEBEB;border-bottom:2px solid #E24B4A;padding:8px 16px;font-size:11px;color:#7A1F1F;text-align:center;font-weight:600"></div>
   <div id="visor-banner" class="visor-banner" style="display:none">👁 Modo visualización — solo lectura</div>
   <div class="filter-bar">
     <label>Tipo</label>
@@ -529,6 +530,77 @@ async function api(method,table,body,query,extraHeaders){
   return ct.includes('json')?r.json():null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CARGA COMPLETA VERIFICADA (anti-truncamiento)
+// PostgREST corta las respuestas en 1000 filas. El código anterior "adivinaba"
+// si faltaban datos comparando length===1000, y varias tablas ni siquiera
+// paginaban. getAll() lee el TOTAL REAL del header Content-Range y verifica que
+// lo recibido coincida: si falta una sola fila LANZA ERROR en vez de devolver
+// un resultado truncado en silencio.
+// ═══════════════════════════════════════════════════════════════════════════
+const PAGE=1000;
+async function _getPage(table,query,sep,off){
+  const hdrs=Object.assign({},H,{'Prefer':'count=exact'});
+  const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}${sep}limit=${PAGE}&offset=${off}`,{method:'GET',headers:hdrs});
+  if(!r.ok) throw new Error(table+': '+(await r.text()));
+  const m=(r.headers.get('content-range')||'').match(/\/(\d+)\s*$/);
+  const rows=(await r.json())||[];
+  return {rows:rows,total:m?parseInt(m[1],10):null};
+}
+async function getAll(table,query){
+  query=query||'';
+  const sep=query.indexOf('?')>=0?'&':'?';
+  const p0=await _getPage(table,query,sep,0);
+  let out=p0.rows.slice();
+  const total=p0.total;
+  if(total==null){
+    // El servidor no informó total: paginamos hasta que una página venga incompleta
+    let off=out.length,ult=p0.rows.length,guard=0;
+    while(ult===PAGE&&guard++<500){
+      const p=await _getPage(table,query,sep,off);
+      out=out.concat(p.rows); ult=p.rows.length; off+=p.rows.length;
+      if(!p.rows.length) break;
+    }
+    return out;
+  }
+  if(out.length>=total) return out;
+  // Total conocido: pedimos las páginas restantes en paralelo (de a 5)
+  const offsets=[];
+  for(let o=out.length;o<total;o+=PAGE) offsets.push(o);
+  const BATCH=5;
+  for(let i=0;i<offsets.length;i+=BATCH){
+    const partes=await Promise.all(offsets.slice(i,i+BATCH).map(o=>_getPage(table,query,sep,o)));
+    for(const p of partes) out=out.concat(p.rows);
+  }
+  if(out.length<total) throw new Error(table+': carga incompleta ('+out.length+' de '+total+' filas)');
+  return out;
+}
+
+// ── Estado de integridad de los datos en memoria ────────────────────────────
+let _dataOk=false;   // la última carga trajo TODAS las filas
+let _fullOk=false;   // loadAll() completo salió bien al menos una vez
+let _dataErr='';
+function _banner(){return document.getElementById('data-warn');}
+function marcarDatosOk(){
+  _dataOk=true;_dataErr='';
+  const b=_banner(); if(b) b.style.display='none';
+}
+function marcarDatosIncompletos(motivo){
+  _dataOk=false;_dataErr=motivo||'';
+  const b=_banner();
+  if(b){
+    b.style.display='block';
+    b.textContent='\u26a0\ufe0f Datos incompletos'+(_dataErr?' \u2014 '+_dataErr:'')+'. Las acciones de borrado est\u00e1n bloqueadas. Toc\u00e1 \ud83d\udd04 Actualizar.';
+  }
+}
+// Guard obligatorio antes de CUALQUIER operación destructiva. Si la carga no está
+// verificada, el array local puede estar truncado y borraríamos por datos parciales.
+function puedeBorrar(){
+  if(_dataOk) return true;
+  alert('\ud83d\udeab Acci\u00f3n bloqueada\n\nLos datos en pantalla est\u00e1n incompletos'+(_dataErr?' ('+_dataErr+')':'')+'.\n\nBorrar ahora podr\u00eda eliminar registros equivocados. Toc\u00e1 "\ud83d\udd04 Actualizar" y esper\u00e1 a que la carga termine sin errores.');
+  return false;
+}
+
 function setSyncStatus(s){const d=document.getElementById('sync-dot');d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');}
 function toast(msg,dur){dur=dur||2500;const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 
@@ -604,6 +676,7 @@ function hidratarDesdeCache(){
     evaluaciones=s.evaluaciones||[]; preguntas=s.preguntas||[]; padron=s.padron||[];
     if(isAdmin()) usuarios=s.usuarios||[];
     aplicarEstadosEnMemoria(); updateSub(); populateFilters(); renderContent();
+    _dataOk=false; _fullOk=false;  // datos de cache: sin verificar, borrado bloqueado
     const sub=document.getElementById('hdr-sub'); if(sub) sub.textContent='Mostrando \u00faltima copia \u2014 actualizando...';
     setSyncStatus('syncing');
     return true;
@@ -620,53 +693,39 @@ async function loadAll(){
   setSyncStatus('syncing');
   document.getElementById('hdr-sub').textContent='Sincronizando...';
   try{
+    // TODAS las tablas pasan por getAll(): antes solo paginaban asistentes y
+    // padron; las otras 8 se cortaban en 1000 filas sin aviso.
     const queries=[
-      api('GET','capacitaciones','','?order=fecha.asc'),
-      api('GET','asistentes','','?order=id.asc&limit=1000&offset=0'),
-      api('GET','unidades_negocio','','?order=nombre.asc'),
-      api('GET','sectores','','?order=nombre.asc'),
-      api('GET','tipos_capacitacion','','?activo=eq.true&order=codigo.asc'),
-      api('GET','materiales','','?order=created_at.asc'),
-      api('GET','evaluaciones','','?order=created_at.asc'),
-      api('GET','preguntas_evaluacion','','?order=orden.asc'),
-      api('GET','padron','','?order=nombre.asc&limit=1000&offset=0')
+      getAll('capacitaciones','?order=fecha.asc'),
+      getAll('asistentes','?order=id.asc'),
+      getAll('unidades_negocio','?order=nombre.asc'),
+      getAll('sectores','?order=nombre.asc'),
+      getAll('tipos_capacitacion','?activo=eq.true&order=codigo.asc'),
+      getAll('materiales','?order=created_at.asc'),
+      getAll('evaluaciones','?order=created_at.asc'),
+      getAll('preguntas_evaluacion','?order=orden.asc'),
+      getAll('padron','?order=nombre.asc')
     ];
-    if(isAdmin()) queries.push(api('GET','usuarios','','?order=nombre.asc'));
+    if(isAdmin()) queries.push(getAll('usuarios','?order=nombre.asc'));
     const res=await Promise.all(queries);
-    caps=res[0]||[];uns=res[2]||[];sectores=res[3]||[];
+    caps=res[0]||[];asistentes=res[1]||[];uns=res[2]||[];sectores=res[3]||[];
     tipos=res[4]||[];materiales=res[5]||[];evaluaciones=res[6]||[];preguntas=res[7]||[];
-    // Cargar asistentes con paginación PARALELA por lotes (más rápido)
-    let asisAcum=res[1]||[];
-    if((res[1]||[]).length===1000){
-      let base=1000; const BATCH=5; let seguir=true;
-      while(seguir && base<=20000){
-        const lote=[];
-        for(let k=0;k<BATCH;k++){ lote.push(api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${base+k*1000}`)); }
-        let partes;
-        try{ partes=await Promise.all(lote); }catch(e){ break; }
-        for(const p of partes){ if(p&&p.length){ asisAcum=asisAcum.concat(p); } }
-        seguir = partes.every(p=>p&&p.length===1000);
-        base += BATCH*1000;
-      }
-    }
-    asistentes=asisAcum;
-    // Cargar padrón con paginación para soportar hasta 2000 registros
-    let padronPage1=res[8]||[];
-    if(padronPage1.length===1000){
-      try{
-        const padronPage2=await api('GET','padron','','?order=nombre.asc&limit=1000&offset=1000');
-        padron=[...padronPage1,...(padronPage2||[])];
-      }catch(e){padron=padronPage1;}
-    } else {
-      padron=padronPage1;
-    }
+    padron=res[8]||[];
     if(isAdmin()) usuarios=res[9]||[];
-    // Extraer departamentos únicos del padrón
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
     aplicarEstadosEnMemoria();
-    guardarCache();
+    _fullOk=true; marcarDatosOk();
+    guardarCache();   // la cache SOLO se escribe con datos verificados completos
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
-  }catch(e){setSyncStatus('error');document.getElementById('hdr-sub').textContent='Sin conexión';}
+  }catch(e){
+    // Ninguna asignacion ocurrio: los arrays quedan como estaban (cache o vacio).
+    // No se guarda cache y quedan bloqueados los borrados.
+    _fullOk=false;
+    setSyncStatus('error');
+    marcarDatosIncompletos((e&&e.message)||'sin conexi\u00f3n');
+    document.getElementById('hdr-sub').textContent='\u26a0\ufe0f Datos incompletos \u2014 no se guard\u00f3 copia';
+    try{populateFilters();renderContent();}catch(_){}
+  }
 }
 
 // ===== REFRESCO LIVIANO (auto-refresh) =====
@@ -677,30 +736,20 @@ async function loadAll(){
 async function loadLive(){
   setSyncStatus('syncing');
   try{
-    const [capsNew, asisPage1] = await Promise.all([
-      api('GET','capacitaciones','','?order=fecha.asc'),
-      api('GET','asistentes','','?order=id.asc&limit=1000&offset=0')
+    const [capsNew, asisNew] = await Promise.all([
+      getAll('capacitaciones','?order=fecha.asc'),
+      getAll('asistentes','?order=id.asc')
     ]);
     caps = capsNew || [];
-    let asisAcum = asisPage1 || [];
-    if(asisAcum.length===1000){
-      let base=1000; const BATCH=5; let seguir=true;
-      while(seguir && base<=20000){
-        const lote=[];
-        for(let k=0;k<BATCH;k++){ lote.push(api('GET','asistentes','',`?order=id.asc&limit=1000&offset=${base+k*1000}`)); }
-        let partes;
-        try{ partes=await Promise.all(lote); }catch(e){ break; }
-        for(const p of partes){ if(p&&p.length){ asisAcum=asisAcum.concat(p); } }
-        seguir = partes.every(p=>p&&p.length===1000);
-        base += BATCH*1000;
-      }
-    }
-    asistentes = asisAcum;
+    asistentes = asisNew || [];
     aplicarEstadosEnMemoria();
-    guardarCache();
+    // Solo se considera integro si ademas hubo un loadAll() completo previo
+    // (padron, evaluaciones y preguntas vienen de ahi).
+    if(_fullOk){ marcarDatosOk(); guardarCache(); }
     setSyncStatus('ok'); updateSub(); populateFilters(); renderContent();
   }catch(e){
     setSyncStatus('error');
+    marcarDatosIncompletos((e&&e.message)||'sin conexi\u00f3n');
   }
 }
 
@@ -1932,7 +1981,16 @@ function filtrarPadron(filtro){
 
 async function limpiarPadron(){
   if(!isAdmin()){toast('Sin permisos');return;}
-  if(!confirm('¿Eliminar TODOS los registros del padrón? Esta acción no se puede deshacer.')) return;
+  if(!puedeBorrar()) return;
+  if(!padron.length){toast('El padr\u00f3n ya est\u00e1 vac\u00edo');return;}
+  // Paso 1: respaldo OBLIGATORIO antes de un borrado irreversible
+  if(!confirm('Vas a borrar los '+padron.length+' registros del padr\u00f3n.\n\nPrimero se descarga un Excel de respaldo.\n\n\u00bfContinuar?')) return;
+  try{ await exportarPadron(); }
+  catch(_e){ alert('No se pudo generar el respaldo. Se cancela el borrado.'); return; }
+  // Paso 2: confirmacion escrita (no alcanza con un click)
+  const _frase=prompt('\u26a0\ufe0f \u00daLTIMO PASO \u2014 ACCI\u00d3N IRREVERSIBLE\n\nSe eliminar\u00e1n '+padron.length+' registros del padr\u00f3n en Supabase.\n\nEscrib\u00ed exactamente:  BORRAR PADRON');
+  if(_frase===null) return;
+  if(String(_frase).trim().toUpperCase()!=='BORRAR PADRON'){ alert('Texto incorrecto. No se borr\u00f3 nada.'); return; }
   try{
     setSyncStatus('syncing');
     await api('DELETE','padron','','?id=gte.0');
@@ -2983,7 +3041,7 @@ function buildDetail(id,resetScroll){
         try{
           const evId=ev.id;
           // Traer legajo para poder filtrar por asistentes actuales
-          const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+evId+'&select=legajo,respuestas,puntaje');
+          const resp=await getAll('respuestas_evaluacion','?evaluacion_id=eq.'+evId+'&select=legajo,respuestas,puntaje&order=id.asc');
           if(!resp||!resp.length){
             const w=document.getElementById('evalChartWrap_'+id);
             if(w) w.textContent='Sin respuestas registradas aún.';
@@ -3828,6 +3886,7 @@ async function toggleCompleto(asistId, capId, nuevoEstado){
 
 async function limpiarParticipantes(capId, total){
   if(!canManageParticipants()) return;
+  if(!puedeBorrar()) return;
   const c=caps.find(x=>x.id===capId);
   if(!c) return;
 
@@ -4469,7 +4528,7 @@ async function exportRespuestas(capId){
   if(!pqsLocal.length){toast('Sin preguntas');return;}
   toast('Generando reporte...',6000);
   try{
-    const resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=*');
+    const resp=await getAll('respuestas_evaluacion','?evaluacion_id=eq.'+ev.id+'&select=*&order=id.asc');
     if(!resp||!resp.length){toast('Sin respuestas registradas');return;}
     // Orden cronológico (created_at si existe, sino id)
     resp.sort((x,y)=>String(x.created_at||'').localeCompare(String(y.created_at||''))||((x.id||0)-(y.id||0)));
@@ -4649,7 +4708,7 @@ async function gestionarRespuestas(capId){
   const ev=getEval(capId);if(!ev){toast('Sin evaluación');return;}
   toast('Cargando respuestas...');
   let resp=[];
-  try{ resp=await api('GET','respuestas_evaluacion','','?evaluacion_id=eq.'+ev.id+'&select=*')||[]; }
+  try{ resp=await getAll('respuestas_evaluacion','?evaluacion_id=eq.'+ev.id+'&select=*&order=id.asc')||[]; }
   catch(e){toast('Error al cargar respuestas');return;}
   resp.sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||''))||((y.id||0)-(x.id||0)));
   window['_gestResp_'+capId]=resp;
@@ -4780,10 +4839,32 @@ async function importExcel(event,capId){
         fecha_evaluacion:(()=>{const fv=String(r.fecha_evaluacion||r['Fecha Evaluación']||r.fecha_eval||'').trim();if(!fv)return null;if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(fv))return fv;return null;})()
       })).filter(r=>r.legajo);
       if(!nuevos.length){alert('No se encontraron registros con columna "legajo".');return;}
+      if(!puedeBorrar()) return;
       setSyncStatus('syncing');toast('Importando...',10000);
-      await api('DELETE','asistentes','',`?capacitacion_id=eq.${capId}`);
-      asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);
-      const ins=await api('POST','asistentes',nuevos,'');
+      // ANTES: se borraba primero y se insertaba despues -> si el POST fallaba,
+      // la capacitacion quedaba VACIA y sin forma de recuperar la lista.
+      // AHORA: se inserta lo nuevo primero y solo si salio bien se borran los
+      // registros anteriores, uno por uno por id. Peor caso: duplicados
+      // temporales (recuperables), nunca una lista vacia.
+      const _previos=getA(capId).slice();
+      let ins=null;
+      try{
+        ins=await api('POST','asistentes',nuevos,'');
+      }catch(_e){
+        setSyncStatus('error');
+        alert('No se pudo importar: '+((_e&&_e.message)||_e)+'\n\nLa lista anterior NO se toc\u00f3.');
+        return;
+      }
+      if(_previos.length){
+        const _idsPrev=new Set(_previos.map(p=>p.id));
+        let _errBorrado=0;
+        for(const _p of _previos){
+          try{ await api('DELETE','asistentes','',`?id=eq.${_p.id}`); }
+          catch(_e2){ _errBorrado++; _idsPrev.delete(_p.id); console.warn('No se pudo borrar el asistente previo',_p.id,_e2); }
+        }
+        asistentes=asistentes.filter(a=>!_idsPrev.has(a.id));
+        if(_errBorrado) alert('Se import\u00f3 la lista nueva, pero quedaron '+_errBorrado+' registro(s) viejo(s) sin borrar. Revis\u00e1 si hay duplicados.');
+      }
       const capObj=caps.find(c=>c.id===capId);
       const cIdx=caps.findIndex(x=>x.id===capId);
       if(ins){
@@ -4995,6 +5076,7 @@ async function mostrarModalActualizarParticipantes(capId, un, departamento){
       resolve();
     };
     overlay.querySelector('#opt-limpiar').onclick=async()=>{
+      if(!puedeBorrar()){ return; }
       document.body.removeChild(overlay);
       // Eliminar los eliminables
       if(eliminables.length){
@@ -5134,6 +5216,9 @@ async function sincronizarFechasYEstados(){
 
 // ===== sincronizarInduccion =====
 async function sincronizarInduccion(){
+  // Esta sincronizacion BORRA registros decidiendo a partir del array local:
+  // con datos truncados eliminaria filas equivocadas.
+  if(!puedeBorrar()) return;
   if(!isAdmin()){toast('Sin permisos');return;}
   const capsInduccion=caps.filter(c=>c.tipo_codigo==='INDUCCION'&&c.fecha);
   if(!capsInduccion.length){toast('No hay capacitaciones INDUCCION con fecha registrada');return;}
@@ -5347,6 +5432,8 @@ async function diagnosticarEvaluaciones(){
 // nota ya cargada manualmente ni borra respuestas.
 // ═══════════════════════════════════════════════════════════════════
 async function sincronizarEvaluacionesDesdeRespuestas(){
+  // Puede eliminar duplicados de INDUCCION: exige datos completos.
+  if(!puedeBorrar()) return;
   if(!isAdmin()){toast('Sin permisos');return;}
 
   setSyncStatus('syncing');
@@ -5685,6 +5772,7 @@ async function resetearEsperadosInduccion(){
 }
 
 async function deleteCap(id){
+  if(!puedeBorrar()) return;
   if(!canEdit()||!confirm('¿Eliminar esta capacitación y todos sus datos?'))return;
   try{await api('DELETE','capacitaciones','',`?id=eq.${id}`);caps=caps.filter(c=>c.id!==id);asistentes=asistentes.filter(a=>a.capacitacion_id!==id);materiales=materiales.filter(m=>m.capacitacion_id!==id);evaluaciones=evaluaciones.filter(e=>e.capacitacion_id!==id);toast('Eliminada');closeModal();updateSub();renderContent();}catch(e){toast('Error');}
 }
@@ -6461,7 +6549,7 @@ async function confirmarAgregarSeleccionados(capId){
     const _capC=caps.find(x=>x.id===capId);
     const _esCerC=!!(_capC&&_capC.lista_cerrada);
     // Siempre consultar BD fresca para evitar duplicados — no confiar en memoria
-    const yaEnBD=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&select=legajo,id`);
+    const yaEnBD=await getAll('asistentes',`?capacitacion_id=eq.${capId}&select=legajo,id&order=id.asc`);
     const legajosBD=new Set((yaEnBD||[]).map(x=>String(x.legajo)));
     // Filtrar solo los que NO están en BD
     const payload=checks
@@ -6480,7 +6568,7 @@ async function confirmarAgregarSeleccionados(capId){
       }));
     if(!payload.length){
       // Todos ya estaban — recargar y mostrar
-      const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
+      const frescos=await getAll('asistentes',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
       if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
       setSyncStatus('ok');toast('Todos los seleccionados ya estaban en la lista');
       buildDetail(capId);renderContent();return;
@@ -6497,7 +6585,7 @@ async function confirmarAgregarSeleccionados(capId){
       }
     }
     // Recargar desde servidor para estado real
-    const frescos=await api('GET','asistentes','',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
+    const frescos=await getAll('asistentes',`?capacitacion_id=eq.${capId}&order=nombre.asc`);
     if(frescos){asistentes=asistentes.filter(a=>a.capacitacion_id!==capId);asistentes=[...asistentes,...frescos];}
     setSyncStatus('ok');
     toast(`${insertados} participante${insertados!==1?'s':''} agregado${insertados!==1?'s':''}`);
@@ -6893,8 +6981,8 @@ async function init(){
       const [ev,pq,cap,pad]=await Promise.all([
         api('GET','evaluaciones','',`?id=eq.${evalId}`),
         api('GET','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}&order=orden.asc`),
-        api('GET','capacitaciones','','?order=id.asc'),
-        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc')
+        getAll('capacitaciones','?order=id.asc'),
+        getAll('padron','?estado=eq.Vigente&order=legajo.asc')
       ]);
       evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];padron=pad||[];
       const tiposData=await api('GET','tipos_capacitacion','','?activo=eq.true');
@@ -6911,10 +6999,10 @@ async function init(){
     try{
       const [cap,pad,tiposData,evData,pqData]=await Promise.all([
         api('GET','capacitaciones','',`?id=eq.${presCapId}`),
-        api('GET','padron','','?estado=eq.Vigente&order=legajo.asc'),
+        getAll('padron','?estado=eq.Vigente&order=legajo.asc'),
         api('GET','tipos_capacitacion','','?activo=eq.true'),
         api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`),
-        api('GET','preguntas_evaluacion','',`?evaluacion_id=not.is.null&order=orden.asc`)
+        getAll('preguntas_evaluacion','?evaluacion_id=not.is.null&order=orden.asc')
       ]);
       caps=cap||[];padron=pad||[];tipos=tiposData||[];
       evaluaciones=evData||[];preguntas=pqData||[];
@@ -8227,6 +8315,7 @@ function seleccionarTodasCaps(marcar){
   actualizarContadorCaps();
 }
 async function borrarCapsSeleccionadas(){
+  if(!puedeBorrar()) return;
   const ids=[..._limpSel];
   if(!ids.length){toast('No hay capacitaciones seleccionadas');return;}
   const n=ids.length;

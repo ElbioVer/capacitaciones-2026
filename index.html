@@ -2524,6 +2524,7 @@ function renderConfig(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn-sm green" onclick="exportPlantillaCaps()">📥 Plantilla Excel</button>
       <button class="btn-sm blue" onclick="exportPlanActual()">📤 Exportar plan</button>
+      <button class="btn-sm blue" onclick="exportPlanClasico()">📊 Exportar formato clásico</button>
       <label class="upload-label">📂 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarCaps(event)"></label>
     </div>
     <div style="background:#FAEEDA;border-radius:8px;padding:10px;font-size:11px;line-height:1.8;color:#854F0B">
@@ -6668,6 +6669,92 @@ function exportPlanActual(){
   XLSX.utils.book_append_sheet(wb,ws,'Plan');
   XLSX.writeFile(wb,'plan_capacitacion_2026.xlsx');
   toast('Plan exportado');
+}
+
+// ── Exportar plan en el formato "clásico" (columnas del viejo Excel de RRHH) ──
+const MESES_ABR_CLASICO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function mesAbrClasico(fecha){
+  if(!fecha)return'';
+  const p=fecha.split('-');if(p.length<2)return'';
+  const y=p[0],m=parseInt(p[1],10);
+  if(!m||m<1||m>12)return'';
+  return MESES_ABR_CLASICO[m-1]+'-'+String(y).slice(2);
+}
+function exportPlanClasico(){
+  if(!caps.length){toast('No hay capacitaciones');return;}
+  const vhRaw=prompt('Valor hora promedio por empleado ($):\n(Valor básico mensual ÷ 24 jornadas ÷ 8 hs — un promedio, no hace falta exactitud)','0');
+  if(vhRaw===null)return;
+  const valorHora=parseFloat(vhRaw.replace(',','.'))||0;
+
+  const cols=['Módulo','Tema','Nombre del Curso','Origen (Calificación)','Alcance - Personal','Alcance - U. Negocios','Mes de realización','Personal a capacitar','Horas - Por persona','Horas - Totales','Horas - Presentes','Horas - Pendientes','Expositor','% Cumplimiento','Aprobados','Desaprobados','Efectividad %','Costo','Observaciones'];
+  const HORAS_TOT_COL='J'; // columna "Horas - Totales" (10ma, ver 'cols' arriba)
+
+  const aoa=[
+    ['Valor hora promedio ($):',valorHora,'','Editá B1 y volvé a calcular "Costo" (Ctrl+Alt+F9) si lo cambiás.'],
+    [],
+    cols
+  ];
+
+  caps.forEach(c=>{
+    const tipo=getTipo(c.tipo_codigo);
+    const esInd=c.tipo_codigo==='INDUCCION';
+    const notaAprob=c.nota_aprobacion||(esInd?60:6);
+    const lista=getAUnica(c.id);
+    const completados=lista.filter(x=>x.completo&&(!esInd||x.nota!=null));
+    const comp=completados.length;
+    const evaluados=lista.filter(x=>x.nota!=null);
+    const aprobados=tipo.tiene_evaluacion?evaluados.filter(x=>x.nota>=notaAprob).length:comp;
+    const esperados=c.participantes_esperados||0;
+    const desaprobados=Math.max(esperados-aprobados,0);
+    const horasPorPersona=c.duracion||0;
+    const horasTotales=esperados*horasPorPersona;
+    const horasPresentes=comp*horasPorPersona;
+    const horasPendientes=Math.max(horasTotales-horasPresentes,0);
+    const pctCump=esperados?comp/esperados:0;
+    const efectividad=!tipo.tiene_evaluacion?1:(esperados?aprobados/esperados:0);
+    const nombreCurso=(c.codigo_redmine?c.codigo_redmine+' - ':'')+(c.titulo||'');
+    aoa.push([
+      c.tipo_codigo||'',
+      tipo.nombre||'',
+      nombreCurso,
+      c.tipo_codigo==='CALIFICACION'?'SI':'NO',
+      'Operativo',
+      c.un||'Varios',
+      mesAbrClasico(c.fecha),
+      esperados,
+      horasPorPersona,
+      horasTotales,
+      horasPresentes,
+      horasPendientes,
+      c.instructor||'',
+      pctCump,
+      aprobados,
+      desaprobados,
+      efectividad,
+      null, // Costo: se completa abajo con fórmula
+      c.obs||''
+    ]);
+  });
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const HEADER_ROW=3; // fila 1-indexed de los encabezados
+  for(let i=0;i<caps.length;i++){
+    const row=HEADER_ROW+1+i; // fila de datos (1-indexed)
+    const addr='R'+row; // columna R = "Costo" (18va columna)
+    ws[addr]={t:'n',f:'$B$1*'+HORAS_TOT_COL+row};
+  }
+  // Formato porcentaje para % Cumplimiento (N) y Efectividad % (Q)
+  for(let i=0;i<caps.length;i++){
+    const row=HEADER_ROW+1+i;
+    if(ws['N'+row])ws['N'+row].z='0%';
+    if(ws['Q'+row])ws['Q'+row].z='0%';
+    if(ws['R'+row])ws['R'+row].z='#,##0';
+  }
+  ws['!cols']=[{wch:9},{wch:26},{wch:32},{wch:16},{wch:14},{wch:16},{wch:12},{wch:12},{wch:10},{wch:10},{wch:10},{wch:11},{wch:16},{wch:12},{wch:10},{wch:12},{wch:12},{wch:14},{wch:26}];
+  XLSX.utils.book_append_sheet(wb,ws,'Plan');
+  XLSX.writeFile(wb,'plan_capacitacion_formato_clasico.xlsx');
+  toast('Plan exportado (formato clásico)');
 }
 
 async function importarCaps(event){

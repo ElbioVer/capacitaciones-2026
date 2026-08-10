@@ -520,14 +520,41 @@ function getPermisosUN(){
   return map;
 }
 
+// Contador local de egress (estimado) para detectar consumo anormal a tiempo.
+const _EG_KEY='cap_egress_';
+function _contarBytes(n){
+  if(!n) return;
+  try{
+    const d=new Date().toISOString().slice(0,10), k=_EG_KEY+d;
+    localStorage.setItem(k,String((parseInt(localStorage.getItem(k)||'0',10)||0)+n));
+  }catch(e){}
+}
+window.consumoHoy=function(){
+  let tot=0;const det=[];
+  for(let i=0;i<30;i++){
+    const dd=new Date(Date.now()-i*86400000).toISOString().slice(0,10);
+    const v=parseInt(localStorage.getItem(_EG_KEY+dd)||'0',10)||0;
+    if(v){det.push(dd+': '+(v/1048576).toFixed(2)+' MB');tot+=v;}
+  }
+  const msg='Consumo estimado de ESTA PC (no incluye otras)\n\n'+det.join('\n')+'\n\nTotal 30 d\u00edas: '+(tot/1048576).toFixed(1)+' MB';
+  console.log(msg);alert(msg);return tot;
+};
+
 async function api(method,table,body,query,extraHeaders){
   query=query||'';
-  const hdrs=extraHeaders?Object.assign({},H,extraHeaders):H;
+  // PATCH y DELETE: ningun punto del programa usa la fila devuelta, asi que
+  // pedimos return=minimal y dejamos de pagar egress por cada escritura.
+  let base=H;
+  if(method==='PATCH'||method==='DELETE') base=Object.assign({},H,{'Prefer':'return=minimal'});
+  const hdrs=extraHeaders?Object.assign({},base,extraHeaders):base;
   const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}`,{method,headers:hdrs,body:body?JSON.stringify(body):undefined});
+  if(r.status===402) throw new Error('[402] Supabase restringi\u00f3 el proyecto por consumo (cuota de egress agotada)');
   if(!r.ok) throw new Error(await r.text());
   if(r.status===204) return null;
   const ct=r.headers.get('content-type')||'';
-  return ct.includes('json')?r.json():null;
+  if(!ct.includes('json')) return null;
+  const txt=await r.text(); _contarBytes(txt.length);
+  try{ return JSON.parse(txt); }catch(e){ return null; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -542,9 +569,11 @@ const PAGE=1000;
 async function _getPage(table,query,sep,off){
   const hdrs=Object.assign({},H,{'Prefer':'count=exact'});
   const r=await fetch(`${SUPA_URL}/rest/v1/${table}${query}${sep}limit=${PAGE}&offset=${off}`,{method:'GET',headers:hdrs});
+  if(r.status===402) throw new Error('[402] Supabase restringi\u00f3 el proyecto por consumo (cuota de egress agotada)');
   if(!r.ok) throw new Error(table+': '+(await r.text()));
   const m=(r.headers.get('content-range')||'').match(/\/(\d+)\s*$/);
-  const rows=(await r.json())||[];
+  const txt=await r.text(); _contarBytes(txt.length);
+  let rows=[]; try{ rows=JSON.parse(txt)||[]; }catch(e){ rows=[]; }
   return {rows:rows,total:m?parseInt(m[1],10):null};
 }
 async function getAll(table,query){
@@ -576,6 +605,53 @@ async function getAll(table,query){
   return out;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SINCRONIZACION INCREMENTAL (ahorro de egress)
+// El refresco cada 5 min bajaba la tabla ENTERA de asistentes. Ahora baja solo
+// las filas con updated_at posterior a la ultima marca de agua, y verifica con
+// un COUNT (respuesta de ~15 bytes) que no falte ninguna. Si el total no cuadra
+// -por un borrado hecho desde otra PC- recarga completo.
+// Requiere la migracion SQL de updated_at. Si la columna no existe, la marca de
+// agua queda nula y todo cae automaticamente en carga completa: funciona igual.
+// ═══════════════════════════════════════════════════════════════════════════
+let _wm={asistentes:null,capacitaciones:null};
+function _maxUpd(rows){
+  let m=null;
+  for(const r of rows||[]){ const u=r&&r.updated_at; if(u&&(m===null||u>m)) m=u; }
+  return m;
+}
+async function contarFilas(table){
+  const hdrs=Object.assign({},H,{'Prefer':'count=exact'});
+  const r=await fetch(`${SUPA_URL}/rest/v1/${table}?select=id&limit=1&offset=0`,{method:'GET',headers:hdrs});
+  if(r.status===402) throw new Error('[402] Supabase restringi\u00f3 el proyecto por consumo (cuota de egress agotada)');
+  if(!r.ok) throw new Error(table+': '+(await r.text()));
+  const txt=await r.text(); _contarBytes(txt.length);
+  const m=(r.headers.get('content-range')||'').match(/\/(\d+)\s*$/);
+  return m?parseInt(m[1],10):null;
+}
+function _mergeById(local,cambios){
+  if(!cambios||!cambios.length) return local.slice();
+  const idx=new Map(); local.forEach((r,i)=>idx.set(r.id,i));
+  const out=local.slice();
+  for(const c of cambios){
+    const i=idx.get(c.id);
+    if(i===undefined){ idx.set(c.id,out.length); out.push(c); }
+    else out[i]=c;
+  }
+  return out;
+}
+// Devuelve {rows} si el incremental fue confiable, o {full:true} si hay que recargar todo.
+async function sincIncremental(table,arrLocal,orden){
+  const wm=_wm[table];
+  if(!wm) return {full:true};
+  const cambios=await getAll(table,`?updated_at=gt.${encodeURIComponent(wm)}&order=${orden}`);
+  const merged=_mergeById(arrLocal,cambios);
+  const total=await contarFilas(table);
+  if(total==null||merged.length!==total) return {full:true};  // hubo borrados: recarga
+  const nm=_maxUpd(cambios); if(nm) _wm[table]=nm;
+  return {rows:merged,cambios:cambios.length};
+}
+
 // ── Estado de integridad de los datos en memoria ────────────────────────────
 let _dataOk=false;   // la última carga trajo TODAS las filas
 let _fullOk=false;   // loadAll() completo salió bien al menos una vez
@@ -593,6 +669,23 @@ function marcarDatosIncompletos(motivo){
     b.textContent='\u26a0\ufe0f Datos incompletos'+(_dataErr?' \u2014 '+_dataErr:'')+'. Las acciones de borrado est\u00e1n bloqueadas. Toc\u00e1 \ud83d\udd04 Actualizar.';
   }
 }
+let _restringido=false;
+function _es402(e){ return !!(e&&String(e.message||'').indexOf('[402]')===0); }
+function modoSoloLectura(){
+  _restringido=true;_dataOk=false;_fullOk=false;
+  if(typeof _stopRefresh==='function') _stopRefresh();   // no seguir gastando pedidos
+  const f=window._cacheTs?new Date(window._cacheTs).toLocaleString('es-AR'):null;
+  const b=_banner();
+  if(b){
+    b.style.display='block';
+    b.textContent='\u26d4 Supabase restringi\u00f3 el proyecto por consumo de datos. '
+      +(f?('Mostrando la copia local del '+f+' \u2014 SOLO LECTURA.'):'No hay copia local en esta PC.')
+      +' No se puede guardar nada hasta que se reinicie el ciclo de facturaci\u00f3n o se suba de plan.';
+  }
+  const sub=document.getElementById('hdr-sub');
+  if(sub) sub.textContent='\u26d4 Solo lectura \u2014 proyecto restringido';
+}
+
 // Guard obligatorio antes de CUALQUIER operación destructiva. Si la carga no está
 // verificada, el array local puede estar truncado y borraríamos por datos parciales.
 function puedeBorrar(){
@@ -671,6 +764,7 @@ function hidratarDesdeCache(){
     if(!raw) return false;
     const s=JSON.parse(raw);
     if(!s||!Array.isArray(s.caps)||!s.caps.length) return false;
+    window._cacheTs=s.ts||null;
     caps=s.caps||[]; asistentes=s.asistentes||[]; uns=s.uns||[]; sectores=s.sectores||[];
     departamentos=s.departamentos||[]; tipos=s.tipos||[]; materiales=s.materiales||[];
     evaluaciones=s.evaluaciones||[]; preguntas=s.preguntas||[]; padron=s.padron||[];
@@ -714,6 +808,9 @@ async function loadAll(){
     if(isAdmin()) usuarios=res[9]||[];
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
     aplicarEstadosEnMemoria();
+    // Marca de agua para que el refresco siguiente sea incremental
+    _wm.asistentes=_maxUpd(asistentes); _wm.capacitaciones=_maxUpd(caps);
+    _restringido=false;
     _fullOk=true; marcarDatosOk();
     guardarCache();   // la cache SOLO se escribe con datos verificados completos
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
@@ -722,6 +819,13 @@ async function loadAll(){
     // No se guarda cache y quedan bloqueados los borrados.
     _fullOk=false;
     setSyncStatus('error');
+    if(_es402(e)){
+      // Proyecto restringido: caemos a la ultima copia local, en solo lectura.
+      if(!caps.length) hidratarDesdeCache();
+      modoSoloLectura();
+      try{populateFilters();renderContent();}catch(_){}
+      return;
+    }
     marcarDatosIncompletos((e&&e.message)||'sin conexi\u00f3n');
     document.getElementById('hdr-sub').textContent='\u26a0\ufe0f Datos incompletos \u2014 no se guard\u00f3 copia';
     try{populateFilters();renderContent();}catch(_){}
@@ -734,21 +838,32 @@ async function loadAll(){
 // evaluaciones y preguntas casi nunca cambian en caliente — se traen una vez con
 // loadAll() al iniciar sesión o al recargar la página, y con eso alcanza.
 async function loadLive(){
+  if(_restringido) return;              // proyecto restringido: no insistir
   setSyncStatus('syncing');
   try{
-    const [capsNew, asisNew] = await Promise.all([
-      getAll('capacitaciones','?order=fecha.asc'),
-      getAll('asistentes','?order=id.asc')
-    ]);
-    caps = capsNew || [];
-    asistentes = asisNew || [];
+    let capsNew,asisNew,modo='incremental',nCambios=0;
+    const rc=await sincIncremental('capacitaciones',caps,'fecha.asc');
+    const ra=rc.full?{full:true}:await sincIncremental('asistentes',asistentes,'id.asc');
+    if(rc.full||ra.full){
+      // Sin marca de agua (migracion no aplicada) o hubo borrados: recarga completa
+      capsNew=await getAll('capacitaciones','?order=fecha.asc');
+      asisNew=await getAll('asistentes','?order=id.asc');
+      _wm.capacitaciones=_maxUpd(capsNew); _wm.asistentes=_maxUpd(asisNew);
+      modo='completo';
+    } else {
+      capsNew=rc.rows.slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+      asisNew=ra.rows.slice().sort((a,b)=>(a.id||0)-(b.id||0));
+      nCambios=(rc.cambios||0)+(ra.cambios||0);
+    }
+    caps=capsNew||[];
+    asistentes=asisNew||[];
     aplicarEstadosEnMemoria();
-    // Solo se considera integro si ademas hubo un loadAll() completo previo
-    // (padron, evaluaciones y preguntas vienen de ahi).
     if(_fullOk){ marcarDatosOk(); guardarCache(); }
+    if(modo==='incremental'&&!nCambios) console.debug('[sync] sin cambios');
     setSyncStatus('ok'); updateSub(); populateFilters(); renderContent();
   }catch(e){
     setSyncStatus('error');
+    if(_es402(e)){ if(!caps.length) hidratarDesdeCache(); modoSoloLectura(); return; }
     marcarDatosIncompletos((e&&e.message)||'sin conexi\u00f3n');
   }
 }

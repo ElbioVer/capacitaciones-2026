@@ -326,7 +326,7 @@ select.form-input{cursor:pointer}
           <div style="font-size:13px;font-weight:700;color:#1a2f6e;letter-spacing:.5px">PLAN DE CAPACITACIÓN</div>
           <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:3px">
             <span class="sync-dot" id="sync-dot"></span>
-            <span id="hdr-sub" style="font-size:10px;color:#777">Conectando...</span>
+            <span id="hdr-sub" style="font-size:10px;color:#777">Conectando...</span><span id="copia-estado" style="font-size:9px;margin-left:8px;white-space:nowrap"></span>
           </div>
         </div>
       </div>
@@ -743,33 +743,99 @@ function showApp(){
   const _pares0=getMisPares();
   if(_pares0&&_pares0.length===1){ fltUN=_pares0[0].un||''; fltSec=_pares0[0].sector||''; }
   else if(!_pares0&&!isAdmin()&&currentUser.un){ fltUN=currentUser.un; if(currentUser.sector) fltSec=currentUser.sector; }
-  hidratarDesdeCache();
-  loadAll();
+  (async()=>{ try{ await hidratarDesdeCache(); }catch(e){} loadAll(); })();
 }
 
 const CACHE_PREFIX='capCache_';
 function cacheKey(){ return CACHE_PREFIX+((currentUser&&currentUser.email)||'anon'); }
-function guardarCache(){
+// ═══════════════════════════════════════════════════════════════════════════
+// COPIA LOCAL DE SEGURIDAD
+// Antes vivia en localStorage, con techo de ~5 MB, y el error de cuota se
+// tragaba en silencio: el dia que la copia no entraba, te quedabas sin red de
+// seguridad sin enterarte. Ahora usa IndexedDB (sin techo practico), avisa
+// fuerte si falla y muestra el estado en pantalla.
+// ═══════════════════════════════════════════════════════════════════════════
+const IDB_NAME='capCacheDB', IDB_STORE='snapshots';
+function _idb(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open(IDB_NAME,1);
+    rq.onupgradeneeded=()=>{const db=rq.result;if(!db.objectStoreNames.contains(IDB_STORE))db.createObjectStore(IDB_STORE);};
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error||new Error('IndexedDB no disponible'));
+  });
+}
+function idbSet(k,v){
+  return _idb().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).put(v,k);
+    tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error);
+  }));
+}
+function idbGet(k){
+  return _idb().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(IDB_STORE,'readonly');
+    const rq=tx.objectStore(IDB_STORE).get(k);
+    rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error);
+  }));
+}
+
+let _cacheEstado={ok:false,ts:null,bytes:0,err:''};
+function pintarEstadoCopia(){
+  const el=document.getElementById('copia-estado'); if(!el) return;
+  if(_cacheEstado.ok){
+    const f=_cacheEstado.ts?new Date(_cacheEstado.ts).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    const mb=_cacheEstado.bytes?(' \u00b7 '+(_cacheEstado.bytes/1048576).toFixed(1)+' MB'):'';
+    el.style.color='#0F6E56';
+    el.textContent='\u2713 Copia local '+f+mb;
+    el.title='Si Supabase se bloquea, esta PC puede consultar estos datos sin conexi\u00f3n.';
+  }else{
+    el.style.color='#CC0000';
+    el.textContent='\u26a0 SIN copia local';
+    el.title='No se pudo guardar la copia de seguridad: '+(_cacheEstado.err||'motivo desconocido');
+  }
+}
+async function guardarCache(){
   try{
-    const snap={ v:1, ts:Date.now(),
+    const snap={ v:2, ts:Date.now(),
       caps:caps, asistentes:asistentes, uns:uns, sectores:sectores, departamentos:departamentos,
       tipos:tipos, materiales:materiales, evaluaciones:evaluaciones, preguntas:preguntas, padron:padron,
       usuarios:(isAdmin()?usuarios:[]) };
-    localStorage.setItem(cacheKey(), JSON.stringify(snap));
-  }catch(e){ /* sin espacio u otro: la caché es opcional, se ignora */ }
+    await idbSet(cacheKey(),snap);
+    let bytes=0; try{ bytes=JSON.stringify(snap).length; }catch(e){}
+    _cacheEstado={ok:true,ts:snap.ts,bytes:bytes,err:''};
+  }catch(e){
+    _cacheEstado={ok:false,ts:_cacheEstado.ts,bytes:_cacheEstado.bytes,err:(e&&e.message)||String(e)};
+    console.error('[copia local] NO se pudo guardar la copia de seguridad:',e);
+    // Aviso visible una sola vez por sesion: nunca mas un fallo silencioso.
+    if(!window._avisoCopia){
+      window._avisoCopia=1;
+      setTimeout(()=>alert('\u26a0\ufe0f No se pudo guardar la copia local de seguridad.\n\nMotivo: '+_cacheEstado.err+'\n\nSi Supabase llegara a bloquearse, esta PC NO va a poder mostrar los datos. Avisale a soporte.'),600);
+    }
+  }
+  pintarEstadoCopia();
 }
-function hidratarDesdeCache(){
+async function hidratarDesdeCache(){
   try{
-    const raw=localStorage.getItem(cacheKey());
-    if(!raw) return false;
-    const s=JSON.parse(raw);
+    let s=null;
+    try{ s=await idbGet(cacheKey()); }catch(e){ console.warn('[copia local] IndexedDB no disponible:',e); }
+    if(!s){
+      // Migracion automatica de la copia vieja en localStorage
+      const raw=localStorage.getItem(cacheKey());
+      if(raw){
+        try{ s=JSON.parse(raw); }catch(e){ s=null; }
+        if(s){
+          try{ await idbSet(cacheKey(),s); localStorage.removeItem(cacheKey()); console.info('[copia local] migrada de localStorage a IndexedDB'); }catch(e){}
+        }
+      }
+    }
     if(!s||!Array.isArray(s.caps)||!s.caps.length) return false;
     window._cacheTs=s.ts||null;
+    _cacheEstado={ok:true,ts:s.ts||null,bytes:_cacheEstado.bytes,err:''};
     caps=s.caps||[]; asistentes=s.asistentes||[]; uns=s.uns||[]; sectores=s.sectores||[];
     departamentos=s.departamentos||[]; tipos=s.tipos||[]; materiales=s.materiales||[];
     evaluaciones=s.evaluaciones||[]; preguntas=s.preguntas||[]; padron=s.padron||[];
     if(isAdmin()) usuarios=s.usuarios||[];
-    aplicarEstadosEnMemoria(); updateSub(); populateFilters(); renderContent();
+    aplicarEstadosEnMemoria(); updateSub(); populateFilters(); renderContent(); pintarEstadoCopia();
     _dataOk=false; _fullOk=false;  // datos de cache: sin verificar, borrado bloqueado
     const sub=document.getElementById('hdr-sub'); if(sub) sub.textContent='Mostrando \u00faltima copia \u2014 actualizando...';
     setSyncStatus('syncing');
@@ -821,7 +887,7 @@ async function loadAll(){
     setSyncStatus('error');
     if(_es402(e)){
       // Proyecto restringido: caemos a la ultima copia local, en solo lectura.
-      if(!caps.length) hidratarDesdeCache();
+      if(!caps.length) await hidratarDesdeCache();
       modoSoloLectura();
       try{populateFilters();renderContent();}catch(_){}
       return;
@@ -863,7 +929,7 @@ async function loadLive(){
     setSyncStatus('ok'); updateSub(); populateFilters(); renderContent();
   }catch(e){
     setSyncStatus('error');
-    if(_es402(e)){ if(!caps.length) hidratarDesdeCache(); modoSoloLectura(); return; }
+    if(_es402(e)){ if(!caps.length) await hidratarDesdeCache(); modoSoloLectura(); return; }
     marcarDatosIncompletos((e&&e.message)||'sin conexi\u00f3n');
   }
 }
@@ -1884,6 +1950,26 @@ function desvioInfo(cap){
 
 // ── PADRÓN ───────────────────────────────────────────────────────
 function getPadronEmpleado(legajo){return padron.find(p=>String(p.legajo)===String(legajo));}
+
+// Trae del servidor SOLO el registro del legajo pedido y lo guarda en `padron`.
+// Antes, los flujos publicos (evaluacion y QR de presencia) se bajaban el padron
+// vigente COMPLETO en el telefono de cada empleado para encontrar a una persona.
+// Con 1.500 vigentes eran ~700 KB por escaneo; ahora son ~300 bytes.
+// Devuelve {emp} si existe, {emp:null} si no esta, {emp:null,error} si fallo la red.
+async function asegurarPadronLegajo(leg){
+  const l=String(leg||'').trim();
+  if(!l) return {emp:null};
+  const ya=padron.find(p=>String(p.legajo)===l);
+  if(ya) return {emp:ya};
+  try{
+    const r=await api('GET','padron','',`?legajo=eq.${encodeURIComponent(l)}&limit=1`);
+    const emp=(Array.isArray(r)&&r.length)?r[0]:null;
+    if(emp) padron.push(emp);
+    return {emp:emp};
+  }catch(e){
+    return {emp:null,error:(e&&e.message)||String(e)};
+  }
+}
 function padronActivos(un,sector,depto){
   return padron.filter(p=>{
     if(p.estado&&p.estado!=='Vigente') return false;
@@ -3803,7 +3889,7 @@ function renderEvalPublica(evalId){
     +'</div></div>';
 }
 
-function validarLegajoPadron(legajo,evalId){
+async function validarLegajoPadron(legajo,evalId){
   const lookup=document.getElementById('padron-lookup');
   const datos=document.getElementById('padron-datos');
   const nombreInput=document.getElementById('pub-nombre');
@@ -3830,7 +3916,10 @@ function validarLegajoPadron(legajo,evalId){
       return;
     }
   }
-  const emp=getPadronEmpleado(leg);
+  lookup.style.display='block';
+  lookup.innerHTML='<span style="color:#888">Verificando\u2026</span>';
+  const _r=await asegurarPadronLegajo(leg);
+  const emp=_r.emp;
   if(emp){
     if(emp.estado&&emp.estado!=='Vigente'){
       lookup.style.display='block';
@@ -3863,7 +3952,7 @@ function validarLegajoPadron(legajo,evalId){
     if(deptoInput) deptoInput.value=depto;
     if(datos) datos.style.display='block';
     if(evalId) checkYaAprobado(evalId, leg);
-  } else if(padron.length>0){
+  } else if(!_r.error){
     lookup.style.display='block';
     lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado en el padrón — verificá el número o contactá a RRHH</span>`;
     if(datos) datos.style.display='none';
@@ -7093,13 +7182,16 @@ async function init(){
   if(evalId){
     // cargar datos minimos y mostrar evaluacion
     try{
-      const [ev,pq,cap,pad]=await Promise.all([
+      const [ev,pq]=await Promise.all([
         api('GET','evaluaciones','',`?id=eq.${evalId}`),
         api('GET','preguntas_evaluacion','',`?evaluacion_id=eq.${evalId}&order=orden.asc`),
-        getAll('capacitaciones','?order=id.asc'),
-        getAll('padron','?estado=eq.Vigente&order=legajo.asc')
       ]);
-      evaluaciones=ev||[];preguntas=pq||[];caps=cap||[];padron=pad||[];
+      evaluaciones=ev||[];preguntas=pq||[];
+      // Solo la capacitacion vinculada a esta evaluacion (antes: la tabla entera)
+      const _capId=(evaluaciones[0]||{}).capacitacion_id;
+      caps=_capId?(await api('GET','capacitaciones','',`?id=eq.${_capId}`)||[]):[];
+      // El padron NO se precarga: se consulta el legajo puntual al validar identidad
+      padron=[];
       const tiposData=await api('GET','tipos_capacitacion','','?activo=eq.true');
       tipos=tiposData||[];
       document.getElementById('login-wrap').style.display='none';
@@ -7112,15 +7204,18 @@ async function init(){
   const presCapId=params.get('presencia');
   if(presCapId){
     try{
-      const [cap,pad,tiposData,evData,pqData]=await Promise.all([
+      const [cap,tiposData,evData]=await Promise.all([
         api('GET','capacitaciones','',`?id=eq.${presCapId}`),
-        getAll('padron','?estado=eq.Vigente&order=legajo.asc'),
         api('GET','tipos_capacitacion','','?activo=eq.true'),
-        api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`),
-        getAll('preguntas_evaluacion','?evaluacion_id=not.is.null&order=orden.asc')
+        api('GET','evaluaciones','',`?capacitacion_id=eq.${presCapId}&activa=eq.true`)
       ]);
-      caps=cap||[];padron=pad||[];tipos=tiposData||[];
-      evaluaciones=evData||[];preguntas=pqData||[];
+      caps=cap||[];tipos=tiposData||[];evaluaciones=evData||[];
+      // Antes se bajaban TODAS las preguntas de TODAS las evaluaciones de la base
+      // (evaluacion_id=not.is.null). Ahora solo las de esta capacitacion.
+      const _evIds=evaluaciones.map(e=>e.id).filter(x=>x!=null);
+      preguntas=_evIds.length?(await api('GET','preguntas_evaluacion','',`?evaluacion_id=in.(${_evIds.join(',')})&order=orden.asc`)||[]):[];
+      // El padron NO se precarga: se consulta el legajo puntual al validar identidad
+      padron=[];
       document.getElementById('login-wrap').style.display='none';
       document.getElementById('app-wrap').style.display='none';
       renderPresenciaPublica(parseInt(presCapId));
@@ -7185,8 +7280,11 @@ async function validarPresencia(capId, evalId){
   if(!lookup) return;
   if(!leg){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá tu legajo</span>';return;}
   if(!dni4||dni4.length<4){lookup.style.display='block';lookup.innerHTML='<span style="color:#CC0000">⚠ Ingresá los 4 últimos dígitos de tu DNI</span>';return;}
-  const emp=getPadronEmpleado(leg);
-  if(!emp&&padron.length>0){
+  lookup.style.display='block';
+  lookup.innerHTML='<span style="color:#888">Verificando\u2026</span>';
+  const _rp=await asegurarPadronLegajo(leg);
+  const emp=_rp.emp;
+  if(!emp&&!_rp.error){
     lookup.style.display='block';
     lookup.innerHTML=`<span style="color:#CC0000;font-weight:600">✘ Legajo ${esc(leg)} no encontrado. Verificá o contactá a RRHH.</span>`;
     return;

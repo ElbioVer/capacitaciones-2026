@@ -346,6 +346,7 @@ select.form-input{cursor:pointer}
       </div>
     </div>
   </div>
+  <div id="backup-warn" style="display:none;background:#FAEEDA;border-bottom:1px solid #E8B86D;padding:7px 16px;font-size:11px;color:#7A5C00;text-align:center"></div>
   <div id="data-warn" style="display:none;background:#FCEBEB;border-bottom:2px solid #E24B4A;padding:8px 16px;font-size:11px;color:#7A1F1F;text-align:center;font-weight:600"></div>
   <div id="visor-banner" class="visor-banner" style="display:none">👁 Modo visualización — solo lectura</div>
   <div class="filter-bar">
@@ -945,6 +946,7 @@ async function loadAll(){
     _fullOk=true; marcarDatosOk();
     guardarCache();   // la cache SOLO se escribe con datos verificados completos
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
+    try{ chequearRecordatorioBackup(); }catch(_){}
   }catch(e){
     // Ninguna asignacion ocurrio: los arrays quedan como estaban (cache o vacio).
     // No se guarda cache y quedan bloqueados los borrados.
@@ -2832,13 +2834,164 @@ async function toggleEvalConfig(evalId, nuevoEstado){
   }catch(e){toast('Error al cambiar estado');}
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// COPIA DE SEGURIDAD COMPLETA
+// En plan Free no hay backups automaticos de Supabase, asi que esta es la unica
+// copia real. Genera DOS archivos: un .xlsx legible (una hoja por tabla) y un
+// .json exacto que conserva las columnas jsonb y permite restaurar.
+// Se descargan las tablas frescas del servidor, no los arrays en memoria, para
+// incluir respuestas_evaluacion (que no forma parte de la copia local).
+// ═══════════════════════════════════════════════════════════════════════════
+const BKP_KEY='cap_ultimo_backup';
+// Orden de dependencias: primero las tablas referenciadas, despues las que refieren
+const TABLAS_BACKUP=['unidades_negocio','sectores','tipos_capacitacion','usuarios',
+  'padron','capacitaciones','asistentes','materiales',
+  'evaluaciones','preguntas_evaluacion','respuestas_evaluacion'];
+
+function _descargarArchivo(nombre,contenido,tipo){
+  const blob=new Blob([contenido],{type:tipo});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=nombre;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+// Excel no soporta objetos: las columnas jsonb se guardan como texto JSON
+function _planoParaExcel(rows){
+  return (rows||[]).map(r=>{
+    const o={};
+    Object.keys(r||{}).forEach(k=>{
+      const v=r[k];
+      o[k]=(v!==null&&typeof v==='object')?JSON.stringify(v):v;
+    });
+    return o;
+  });
+}
+
+async function generarBackup(){
+  if(!isAdmin()){toast('Solo administradores');return;}
+  const btnBanner=document.getElementById('backup-warn');
+  try{
+    setSyncStatus('syncing');
+    toast('Descargando todas las tablas\u2026',30000);
+    const datos={}; const conteos={};
+    for(const tb of TABLAS_BACKUP){
+      try{ datos[tb]=await getAll(tb,'?order=id.asc'); }
+      catch(e){ datos[tb]=[]; console.warn('[backup] no se pudo leer',tb,e); }
+      conteos[tb]=datos[tb].length;
+    }
+    const total=Object.values(conteos).reduce((a,b)=>a+b,0);
+    if(!total){ setSyncStatus('error'); alert('No se pudo leer ninguna tabla. No se gener\u00f3 la copia.'); return; }
+    const hoy=new Date();
+    const stamp=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+
+    // 1) JSON exacto (restaurable)
+    const paquete={app:'Plan de Capacitacion 2026 - EMA Servicios',version:1,
+      generado:hoy.toISOString(),filas:conteos,tablas:datos};
+    _descargarArchivo('backup_capacitaciones_'+stamp+'.json',JSON.stringify(paquete),'application/json');
+
+    // 2) Excel legible (una hoja por tabla). Se separa del anterior para que el
+    //    navegador no bloquee la segunda descarga.
+    setTimeout(()=>{
+      try{
+        const wb=XLSX.utils.book_new();
+        for(const tb of TABLAS_BACKUP){
+          const ws=XLSX.utils.json_to_sheet(_planoParaExcel(datos[tb]));
+          XLSX.utils.book_append_sheet(wb,ws,tb.slice(0,31));
+        }
+        XLSX.writeFile(wb,'backup_capacitaciones_'+stamp+'.xlsx');
+      }catch(e){ console.warn('[backup] fallo el Excel',e); alert('El JSON se descarg\u00f3 bien, pero fall\u00f3 el Excel: '+((e&&e.message)||e)); }
+    },900);
+
+    localStorage.setItem(BKP_KEY,String(Date.now()));
+    if(btnBanner) btnBanner.style.display='none';
+    setSyncStatus('ok');
+    const det=TABLAS_BACKUP.map(tb=>'\u2022 '+tb+': '+conteos[tb]).join('\n');
+    setTimeout(()=>alert('Copia de seguridad generada \u2713\n\n'+det+'\n\nTOTAL: '+total+' filas\n\nSe descargaron 2 archivos (.json y .xlsx). Si el navegador pregunta si permit\u00eds varias descargas, acept\u00e1.\n\nGuardalos fuera de esta PC (mail, pendrive o Drive).'),1600);
+  }catch(e){
+    setSyncStatus('error');
+    alert('No se pudo generar la copia: '+((e&&e.message)||e));
+  }
+}
+
+async function restaurarBackup(ev){
+  if(!isAdmin()){toast('Solo administradores');return;}
+  const file=ev.target.files[0]; if(!file) return;
+  ev.target.value='';
+  let bk=null;
+  try{ bk=JSON.parse(await file.text()); }
+  catch(e){ alert('El archivo no es un JSON v\u00e1lido.'); return; }
+  if(!bk||!bk.tablas){ alert('Ese archivo no es una copia de seguridad de esta aplicaci\u00f3n.'); return; }
+  const presentes=TABLAS_BACKUP.filter(tb=>Array.isArray(bk.tablas[tb])&&bk.tablas[tb].length);
+  if(!presentes.length){ alert('La copia no contiene datos.'); return; }
+  const fecha=bk.generado?new Date(bk.generado).toLocaleString('es-AR'):'desconocida';
+  const resumen=presentes.map(tb=>'\u2022 '+tb+': '+bk.tablas[tb].length+' filas').join('\n');
+  if(!confirm('Copia del '+fecha+'\n\n'+resumen+'\n\nSe van a INSERTAR o ACTUALIZAR estas filas en Supabase, identificadas por id.\n\nNO se borra nada: lo que hoy exista y no est\u00e9 en la copia se conserva tal cual.\n\n\u00bfContinuar?')) return;
+  const f=prompt('\u26a0\ufe0f Confirmaci\u00f3n final\n\nEscrib\u00ed exactamente:  RESTAURAR');
+  if(f===null) return;
+  if(String(f).trim().toUpperCase()!=='RESTAURAR'){ alert('Texto incorrecto. No se restaur\u00f3 nada.'); return; }
+  setSyncStatus('syncing');
+  let ok=0,err=0,ultimo='';
+  const detalle=[];
+  for(const tb of presentes){
+    const filas=bk.tablas[tb];
+    let okT=0,errT=0;
+    for(let i=0;i<filas.length;i+=500){
+      const lote=filas.slice(i,i+500);
+      toast('Restaurando '+tb+'\u2026 '+Math.min(i+500,filas.length)+'/'+filas.length,20000);
+      try{
+        await api('POST',tb,lote,'?on_conflict=id',{'Prefer':'resolution=merge-duplicates'});
+        okT+=lote.length;
+      }catch(e){ errT+=lote.length; ultimo=(e&&e.message)||String(e); console.warn('[restaurar]',tb,e); }
+    }
+    ok+=okT; err+=errT;
+    detalle.push('\u2022 '+tb+': '+okT+' ok'+(errT?(', '+errT+' con error'):''));
+  }
+  setSyncStatus(err?'error':'ok');
+  await loadAll();
+  alert('Restauraci\u00f3n finalizada.\n\n'+detalle.join('\n')+'\n\nTotal: '+ok+' filas restauradas'+(err?(', '+err+' con error.\n\n\u00daltimo error:\n'+ultimo):'.'));
+}
+
+function chequearRecordatorioBackup(){
+  if(!isAdmin()||window._bkpAvisado) return;
+  const el=document.getElementById('backup-warn'); if(!el) return;
+  const v=parseInt(localStorage.getItem(BKP_KEY)||'0',10);
+  const dias=v?Math.floor((Date.now()-v)/86400000):null;
+  if(dias!==null&&dias<7) return;
+  window._bkpAvisado=1;
+  const msg=(dias===null)?'Nunca generaste una copia de seguridad.':('Hace '+dias+' d\u00edas que no gener\u00e1s una copia de seguridad.');
+  el.style.display='block';
+  el.innerHTML='<span style="margin-right:10px">\ud83d\udcbe '+msg+'</span>'
+    +'<button onclick="generarBackup()" style="background:#1D9E75;color:#fff;border:none;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;margin-right:6px">Descargar ahora</button>'
+    +'<button onclick="document.getElementById(\'backup-warn\').style.display=\'none\'" style="background:none;border:1px solid #C9A227;color:#7A5C00;border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer">M\u00e1s tarde</button>';
+}
+function _infoUltimoBackup(){
+  const v=parseInt(localStorage.getItem(BKP_KEY)||'0',10);
+  if(!v) return '<span style="color:#CC0000;font-weight:600">Nunca se gener\u00f3 una copia</span>';
+  const d=Math.floor((Date.now()-v)/86400000);
+  const col=d>=7?'#CC0000':'#0F6E56';
+  return '<span style="color:'+col+';font-weight:600">\u00daltima copia: '+new Date(v).toLocaleString('es-AR')+' (hace '+d+' d\u00eda'+(d===1?'':'s')+')</span>';
+}
+
 function renderConfig(){
   if(!isAdmin())return'';
   const unTags=uns.map(u=>`<div class="tag">${esc(u.nombre)}<span class="tag-del" onclick="delUN(${u.id},'${esc(u.nombre)}')">×</span></div>`).join('');
   const secTags=sectores.map(s=>`<div class="tag" style="border-radius:8px;flex-direction:column;align-items:flex-start;padding:4px 9px"><div style="display:flex;align-items:center;gap:4px;width:100%"><span style="font-size:11px;flex:1">${esc(s.nombre)}</span><span class="tag-del" onclick="delSector(${s.id},'${esc(s.nombre)}')">×</span></div><span style="font-size:10px;color:#999">${esc(s.un)}</span></div>`).join('');
   const deptTags=departamentos.map(d=>`<div class="tag" style="background:#E8F5FF;border-color:#90CAF9">${esc(d)}<span class="tag-del" onclick="delDepto('${esc(d)}')">×</span></div>`).join('')||'<span style="font-size:11px;color:#aaa">Sin departamentos (se cargan desde el padrón)</span>';
   const tipoRows=tipos.map(t=>`<div class="plan-row-item" style="cursor:default">${tipoBadge(t.codigo)}<span class="plan-item-name" style="margin-left:6px">${t.nombre}</span><div style="display:flex;gap:4px;align-items:center">${t.tiene_evaluacion?'<span class="badge realizada" style="font-size:10px">Eval</span>':''}${t.tiene_repositorio?'<span class="badge programada" style="font-size:10px">Repo</span>':''}${t.tiene_qr_presencia!==false?'<span class="badge" style="font-size:10px;background:#E8EAF6;color:#1A2F6E;border:1px solid #9FA8DA">QR</span>':''}<button class="btn-sm" style="font-size:10px;padding:3px 8px;margin-left:4px" onclick="editTipo('${t.codigo}')">✏️ Editar</button></div></div>`).join('');
-  return`<div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
+  return`<div class="config-section" style="border:2px solid #1D9E75">
+    <div class="config-title">\ud83d\udcbe Copia de seguridad</div>
+    <p style="font-size:12px;color:#777;margin-bottom:6px">Descarga TODAS las tablas: un <strong>.xlsx</strong> para consultar y un <strong>.json</strong> exacto que permite restaurar. En plan Free no hay backups autom\u00e1ticos de Supabase, as\u00ed que esta es la \u00fanica copia real.</p>
+    <div style="font-size:11px;margin-bottom:10px">${_infoUltimoBackup()}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-sm green" onclick="generarBackup()">\ud83d\udcbe Generar copia ahora</button>
+      <label class="upload-label">\u267b\ufe0f Restaurar desde copia .json<input type="file" accept=".json" style="display:none" onchange="restaurarBackup(event)"></label>
+    </div>
+    <div style="background:#FAEEDA;border-radius:8px;padding:10px;font-size:11px;line-height:1.7;color:#854F0B;margin-top:10px">
+      <strong>Guardalos fuera de esta PC</strong> \u2014 mail, pendrive o Drive. Una copia que vive en el mismo equipo no protege contra nada.<br>
+      La restauraci\u00f3n <strong>no borra</strong>: inserta o actualiza por id y conserva lo que hoy exista.
+    </div>
+  </div>
+  <div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
   <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list scrollable">${deptTags}</div></div>
   <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list scrollable">${secTags}</div></div>
   <div class="config-section"><div class="config-title">Tipos de capacitación<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addTipo()">+ Nuevo tipo</button></div>${tipoRows}</div>

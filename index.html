@@ -542,6 +542,9 @@ window.consumoHoy=function(){
 
 async function api(method,table,body,query,extraHeaders){
   query=query||'';
+  // En modo solo lectura no se intenta escribir: se corta aca con un mensaje
+  // claro en vez de dejar que el servidor devuelva 402 y confunda al usuario.
+  if(_restringido&&method!=='GET') throw new Error('[402] Modo solo lectura: el proyecto est\u00e1 restringido y no se puede guardar nada.');
   // PATCH y DELETE: ningun punto del programa usa la fila devuelta, asi que
   // pedimos return=minimal y dejamos de pagar egress por cada escritura.
   let base=H;
@@ -697,20 +700,82 @@ function puedeBorrar(){
 function setSyncStatus(s){const d=document.getElementById('sync-dot');d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');}
 function toast(msg,dur){dur=dur||2500;const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ACCESO SIN CONEXION — SOLO ROL ADMIN
+// El login consulta la tabla usuarios en Supabase. Si el proyecto esta
+// restringido (402) el login falla y el usuario queda afuera aunque tenga la
+// copia local completa en IndexedDB. Para el rol admin guardamos en ESTA PC el
+// email y un hash SHA-256 de la contrasena (nunca la contrasena en claro), y
+// con eso puede entrar en modo SOLO LECTURA. Para los demas roles no se guarda
+// nada y no hay acceso sin conexion.
+// ═══════════════════════════════════════════════════════════════════════════
+const CRED_PREFIX='capLogin_';
+async function _hashPass(email,pass){
+  const txt=String(email||'').toLowerCase()+'|'+String(pass||'')+'|planCapacitacion2026';
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function guardarCredencialOffline(email,pass,user){
+  try{
+    if(!user||user.rol!=='admin'){ localStorage.removeItem(CRED_PREFIX+email); return; }
+    const h=await _hashPass(email,pass);
+    localStorage.setItem(CRED_PREFIX+email,JSON.stringify({email:email,hash:h,user:user,ts:Date.now()}));
+  }catch(e){ console.warn('[offline] no se pudo guardar la credencial local',e); }
+}
+async function loginOffline(email,pass){
+  let rec=null;
+  try{ rec=JSON.parse(localStorage.getItem(CRED_PREFIX+email)||'null'); }catch(e){}
+  if(!rec||!rec.hash||!rec.user) return {ok:false,motivo:'sin-credencial'};
+  if(rec.user.rol!=='admin')     return {ok:false,motivo:'sin-permiso'};
+  let h='';
+  try{ h=await _hashPass(email,pass); }catch(e){ return {ok:false,motivo:'sin-cripto'}; }
+  if(h!==rec.hash) return {ok:false,motivo:'password'};
+  return {ok:true,user:rec.user};
+}
+
 async function doLogin(){
   const email=document.getElementById('login-email').value.trim().toLowerCase();
   const pass=document.getElementById('login-pass').value.trim();
   const btn=document.getElementById('login-btn');
   const err=document.getElementById('login-error');
   if(!email||!pass)return;
+  // Antes el catch hacia err.textContent=... y destruia el HTML del cartel para
+  // siempre: tras un error de red, un password mal escrito mostraba el mensaje
+  // equivocado. Ahora cada rama escribe su propio contenido.
+  const fallo=(html)=>{ err.innerHTML=html; err.style.display='block'; btn.disabled=false; btn.textContent='Ingresar'; };
   btn.disabled=true;btn.textContent='Ingresando...';err.style.display='none';
   try{
     const res=await api('GET','usuarios','',`?email=eq.${encodeURIComponent(email)}&password_hash=eq.${encodeURIComponent(pass)}&activo=eq.true`);
-    if(!res||!res.length){err.style.display='block';btn.disabled=false;btn.textContent='Ingresar';document.getElementById('login-pass').value='';document.getElementById('login-pass').focus();return;}
+    if(!res||!res.length){
+      fallo('<strong>Usuario o contrase\u00f1a incorrectos.</strong><br><span style="font-size:11px">Verific\u00e1 el email y la contrase\u00f1a. Si no pod\u00e9s ingresar, contact\u00e1 al administrador.</span>');
+      document.getElementById('login-pass').value='';document.getElementById('login-pass').focus();
+      return;
+    }
     currentUser=res[0];
     sessionStorage.setItem('capUser',JSON.stringify(currentUser));
+    await guardarCredencialOffline(email,pass,currentUser);   // no hace nada si no es admin
+    _restringido=false;
     showApp();
-  }catch(e){err.textContent='Error de conexión.';err.style.display='block';btn.disabled=false;btn.textContent='Ingresar';}
+  }catch(e){
+    // Supabase no responde (402 o corte de red): intento de acceso sin conexion
+    const off=await loginOffline(email,pass);
+    if(off.ok){
+      currentUser=off.user;
+      sessionStorage.setItem('capUser',JSON.stringify(currentUser));
+      _restringido=true;
+      showApp();
+      setTimeout(()=>{ if(_restringido) modoSoloLectura(); },60);
+      return;
+    }
+    if(off.motivo==='password'){
+      fallo('<strong>Contrase\u00f1a incorrecta.</strong><br><span style="font-size:11px">Supabase no responde. Se valid\u00f3 contra la copia local de esta PC.</span>');
+      document.getElementById('login-pass').value='';document.getElementById('login-pass').focus();
+    }else if(off.motivo==='sin-credencial'||off.motivo==='sin-permiso'){
+      fallo('<strong>Sin conexi\u00f3n con Supabase.</strong><br><span style="font-size:11px">El acceso sin conexi\u00f3n est\u00e1 habilitado solo para administradores, y solo en las PC donde ya ingresaron antes. Volv\u00e9 a intentar m\u00e1s tarde.</span>');
+    }else{
+      fallo('<strong>Error de conexi\u00f3n.</strong><br><span style="font-size:11px">No se pudo contactar al servidor. Revis\u00e1 tu conexi\u00f3n a internet.</span>');
+    }
+  }
 }
 
 function doLogout(){
@@ -876,7 +941,7 @@ async function loadAll(){
     aplicarEstadosEnMemoria();
     // Marca de agua para que el refresco siguiente sea incremental
     _wm.asistentes=_maxUpd(asistentes); _wm.capacitaciones=_maxUpd(caps);
-    _restringido=false;
+    if(_restringido){ _restringido=false; try{ _startRefresh(); }catch(_){} }
     _fullOk=true; marcarDatosOk();
     guardarCache();   // la cache SOLO se escribe con datos verificados completos
     setSyncStatus('ok');updateSub();populateFilters();renderContent();

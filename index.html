@@ -395,6 +395,7 @@ select.form-input{cursor:pointer}
     <div class="tab" id="tab-resumen" onclick="switchTab(&#39;resumen&#39;)">Resumen</div>
     <div class="tab" id="tab-indicadores" onclick="switchTab(&#39;indicadores&#39;)">Indicadores</div>
     <div class="tab" id="tab-gantt" onclick="switchTab(&#39;gantt&#39;)">Gantt 2026</div>
+    <div class="tab" id="tab-empleado" onclick="switchTab(&#39;empleado&#39;)">Empleado</div>
     <div class="tab" id="tab-padron" onclick="switchTab(&#39;padron&#39;)" style="display:none">Padrón</div>
     <div class="tab" id="tab-config" onclick="switchTab(&#39;config&#39;)" style="display:none">Configurar</div>
     <div class="tab" id="tab-usuarios" onclick="switchTab(&#39;usuarios&#39;)" style="display:none">Usuarios</div>
@@ -1415,6 +1416,7 @@ function renderContent(resetScroll){
     else if(currentTab==='resumen'){el.innerHTML=renderResumen();waitForChart(renderCharts);injectPrintBtn(el,'resumen');}
     else if(currentTab==='indicadores'){const _indData=getIndicadoresData(),_remoData=getIndicadoresRemo(),_cuatriData=getCuatriData();el.innerHTML=renderIndicadores(_indData,_remoData,_cuatriData);waitForChart(()=>renderIndicadoresCharts(_indData,_remoData,_cuatriData));injectPrintBtn(el,'indicadores');}
     else if(currentTab==='gantt'){el.innerHTML=renderGantt();}
+    else if(currentTab==='empleado') el.innerHTML=renderEmpleado();
     else if(currentTab==='padron') el.innerHTML=renderPadron();
     else if(currentTab==='config'){el.innerHTML=renderConfig();setTimeout(()=>{previewWAMsg&&previewWAMsg();},50);}
     else if(currentTab==='usuarios') el.innerHTML=renderUsuarios();
@@ -2970,6 +2972,182 @@ function _infoUltimoBackup(){
   const d=Math.floor((Date.now()-v)/86400000);
   const col=d>=7?'#CC0000':'#0F6E56';
   return '<span style="color:'+col+';font-weight:600">\u00daltima copia: '+new Date(v).toLocaleString('es-AR')+' (hace '+d+' d\u00eda'+(d===1?'':'s')+')</span>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FICHA DE EMPLEADO
+// Busca una persona por legajo o nombre y muestra TODAS las capacitaciones en
+// las que figura como participante. Respeta las restricciones de UN/sector del
+// rol: un supervisor solo ve empleados y capacitaciones de sus pares asignados.
+// ═══════════════════════════════════════════════════════════════════════════
+let _empQuery='', _empLegajo='';
+
+function _empVisible(un,sector){
+  const pares=getMisPares();
+  if(!pares) return true;
+  return pares.some(p=>(!p.un||p.un===un)&&(!p.sector||p.sector===sector));
+}
+function buscarEmpleados(q){
+  q=String(q||'').toLowerCase().trim();
+  if(q.length<2) return [];
+  const esNum=/^[0-9]+$/.test(q);
+  const mapa=new Map();
+  for(const p of padron){
+    const lg=String(p.legajo||''); if(!lg) continue;
+    const coincide=esNum?lg.startsWith(q):String(p.nombre||'').toLowerCase().includes(q);
+    if(!coincide) continue;
+    if(!_empVisible(p.un,p.sector)) continue;
+    mapa.set(lg,{legajo:lg,nombre:p.nombre||'',un:p.un||'',sector:p.sector||'',
+      departamento:p.departamento||p.datos_extra?.Departamento||'',
+      estado:p.estado||'Vigente',fca:p.fecha_calculo_antiguedad||'',enPadron:true});
+  }
+  // Quien figura como participante pero ya no esta en el padron (baja, por ejemplo)
+  for(const a of asistentes){
+    const lg=String(a.legajo||''); if(!lg||mapa.has(lg)) continue;
+    const coincide=esNum?lg.startsWith(q):String(a.nombre||'').toLowerCase().includes(q);
+    if(!coincide) continue;
+    if(!_empVisible(a.un,a.sector)) continue;
+    mapa.set(lg,{legajo:lg,nombre:a.nombre||'',un:a.un||'',sector:a.sector||'',
+      departamento:a.departamento||'',estado:null,fca:'',enPadron:false});
+  }
+  return [...mapa.values()].sort((x,y)=>String(x.nombre).localeCompare(String(y.nombre))).slice(0,60);
+}
+function historialEmpleado(legajo){
+  const lg=String(legajo);
+  const pares=getMisPares();
+  const filas=[];
+  for(const a of asistentes){
+    if(String(a.legajo)!==lg) continue;
+    const c=caps.find(x=>x.id===a.capacitacion_id);
+    if(!c) continue;
+    if(pares&&!pares.some(p=>capMatchUnSec(c,p.un,p.sector))) continue;
+    const esInd=c.tipo_codigo==='INDUCCION';
+    const completo=!!(a.completo&&(!esInd||a.nota!=null));
+    filas.push({cap:c,asis:a,completo:completo,
+      estado:completo?'Completó':(estadoCap(c)==='Vencida'?'Vencida':'Pendiente')});
+  }
+  filas.sort((x,y)=>String(y.cap.fecha||'').localeCompare(String(x.cap.fecha||'')));
+  return filas;
+}
+function seleccionarEmpleado(lg){ _empLegajo=String(lg); _pintarEmpBody(); }
+function _onBuscarEmpleado(v){ _empQuery=v; _empLegajo=''; _pintarEmpBody(); }
+function _pintarEmpBody(){
+  const el=document.getElementById('emp-body');
+  if(el) el.innerHTML=renderEmpBody();
+}
+function limpiarEmpleado(){
+  _empQuery=''; _empLegajo='';
+  const i=document.getElementById('emp-search'); if(i){ i.value=''; i.focus(); }
+  _pintarEmpBody();
+}
+
+function renderEmpBody(){
+  const q=String(_empQuery||'').trim();
+  if(q.length<2) return '<div class="empty-state"><div class="empty-num">🔎</div><div class="empty-t">Escribí un legajo o un apellido</div><div style="font-size:12px;color:#999;margin-top:6px">Mínimo 2 caracteres. Los números buscan por legajo; las letras, por nombre.</div></div>';
+  const encontrados=buscarEmpleados(q);
+  if(!encontrados.length) return '<div class="empty-state"><div class="empty-num">🚫</div><div class="empty-t">Sin coincidencias para "'+esc(q)+'"</div></div>';
+  let emp=encontrados.find(e=>e.legajo===_empLegajo);
+  let selector='';
+  if(encontrados.length>1){
+    selector='<div style="margin-bottom:10px"><div style="font-size:11px;color:#888;margin-bottom:5px">'+encontrados.length+' coincidencias — elegí una:</div><div style="display:flex;flex-wrap:wrap;gap:6px">'
+      +encontrados.map(e=>{
+        const act=(emp&&e.legajo===emp.legajo);
+        return '<button class="btn-sm'+(act?' green':'')+'" style="font-size:11px" onclick="seleccionarEmpleado(\''+esc(e.legajo)+'\')">'+esc(e.nombre||'(sin nombre)')+' · '+esc(e.legajo)+'</button>';
+      }).join('')+'</div></div>';
+  }
+  if(!emp){
+    if(encontrados.length===1) emp=encontrados[0];
+    else return selector;
+  }
+  const filas=historialEmpleado(emp.legajo);
+  const total=filas.length, comp=filas.filter(f=>f.completo).length;
+  const pct=total?Math.round(comp/total*100):0;
+  const badgeEstado=emp.estado===null
+    ? '<span class="badge" style="font-size:10px;background:#F1EFE8;color:#5F5E5A">Fuera del padrón</span>'
+    : estadoBadgeHtml(emp.estado);
+  const iniciales=String(emp.nombre||'?').split(/[.\s]+/).filter(Boolean).slice(0,2).map(s=>s.charAt(0).toUpperCase()).join('')||'?';
+
+  const filasHtml=filas.length?filas.map(f=>{
+    const c=f.cap, a=f.asis;
+    const nota=(a.nota!=null)?('Nota '+a.nota):'Completó';
+    const col=f.completo?'#0F6E56':(f.estado==='Vencida'?'#CC0000':'#BA7517');
+    const txt=f.completo?nota:f.estado;
+    const cod=c.codigo_redmine?('<span style="color:#999;font-size:10px"> · '+esc(c.codigo_redmine)+'</span>'):'';
+    return '<tr style="border-top:1px solid #EEE">'
+      +'<td style="padding:7px 4px"><span style="cursor:pointer;color:#1A2F6E" onclick="switchTab(\'lista\');setTimeout(()=>openDetail('+c.id+'),80)">'+esc(c.titulo||'(sin título)')+'</span>'+cod+'</td>'
+      +'<td style="padding:7px 4px">'+tipoBadge(c.tipo_codigo)+'</td>'
+      +'<td style="padding:7px 4px;color:#777;font-size:11px">'+esc(c.bimestre||'—')+'</td>'
+      +'<td style="padding:7px 4px;color:#777;font-size:11px">'+fmtF(c.fecha)+'</td>'
+      +'<td style="padding:7px 4px;color:#777;font-size:11px">'+(a.fecha_evaluacion?fmtF(a.fecha_evaluacion):'—')+'</td>'
+      +'<td style="padding:7px 4px;text-align:right;font-weight:600;font-size:11px;color:'+col+'">'+esc(txt)+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="6" style="padding:16px;text-align:center;color:#999;font-size:12px">No figura como participante en ninguna capacitación visible para tu rol.</td></tr>';
+
+  return selector
+   +'<div class="config-section" style="margin-bottom:10px">'
+     +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+       +'<div style="width:44px;height:44px;border-radius:50%;background:#E6F1FB;color:#185FA5;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+esc(iniciales)+'</div>'
+       +'<div style="flex:1;min-width:180px">'
+         +'<div style="font-weight:700;font-size:15px">'+esc(emp.nombre||'(sin nombre)')+'</div>'
+         +'<div style="font-size:11px;color:#777">Legajo '+esc(emp.legajo)+(emp.un?(' · '+esc(emp.un)):'')+(emp.departamento?(' · '+esc(emp.departamento)):'')+(emp.sector?(' · '+esc(emp.sector)):'')+'</div>'
+         +(emp.fca?('<div style="font-size:10px;color:#999">Antigüedad: '+fmtF(emp.fca)+'</div>'):'')
+       +'</div>'
+       +'<div>'+badgeEstado+'</div>'
+     +'</div>'
+     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px">'
+       +'<div style="background:#F7F7F5;border-radius:8px;padding:10px"><div style="font-size:11px;color:#777">Asignadas</div><div style="font-size:22px;font-weight:700">'+total+'</div></div>'
+       +'<div style="background:#F7F7F5;border-radius:8px;padding:10px"><div style="font-size:11px;color:#777">Completadas</div><div style="font-size:22px;font-weight:700;color:#0F6E56">'+comp+'</div></div>'
+       +'<div style="background:#F7F7F5;border-radius:8px;padding:10px"><div style="font-size:11px;color:#777">Pendientes</div><div style="font-size:22px;font-weight:700;color:#BA7517">'+(total-comp)+'</div></div>'
+       +'<div style="background:#F7F7F5;border-radius:8px;padding:10px"><div style="font-size:11px;color:#777">Cumplimiento</div><div style="font-size:22px;font-weight:700">'+pct+'%</div></div>'
+     +'</div>'
+   +'</div>'
+   +'<div class="config-section">'
+     +'<div class="config-title">Capacitaciones asignadas'
+       +(filas.length?'<button class="btn-sm blue" style="font-size:11px" onclick="exportarHistorialEmpleado(\''+esc(emp.legajo)+'\')">📊 Exportar Excel</button>':'')
+     +'</div>'
+     +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+       +'<thead><tr style="color:#888;font-size:11px;text-align:left">'
+         +'<th style="padding:4px">Capacitación</th><th style="padding:4px">Tipo</th><th style="padding:4px">Bimestre</th>'
+         +'<th style="padding:4px">Fecha</th><th style="padding:4px">F. Evaluación</th><th style="padding:4px;text-align:right">Estado</th>'
+       +'</tr></thead><tbody>'+filasHtml+'</tbody>'
+     +'</table></div>'
+   +'</div>';
+}
+
+function renderEmpleado(){
+  return '<div class="config-section" style="padding-bottom:10px">'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+      +'<input class="form-input" id="emp-search" placeholder="Legajo o apellido — ej: 9356 o ABBATE" value="'+esc(_empQuery)+'" oninput="_onBuscarEmpleado(this.value)" style="flex:1">'
+      +'<button class="btn-sm" onclick="limpiarEmpleado()">✕ Limpiar</button>'
+    +'</div>'
+    +'<div style="font-size:11px;color:#999;margin-top:5px">Muestra todas las capacitaciones donde la persona figura como participante.</div>'
+  +'</div>'
+  +'<div id="emp-body">'+renderEmpBody()+'</div>';
+}
+
+function exportarHistorialEmpleado(legajo){
+  const filas=historialEmpleado(legajo);
+  if(!filas.length){toast('Sin capacitaciones para exportar');return;}
+  const emp=(buscarEmpleados(String(legajo))[0])||{nombre:'',legajo:legajo};
+  const rows=filas.map(f=>({
+    'Legajo':legajo,
+    'Nombre':emp.nombre||f.asis.nombre||'',
+    'Código':f.cap.codigo_redmine||'',
+    'Capacitación':f.cap.titulo||'',
+    'Tipo':f.cap.tipo_codigo||'',
+    'Bimestre':f.cap.bimestre||'',
+    'UN':f.cap.un||'',
+    'Fecha':f.cap.fecha?fmtF(f.cap.fecha):'',
+    'Estado capacitación':estadoCap(f.cap),
+    'Completó':f.completo?'Sí':'No',
+    'Nota':f.asis.nota!=null?f.asis.nota:'',
+    'Fecha evaluación':f.asis.fecha_evaluacion?fmtF(f.asis.fecha_evaluacion):'',
+    'Estado participante':f.estado
+  }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Historial');
+  XLSX.writeFile(wb,'historial_'+String(legajo).replace(/[^0-9A-Za-z]/g,'')+'.xlsx');
+  toast('Excel descargado');
 }
 
 function renderConfig(){
@@ -9055,7 +9233,7 @@ function _puedeRefrescar(){
   // No recargar en pestañas de trabajo donde el rerender interrumpe: Config (limpieza de plan,
   // texto de WhatsApp) y Padrón (edición de contactos, scroll horizontal). Ahí el auto-refresh
   // haría perder la selección, el scroll o el foco mientras el usuario opera.
-  if(currentTab==='config'||currentTab==='padron') return false;
+  if(currentTab==='config'||currentTab==='padron'||currentTab==='empleado') return false;
   return true;
 }
 

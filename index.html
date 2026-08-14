@@ -6541,9 +6541,13 @@ function openNewUsuario(){
   _paresUsuarioTemp=[];
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Nuevo usuario</div>
+    <div class="form-group"><label class="form-label">Legajo (buscar en padrón) *</label><div style="display:flex;gap:6px"><input class="form-input" id="u-legajo" placeholder="Ej: 12345" style="flex:1"><button type="button" class="btn-sm green" onclick="buscarUsuarioPorLegajo()" style="font-size:10px;padding:6px 10px;white-space:nowrap">🔍 Buscar</button></div></div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" placeholder="Juan Pérez"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" placeholder="juan@empresa.com"></div>
     <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-input" id="u-pass" type="text" placeholder="Contraseña inicial"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div>
+    <div class="form-group"><label class="form-label">Teléfono Personal</label><input class="form-input" id="u-tel-personal" type="tel" placeholder="+54 9 11 XXXX-XXXX"></div>
+    <div class="form-group"><label class="form-label">Teléfono Laboral</label><input class="form-input" id="u-tel-laboral" type="tel" placeholder="+54 11 XXXX-XXXX"></div>
     <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor">Visor</option><option value="supervisor">Supervisor</option><option value="capacitador">Capacitador</option><option value="admin">Administrador</option></select></div>
     <div id="rol-fields-single" style="display:none"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
     <div id="rol-fields-multi" style="display:none">
@@ -6571,8 +6575,10 @@ function editUsuario(id){
   const btnWhatsApp=(u.email && u.password_hash && (telPersonal || telLaboral))?`<button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none" onclick="enviarPorWhatsAppDirecto(${id})"><span style="font-size:14px">💬</span>WhatsApp</button>`:'';
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
+    <div class="form-group"><label class="form-label">Legajo (buscar en padrón)</label><div style="display:flex;gap:6px"><input class="form-input" id="u-legajo" value="${esc(u.legajo||'')}" placeholder="Ej: 12345" style="flex:1"><button type="button" class="btn-sm green" onclick="buscarUsuarioPorLegajo()" style="font-size:10px;padding:6px 10px;white-space:nowrap">🔍 Buscar</button></div></div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}" readonly style="background:#f4f4f2;cursor:not-allowed"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Teléfono Personal ${telPersonalPadron?'<span style="color:#777;font-weight:400">(del padrón)</span>':''}</label><input class="form-input" id="u-tel-personal" type="tel" value="${esc(telPersonal)}" ${telPersonalPadron&&!u.tel_personal?'readonly style="background:#f4f4f2"':''}></div><div class="form-group"><label class="form-label">Teléfono Laboral</label><input class="form-input" id="u-tel-laboral" type="tel" value="${esc(telLaboral)}"></div></div>
     <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
     <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
@@ -6587,10 +6593,31 @@ function editUsuario(id){
   onChangeRolUsuario();
 }
 
+function buscarUsuarioPorLegajo(){
+  const legajo=document.getElementById('u-legajo').value.trim();
+  if(!legajo){toast('❌ Ingresa un legajo');return;}
+  if(!padron || !padron.length){toast('❌ Padrón vacío');return;}
+
+  const empPadron=padron.find(p=>String(p.legajo)===String(legajo));
+  if(!empPadron){
+    toast('❌ Legajo no encontrado en padrón');
+    return;
+  }
+
+  // Cargar datos del padrón
+  if(empPadron.nombre) document.getElementById('u-nombre').value=esc(empPadron.nombre);
+  if(empPadron.un) document.getElementById('u-un').value=empPadron.un;
+  if(empPadron.sector) document.getElementById('u-sec').value=empPadron.sector;
+  if(empPadron.celular) document.getElementById('u-tel-personal').value=esc(empPadron.celular);
+
+  toast(`✓ Datos cargados del padrón (${empPadron.nombre})`);
+}
+
 async function saveUsuario(id){
   const nombre=document.getElementById('u-nombre').value.trim();
   const email=document.getElementById('u-email').value.trim().toLowerCase();
   const pass=document.getElementById('u-pass').value.trim();
+  const legajo=document.getElementById('u-legajo')?document.getElementById('u-legajo').value.trim()||null:null;
   const tel_personal=document.getElementById('u-tel-personal').value.trim()||null;
   const tel_laboral=document.getElementById('u-tel-laboral').value.trim()||null;
   const rol=document.getElementById('u-rol').value;
@@ -6600,7 +6627,7 @@ async function saveUsuario(id){
   const restricciones=esMulti?_paresUsuarioTemp.filter(b=>b.un).flatMap(b=>b.deptos.length?b.deptos.map(d=>({un:b.un,sector:d})):[{un:b.un,sector:null}]):[];
   if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
   const isNew=!id;if(isNew&&!pass){alert('La contraseña es obligatoria');return;}
-  const obj={nombre,email,rol,un,sector,restricciones,tel_personal,tel_laboral};if(pass)obj.password_hash=pass;
+  const obj={nombre,email,rol,un,sector,restricciones,tel_personal,tel_laboral,legajo};if(pass)obj.password_hash=pass;
   try{
     if(isNew){const r=await api('POST','usuarios',{...obj,activo:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)usuarios.push(nv);toast('Usuario creado');}
     else{await api('PATCH','usuarios',obj,`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i]={...usuarios[i],...obj};toast('Actualizado');}

@@ -3400,7 +3400,7 @@ function probarWAText(){
 
 function renderUsuarios(){
   if(!isAdmin())return'';
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button></div>`;
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button><button class="btn-sm blue" style="font-size:10px" onclick="actualizarUsuariosDesdeP adron()">📲 Traer celulares del padrón</button><button class="btn-sm blue" style="font-size:10px" onclick="exportarUsuarios()">📤 Exportar Excel</button><label class="upload-label" style="font-size:10px;padding:4px 8px"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarTelefonosLaborales(event)">📂 Importar teléfonos</label></div></div>`;
   return html+usuarios.map(u=>{
     const av=(u.nombre||'?').charAt(0).toUpperCase();
     const paresStr=resumenRestricciones(u.restricciones);
@@ -6610,6 +6610,141 @@ async function saveUsuario(id){
 
 async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
+}
+
+// ── ACTUALIZAR USUARIOS DESDE PADRÓN ──────────────────────────────────────
+async function actualizarUsuariosDesdeP adron(){
+  if(!padron || !padron.length){toast('❌ Padrón vacío');return;}
+  if(!usuarios || !usuarios.length){toast('❌ Sin usuarios');return;}
+
+  let actualizados=0;
+  const updates=[];
+
+  for(const u of usuarios){
+    // Buscar en padrón por email o nombre
+    let empPadron=padron.find(p=>p.email===u.email);
+    if(!empPadron && u.nombre){
+      empPadron=padron.find(p=>p.nombre && p.nombre.toUpperCase()===u.nombre.toUpperCase());
+    }
+
+    if(empPadron && empPadron.celular && !u.tel_personal){
+      updates.push({id:u.id,tel_personal:empPadron.celular});
+      actualizados++;
+    }
+  }
+
+  if(!actualizados){
+    toast('⚠️ No hay usuarios sin teléfono personal. Todos ya tienen.');
+    return;
+  }
+
+  // Actualizar en base de datos
+  try{
+    for(const upd of updates){
+      await api('PATCH','usuarios',{tel_personal:upd.tel_personal},`?id=eq.${upd.id}`);
+      const idx=usuarios.findIndex(u=>u.id===upd.id);
+      if(idx>=0)usuarios[idx].tel_personal=upd.tel_personal;
+    }
+    toast(`✓ ${actualizados} usuario(s) actualizado(s) con teléfono del padrón`);
+    renderContent();
+  }catch(e){
+    toast('Error: '+e.message);
+  }
+}
+
+// ── EXPORTAR USUARIOS A EXCEL ──────────────────────────────────────────────
+function exportarUsuarios(){
+  if(!usuarios || !usuarios.length){
+    toast('Sin usuarios para exportar');
+    return;
+  }
+
+  // Preparar datos
+  const datos=usuarios.map(u=>({
+    'ID':u.id,
+    'Nombre':u.nombre,
+    'Email':u.email,
+    'Rol':u.rol,
+    'Teléfono Personal':u.tel_personal||'',
+    'Teléfono Laboral (ACTUALIZAR)':u.tel_laboral||'',
+    'Activo':u.activo?'Sí':'No',
+    'UN':u.un||'',
+    'Sector':u.sector||''
+  }));
+
+  // Crear workbook
+  const ws=XLSX.utils.json_to_sheet(datos);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Usuarios');
+
+  // Ajustar ancho de columnas
+  const colWidths=[
+    {wch:6},   // ID
+    {wch:25},  // Nombre
+    {wch:30},  // Email
+    {wch:15},  // Rol
+    {wch:20},  // Tel Personal
+    {wch:25},  // Tel Laboral
+    {wch:8},   // Activo
+    {wch:15},  // UN
+    {wch:15}   // Sector
+  ];
+  ws['!cols']=colWidths;
+
+  // Descargar
+  XLSX.writeFile(wb,'usuarios_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✓ Excel descargado');
+}
+
+// ── IMPORTAR TELÉFONOS LABORALES DESDE EXCEL ──────────────────────────────
+async function importarTelefonosLaborales(event){
+  const file=event.target.files[0];
+  if(!file)return;
+
+  try{
+    const data=await file.arrayBuffer();
+    const wb=XLSX.read(data);
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const filas=XLSX.utils.sheet_to_json(ws);
+
+    if(!filas.length){
+      toast('Archivo vacío');
+      return;
+    }
+
+    let actualizados=0;
+    const updates=[];
+
+    for(const fila of filas){
+      const id=fila.ID || fila.id;
+      const telLaboral=(fila['Teléfono Laboral (ACTUALIZAR)'] || fila['Tel_Laboral'] || '').toString().trim();
+
+      if(id && telLaboral){
+        updates.push({id:parseInt(id),tel_laboral:telLaboral});
+      }
+    }
+
+    if(!updates.length){
+      toast('❌ No hay datos válidos para importar');
+      return;
+    }
+
+    // Actualizar en base de datos
+    for(const upd of updates){
+      await api('PATCH','usuarios',{tel_laboral:upd.tel_laboral},`?id=eq.${upd.id}`);
+      const idx=usuarios.findIndex(u=>u.id===upd.id);
+      if(idx>=0)usuarios[idx].tel_laboral=upd.tel_laboral;
+      actualizados++;
+    }
+
+    toast(`✓ ${actualizados} teléfono(s) laboral(es) actualizado(s)`);
+    renderContent();
+  }catch(e){
+    toast('Error: '+e.message);
+  }
+
+  // Reset input
+  event.target.value='';
 }
 
 function enviarPorWhatsAppDirecto(usuarioId){

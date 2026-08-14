@@ -6560,10 +6560,12 @@ function editUsuario(id){
   const unOpts='<option value="">Sin restricción</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   _paresUsuarioTemp=_paresToBloques(u.restricciones);
+  const btnWhatsApp=(u.email && u.password_hash)?`<button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px" onclick="enviarPorWhatsApp('${esc(u.email)}','${esc(u.password_hash)}','${esc(u.nombre)}')"><span style="font-size:14px">💬</span>WhatsApp</button>`:'';
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
-    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}"></div>
+    <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}" readonly style="background:#f4f4f2;cursor:not-allowed"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Teléfono Personal</label><input class="form-input" id="u-tel-personal" type="tel" value="${esc(u.tel_personal||'')}"></div><div class="form-group"><label class="form-label">Teléfono Laboral</label><input class="form-input" id="u-tel-laboral" type="tel" value="${esc(u.tel_laboral||'')}"></div></div>
     <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
     <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
     <div id="rol-fields-single" style="display:none"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
@@ -6572,7 +6574,8 @@ function editUsuario(id){
       <div id="pares-list"></div>
       <button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px" onclick="agregarParUsuario()">+ Agregar UN / Depto</button>
     </div>
-    <div class="btn-row"><button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(${id})">Guardar</button></div>`);
+    <div style="background:#E1F5EE;border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:#085041"><strong>Usuario:</strong> ${esc(u.email)}<br><strong>Contraseña:</strong> ${esc(u.password_hash||'—')}</div>
+    <div class="btn-row">${btnWhatsApp}<button class="btn-sec" onclick="closeModal()">Cancelar</button><button class="btn-prim" onclick="saveUsuario(${id})">Guardar</button></div>`);
   onChangeRolUsuario();
 }
 
@@ -6580,6 +6583,8 @@ async function saveUsuario(id){
   const nombre=document.getElementById('u-nombre').value.trim();
   const email=document.getElementById('u-email').value.trim().toLowerCase();
   const pass=document.getElementById('u-pass').value.trim();
+  const tel_personal=document.getElementById('u-tel-personal').value.trim()||null;
+  const tel_laboral=document.getElementById('u-tel-laboral').value.trim()||null;
   const rol=document.getElementById('u-rol').value;
   const esMulti=(rol==='supervisor'||rol==='visor');
   const un=(rol==='admin'||esMulti)?null:(document.getElementById('u-un').value||null);
@@ -6587,7 +6592,7 @@ async function saveUsuario(id){
   const restricciones=esMulti?_paresUsuarioTemp.filter(b=>b.un).flatMap(b=>b.deptos.length?b.deptos.map(d=>({un:b.un,sector:d})):[{un:b.un,sector:null}]):[];
   if(!nombre||!email){alert('Nombre y email son obligatorios');return;}
   const isNew=!id;if(isNew&&!pass){alert('La contraseña es obligatoria');return;}
-  const obj={nombre,email,rol,un,sector,restricciones};if(pass)obj.password_hash=pass;
+  const obj={nombre,email,rol,un,sector,restricciones,tel_personal,tel_laboral};if(pass)obj.password_hash=pass;
   try{
     if(isNew){const r=await api('POST','usuarios',{...obj,activo:true},'');const nv=Array.isArray(r)?r[0]:r;if(nv)usuarios.push(nv);toast('Usuario creado');}
     else{await api('PATCH','usuarios',obj,`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i]={...usuarios[i],...obj};toast('Actualizado');}
@@ -6597,6 +6602,13 @@ async function saveUsuario(id){
 
 async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
+}
+
+function enviarPorWhatsApp(email,password,nombre){
+  const mensaje=encodeURIComponent(`Hola ${nombre}, tus credenciales son:\nUsuario: ${email}\nContraseña: ${password}`);
+  const urlWhatsApp=`https://wa.me/?text=${mensaje}`;
+  window.open(urlWhatsApp,'_blank');
+  toast('Abre WhatsApp y selecciona el contacto para enviar');
 }
 
 

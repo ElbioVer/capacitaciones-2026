@@ -3400,7 +3400,7 @@ function probarWAText(){
 
 function renderUsuarios(){
   if(!isAdmin())return'';
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button><button class="btn-sm blue" style="font-size:10px" onclick="actualizarUsuariosDesdeP adron()">📲 Traer celulares del padrón</button><button class="btn-sm blue" style="font-size:10px" onclick="exportarUsuarios()">📤 Exportar Excel</button><label class="upload-label" style="font-size:10px;padding:4px 8px"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarTelefonosLaborales(event)">📂 Importar teléfonos</label></div></div>`;
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px"><span style="font-size:12px;font-weight:600">${usuarios.length} usuarios</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-green" onclick="openNewUsuario()">+ Nuevo usuario</button><button class="btn-sm blue" style="font-size:10px" onclick="actualizarUsuariosDesdePadron()">📲 Traer celulares del padrón</button><button class="btn-sm blue" style="font-size:10px" onclick="exportarUsuarios()">📤 Exportar Excel</button><label class="upload-label" style="font-size:10px;padding:4px 8px"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarTelefonosLaborales(event)">📂 Importar teléfonos</label></div></div>`;
   return html+usuarios.map(u=>{
     const av=(u.nombre||'?').charAt(0).toUpperCase();
     const paresStr=resumenRestricciones(u.restricciones);
@@ -6613,7 +6613,7 @@ async function toggleUsuario(id,nuevoEstado){
 }
 
 // ── ACTUALIZAR USUARIOS DESDE PADRÓN ──────────────────────────────────────
-async function actualizarUsuariosDesdeP adron(){
+async function actualizarUsuariosDesdePadron(){
   if(!padron || !padron.length){toast('❌ Padrón vacío');return;}
   if(!usuarios || !usuarios.length){toast('❌ Sin usuarios');return;}
 

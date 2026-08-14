@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/e.verdun/Downloads/index_17.html -->
-<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="es"><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Plan de Capacitación 2026</title>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -9476,7 +9475,7 @@ _startRefresh();
   const errores=[];
   if(typeof XLSX==='undefined') errores.push('SheetJS (XLSX)');
   if(typeof Chart==='undefined') errores.push('Chart.js');
-  if(errores.length>0) console.warn('[EVDigital] CDN no disponibles:',errores.join(', '));
+  if(errores.length>0) console.warn('WARNING: CDN no disponibles:',errores.join(', '));
 })();
 
 init();

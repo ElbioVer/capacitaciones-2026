@@ -6540,7 +6540,7 @@ function openNewUsuario(){
   _paresUsuarioTemp=[];
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Nuevo usuario</div>
-    <div class="form-group"><label class="form-label">Legajo (buscar en padrón) *</label><div style="display:flex;gap:6px"><input class="form-input" id="u-legajo" placeholder="Ej: 12345" style="flex:1"><button type="button" class="btn-sm green" onclick="buscarUsuarioPorLegajo()" style="font-size:10px;padding:6px 10px;white-space:nowrap">🔍 Buscar</button></div></div>
+    <div class="form-group"><label class="form-label">Legajo (buscar en padrón) *</label><div style="position:relative"><input class="form-input" id="u-legajo" placeholder="Ej: 12345 o nombre..." oninput="mostrarOpcionesLegajo()" onblur="setTimeout(()=>{const d=document.getElementById('u-legajo-dropdown');if(d)d.style.display='none'},200)"></div></div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" placeholder="Juan Pérez"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" placeholder="juan@empresa.com"></div>
     <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-input" id="u-pass" type="text" placeholder="Contraseña inicial"></div>
@@ -6574,7 +6574,7 @@ function editUsuario(id){
   const btnWhatsApp=(u.email && u.password_hash && (telPersonal || telLaboral))?`<button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none" onclick="enviarPorWhatsAppDirecto(${id})"><span style="font-size:14px">💬</span>WhatsApp</button>`:'';
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
-    <div class="form-group"><label class="form-label">Legajo (buscar en padrón)</label><div style="display:flex;gap:6px"><input class="form-input" id="u-legajo" value="${esc(u.legajo||'')}" placeholder="Ej: 12345" style="flex:1"><button type="button" class="btn-sm green" onclick="buscarUsuarioPorLegajo()" style="font-size:10px;padding:6px 10px;white-space:nowrap">🔍 Buscar</button></div></div>
+    <div class="form-group"><label class="form-label">Legajo (buscar en padrón)</label><div style="position:relative"><input class="form-input" id="u-legajo" value="${esc(u.legajo||'')}" placeholder="Ej: 12345 o nombre..." oninput="mostrarOpcionesLegajo()" onblur="setTimeout(()=>{const d=document.getElementById('u-legajo-dropdown');if(d)d.style.display='none'},200)"></div></div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}" readonly style="background:#f4f4f2;cursor:not-allowed"></div>
     <div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div>
@@ -6592,24 +6592,83 @@ function editUsuario(id){
   onChangeRolUsuario();
 }
 
-function buscarUsuarioPorLegajo(){
-  const legajo=document.getElementById('u-legajo').value.trim();
-  if(!legajo){toast('❌ Ingresa un legajo');return;}
-  if(!padron || !padron.length){toast('❌ Padrón vacío');return;}
+// Buscar en padrón por legajo o nombre para usuarios
+function buscarEnPadronParaUsuario(q){
+  q=String(q||'').toLowerCase().trim();
+  if(q.length<2) return [];
+  const esNum=/^[0-9]+$/.test(q);
+  const resultados=[];
+  const visto=new Set();
 
-  const empPadron=padron.find(p=>String(p.legajo)===String(legajo));
-  if(!empPadron){
-    toast('❌ Legajo no encontrado en padrón');
+  for(const p of padron){
+    const lg=String(p.legajo||'');
+    if(!lg||visto.has(lg)) continue;
+
+    const coincide=esNum?lg.startsWith(q):String(p.nombre||'').toLowerCase().includes(q);
+    if(!coincide) continue;
+
+    visto.add(lg);
+    resultados.push({
+      legajo:lg,
+      nombre:p.nombre||'',
+      un:p.un||'',
+      sector:p.sector||'',
+      celular:p.celular||''
+    });
+  }
+
+  return resultados.sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre))).slice(0,50);
+}
+
+// Mostrar opciones de búsqueda mientras el usuario escribe
+function mostrarOpcionesLegajo(){
+  const input=document.getElementById('u-legajo');
+  const q=input.value.trim();
+  const dropdown=document.getElementById('u-legajo-dropdown');
+
+  if(q.length<2){
+    if(dropdown) dropdown.style.display='none';
     return;
   }
 
-  // Cargar datos del padrón
-  if(empPadron.nombre) document.getElementById('u-nombre').value=esc(empPadron.nombre);
-  if(empPadron.un) document.getElementById('u-un').value=empPadron.un;
-  if(empPadron.sector) document.getElementById('u-sec').value=empPadron.sector;
-  if(empPadron.celular) document.getElementById('u-tel-personal').value=esc(empPadron.celular);
+  const opciones=buscarEnPadronParaUsuario(q);
 
-  toast(`✓ Datos cargados del padrón (${empPadron.nombre})`);
+  if(!opciones.length){
+    if(dropdown) dropdown.style.display='none';
+    return;
+  }
+
+  const html=opciones.map((opt,idx)=>`
+    <div class="legajo-option" onclick="seleccionarLegajoOpcion('${esc(opt.legajo)}','${esc(opt.nombre)}','${esc(opt.un)}','${esc(opt.sector)}','${esc(opt.celular)}')" style="padding:8px 12px;border-bottom:1px solid #e5e5e0;cursor:pointer;hover-bg:#f4f4f2">
+      <div style="font-weight:600;font-size:12px">${esc(opt.nombre)}</div>
+      <div style="font-size:11px;color:#888">Legajo ${esc(opt.legajo)}${opt.un?(' • '+esc(opt.un)):''}${opt.sector?(' • '+esc(opt.sector)):''};</div>
+    </div>
+  `).join('');
+
+  if(!dropdown){
+    const newDropdown=document.createElement('div');
+    newDropdown.id='u-legajo-dropdown';
+    newDropdown.style.cssText='position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e5e0;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);z-index:1000;max-height:300px;overflow-y:auto;margin-top:2px';
+    input.parentElement.parentElement.style.position='relative';
+    input.parentElement.parentElement.appendChild(newDropdown);
+  }
+
+  dropdown.innerHTML=html;
+  dropdown.style.display='block';
+}
+
+// Seleccionar una opción del dropdown
+function seleccionarLegajoOpcion(legajo,nombre,un,sector,celular){
+  document.getElementById('u-legajo').value=legajo;
+  document.getElementById('u-nombre').value=nombre;
+  document.getElementById('u-un').value=un;
+  document.getElementById('u-sec').value=sector;
+  document.getElementById('u-tel-personal').value=celular;
+
+  const dropdown=document.getElementById('u-legajo-dropdown');
+  if(dropdown) dropdown.style.display='none';
+
+  toast(`✓ Datos cargados (${nombre})`);
 }
 
 async function saveUsuario(id){

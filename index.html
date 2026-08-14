@@ -6557,15 +6557,23 @@ function openNewUsuario(){
 
 function editUsuario(id){
   const u=usuarios.find(x=>x.id===id);if(!u)return;
+  // Buscar teléfono personal desde el padrón
+  let telPersonalPadron='';
+  if(padron && padron.length){
+    const empPadron=padron.find(p=>p.email===u.email || (p.nombre && u.nombre && p.nombre.toUpperCase()===u.nombre.toUpperCase()));
+    if(empPadron && empPadron.celular) telPersonalPadron=empPadron.celular;
+  }
   const unOpts='<option value="">Sin restricción</option>'+uns.map(x=>`<option${u.un===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   const secOpts='<option value="">Sin restricción</option>'+sectores.map(x=>`<option${u.sector===x.nombre?' selected':''}>${x.nombre}</option>`).join('');
   _paresUsuarioTemp=_paresToBloques(u.restricciones);
-  const btnWhatsApp=(u.email && u.password_hash)?`<button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px" onclick="enviarPorWhatsApp('${esc(u.email)}','${esc(u.password_hash)}','${esc(u.nombre)}')"><span style="font-size:14px">💬</span>WhatsApp</button>`:'';
+  const telPersonal=u.tel_personal||telPersonalPadron;
+  const telLaboral=u.tel_laboral||'';
+  const btnWhatsApp=(u.email && u.password_hash && (telPersonal || telLaboral))?`<button type="button" class="btn-sec" style="font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none" onclick="enviarPorWhatsAppDirecto(${id})"><span style="font-size:14px">💬</span>WhatsApp</button>`:'';
   showModal(`<div class="modal-handle"></div>
     <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px">Editar usuario</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="u-nombre" value="${esc(u.nombre)}"></div>
     <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="u-email" type="email" value="${esc(u.email)}" readonly style="background:#f4f4f2;cursor:not-allowed"></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Teléfono Personal</label><input class="form-input" id="u-tel-personal" type="tel" value="${esc(u.tel_personal||'')}"></div><div class="form-group"><label class="form-label">Teléfono Laboral</label><input class="form-input" id="u-tel-laboral" type="tel" value="${esc(u.tel_laboral||'')}"></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Teléfono Personal ${telPersonalPadron?'<span style="color:#777;font-weight:400">(del padrón)</span>':''}</label><input class="form-input" id="u-tel-personal" type="tel" value="${esc(telPersonal)}" ${telPersonalPadron&&!u.tel_personal?'readonly style="background:#f4f4f2"':''}></div><div class="form-group"><label class="form-label">Teléfono Laboral</label><input class="form-input" id="u-tel-laboral" type="tel" value="${esc(telLaboral)}"></div></div>
     <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambia)</label><input class="form-input" id="u-pass" type="text" placeholder="Nueva contraseña"></div>
     <div class="form-group"><label class="form-label">Rol</label><select class="form-input" id="u-rol" onchange="onChangeRolUsuario()"><option value="visor"${u.rol==='visor'?' selected':''}>Visor</option><option value="supervisor"${u.rol==='supervisor'?' selected':''}>Supervisor</option><option value="capacitador"${u.rol==='capacitador'?' selected':''}>Capacitador</option><option value="admin"${u.rol==='admin'?' selected':''}>Administrador</option></select></div>
     <div id="rol-fields-single" style="display:none"><div class="form-row"><div class="form-group"><label class="form-label">UN</label><select class="form-input" id="u-un">${unOpts}</select></div><div class="form-group"><label class="form-label">Sector</label><select class="form-input" id="u-sec">${secOpts}</select></div></div></div>
@@ -6604,11 +6612,46 @@ async function toggleUsuario(id,nuevoEstado){
   try{await api('PATCH','usuarios',{activo:nuevoEstado},`?id=eq.${id}`);const i=usuarios.findIndex(u=>u.id===id);if(i>=0)usuarios[i].activo=nuevoEstado;toast(nuevoEstado?'Usuario activado':'Desactivado');renderContent();}catch(e){toast('Error');}
 }
 
-function enviarPorWhatsApp(email,password,nombre){
-  const mensaje=encodeURIComponent(`Hola ${nombre}, tus credenciales son:\nUsuario: ${email}\nContraseña: ${password}`);
-  const urlWhatsApp=`https://wa.me/?text=${mensaje}`;
+function enviarPorWhatsAppDirecto(usuarioId){
+  const u=usuarios.find(x=>x.id===usuarioId);
+  if(!u)return;
+
+  // Obtener teléfono personal desde padrón si existe
+  let telPersonal=u.tel_personal||'';
+  if(!telPersonal && padron && padron.length){
+    const empPadron=padron.find(p=>p.email===u.email || (p.nombre && u.nombre && p.nombre.toUpperCase()===u.nombre.toUpperCase()));
+    if(empPadron && empPadron.celular) telPersonal=empPadron.celular;
+  }
+
+  const telLaboral=u.tel_laboral||'';
+
+  // Si tiene ambos números, preguntar cuál usar
+  let telFinal='';
+  if(telPersonal && telLaboral){
+    const resp=confirm(`¿A cuál número enviar?\n\n📱 Personal: ${telPersonal}\n💼 Laboral: ${telLaboral}\n\nOK = Personal\nCancelar = Laboral`);
+    telFinal=resp?telPersonal:telLaboral;
+  } else if(telPersonal){
+    telFinal=telPersonal;
+  } else if(telLaboral){
+    telFinal=telLaboral;
+  }
+
+  if(!telFinal){
+    toast('No hay número de teléfono registrado');
+    return;
+  }
+
+  // Normalizar el número (remover caracteres especiales)
+  const telNorm=telFinal.replace(/\D/g,'');
+
+  // Construir el mensaje
+  const mensaje=`Hola ${u.nombre}, tus credenciales son:\nUsuario: ${u.email}\nContraseña: ${u.password_hash}`;
+  const mensajeEnc=encodeURIComponent(mensaje);
+
+  // Abrir WhatsApp con el número y mensaje
+  const urlWhatsApp=`https://wa.me/${telNorm}?text=${mensajeEnc}`;
   window.open(urlWhatsApp,'_blank');
-  toast('Abre WhatsApp y selecciona el contacto para enviar');
+  toast('✓ Abierto WhatsApp');
 }
 
 

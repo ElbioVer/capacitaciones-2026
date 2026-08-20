@@ -8268,7 +8268,7 @@ function _abrirRegistroFirmas(c,qrDataUrl){
     +'<div class="tema" style="justify-content:center"><b>TEMA</b></div>'
     +'<div class="qr-cont">'
     +'<div class="qr-box"><img src="'+qrDataUrl+'" alt="QR"><div class="cap">Escane\u00e1 el QR para registrar tu asistencia</div></div>'
-    +'<div class="contenido" style="display:flex;align-items:flex-start"><div style="color:#E30613;font-weight:bold;font-size:11px;line-height:1.4;padding-top:2px">'+esc(tituloTxt)+(redmineTxt?' – '+esc(redmineTxt):'')+'</div></div>'
+    +'<div class="contenido" style="display:flex;flex-direction:column;justify-content:flex-start"><div style="color:#E30613;font-weight:bold;font-size:11px;line-height:1.4;padding-top:2px;margin-bottom:4px">'+esc(tituloTxt)+(redmineTxt?' – '+esc(redmineTxt):'')+'</div>'+(c.obs?'<div style="font-size:9px;line-height:1.3;white-space:pre-wrap;word-break:break-word">'+esc(c.obs)+'</div>':'')+'</div>'
     +'</div></div></div>'
     +'<table class="tabla-firmas"><thead><tr><th style="width:8mm">N\u00ba</th><th style="width:18mm">LEGAJO</th><th style="width:24mm">DNI</th><th>APELLIDO Y NOMBRES</th><th style="width:38mm">FIRMA</th><th style="width:14mm">CALIF.</th></tr></thead><tbody>'+filas+'</tbody></table>'
     +'<table class="pie"><thead><tr><th style="width:26mm"></th><th>EXPOSITOR</th><th>GCIA/RESP</th><th>RRHH</th></tr></thead><tbody>'

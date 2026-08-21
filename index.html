@@ -9302,6 +9302,19 @@ async function importarMasivaParticipantes(event){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       if(!rows.length){alert('El archivo está vacío');event.target.value='';return;}
 
+      // Función helper: convertir número de serie de Excel a YYYY-MM-DD
+      const excelSerialToDate=(serial)=>{
+        if(!serial||isNaN(serial)) return null;
+        const n=parseInt(serial);
+        if(n<1) return null;
+        const baseDate=new Date(1899,11,30); // 30/12/1899
+        const d=new Date(baseDate.getTime()+(n*24*60*60*1000));
+        const y=d.getFullYear();
+        const m=String(d.getMonth()+1).padStart(2,'0');
+        const day=String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      };
+
       // Agrupar por #Redmine — acepta con o sin el símbolo #
       const porRedmine={};
       let filasSinCodigo=0;
@@ -9368,10 +9381,12 @@ async function importarMasivaParticipantes(event){
         let fechaCapActualizar=null;
         for(const r of filas){
           let fv='';
+          let fvRaw=null;
           for(const key of Object.keys(r)){
             const keyLower=key.toLowerCase().replace(/[\s_-]/g,'');
             if(keyLower.includes('fecha')&&keyLower.includes('evaluacion')){
-              fv=String(r[key]||'').trim();
+              fvRaw=r[key];
+              fv=String(fvRaw||'').trim();
               if(fv) break;
             }
           }
@@ -9379,6 +9394,7 @@ async function importarMasivaParticipantes(event){
             let fp=null;
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');fp=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
             else if(/^\d{4}-\d{2}-\d{2}$/.test(fv)){fp=fv;}
+            else if(!isNaN(fvRaw)&&fvRaw!=='') fp=excelSerialToDate(fvRaw);
             if(fp){fechaCapActualizar=fp;break;}
           }
         }
@@ -9416,10 +9432,12 @@ async function importarMasivaParticipantes(event){
           // fecha_evaluacion a nivel participante — búsqueda insensible a mayúsculas
           // Buscar cualquier columna que contenga 'fecha' y 'evaluacion'
           let fvPart='';
+          let fvPartRaw=null;
           for(const key of Object.keys(r)){
             const keyLower=key.toLowerCase().replace(/[\s_-]/g,'');
             if(keyLower.includes('fecha')&&keyLower.includes('evaluacion')){
-              fvPart=String(r[key]||'').trim();
+              fvPartRaw=r[key];
+              fvPart=String(fvPartRaw||'').trim();
               if(fvPart) break;
             }
           }
@@ -9427,6 +9445,7 @@ async function importarMasivaParticipantes(event){
           if(fvPart){
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fvPart)){const[d,m,y]=fvPart.split('/');fechaEvalPart=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
             else if(/^\d{4}-\d{2}-\d{2}$/.test(fvPart)) fechaEvalPart=fvPart;
+            else if(!isNaN(fvPartRaw)&&fvPartRaw!=='') fechaEvalPart=excelSerialToDate(fvPartRaw);
           }
           if(!fechaEvalPart&&fechaCapActualizar) fechaEvalPart=fechaCapActualizar;
 

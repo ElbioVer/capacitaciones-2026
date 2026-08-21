@@ -9363,11 +9363,18 @@ async function importarMasivaParticipantes(event){
         }
         const filas=porRedmine[codigo];
 
-        // fecha_evaluacion del Excel (columna fecha_evaluacion)
+        // fecha_evaluacion del Excel — búsqueda insensible a mayúsculas
         // Si viene en alguna fila, la usamos para actualizar la fecha de la cap
         let fechaCapActualizar=null;
         for(const r of filas){
-          const fv=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||r['Fecha evaluacion']||r['fechaEvaluacion']||r['FechaEvaluacion']||r['fecha_eval']||'').trim();
+          let fv='';
+          for(const key of Object.keys(r)){
+            const keyLower=key.toLowerCase().replace(/[\s_-]/g,'');
+            if(keyLower.includes('fecha')&&keyLower.includes('evaluacion')){
+              fv=String(r[key]||'').trim();
+              if(fv) break;
+            }
+          }
           if(fv&&fv!==''){
             let fp=null;
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');fp=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
@@ -9406,8 +9413,16 @@ async function importarMasivaParticipantes(event){
           const completo=['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||'').toLowerCase().trim());
           const nota=parseFloat(r.nota||r.Nota||'')||null;
 
-          // fecha_evaluacion a nivel participante — soporta múltiples variantes de nombre de columna
-          const fvPart=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||r['Fecha evaluacion']||r['fechaEvaluacion']||r['FechaEvaluacion']||r['fecha_eval']||'').trim();
+          // fecha_evaluacion a nivel participante — búsqueda insensible a mayúsculas
+          // Buscar cualquier columna que contenga 'fecha' y 'evaluacion'
+          let fvPart='';
+          for(const key of Object.keys(r)){
+            const keyLower=key.toLowerCase().replace(/[\s_-]/g,'');
+            if(keyLower.includes('fecha')&&keyLower.includes('evaluacion')){
+              fvPart=String(r[key]||'').trim();
+              if(fvPart) break;
+            }
+          }
           let fechaEvalPart=null;
           if(fvPart){
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fvPart)){const[d,m,y]=fvPart.split('/');fechaEvalPart=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}

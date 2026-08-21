@@ -3468,7 +3468,7 @@ function buildDetail(id,resetScroll){
   const colSel=canManageParticipants()?`<th style="width:24px;text-align:center"><input type="checkbox" id="chk-todos-asis-${id}" onchange="toggleTodosAsis(this,${id})" title="Seleccionar/deseleccionar todos (de la vista actual)"></th>`:'';
   const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
   const colEstado=`<th style="width:70px" title="Estado del empleado según el Padrón">Estado</th>`;
-  const tableHead=`<thead><tr>${colSel}<th style="width:32px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:115px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:110px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}${colEstado}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr>${colSel}<th style="width:50px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:85px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:85px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}${colEstado}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -3489,7 +3489,7 @@ function buildDetail(id,resetScroll){
     const cuilCell=`<td class="col-cuil" style="font-size:10px;color:#666">${esc(x.cuil||'—')}</td>`;
     // Celda de fecha de evaluación + botón Ver. overflow:visible para que el botón no se recorte.
     const fechaEvalCell=`<td class="col-fevaluac" data-sortkey="${x.fecha_evaluacion||''}" style="font-size:10px;color:#666;overflow:visible;white-space:nowrap">${x.fecha_evaluacion?fmtF(x.fecha_evaluacion):'—'}${verBtn}</td>`;
-    const numCell=`<td style="width:40px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
+    const numCell=`<td style="width:50px;text-align:center;font-size:11px;color:#888;font-weight:600">${index!==null?index+1:'—'}</td>`;
     const _fAntig=getFechaAntiguedad(x.legajo);
     const antigCell=`<td data-sortkey="${_fAntig||''}" style="font-size:10px;color:#666">${_fAntig?fmtF(_fAntig):'—'}</td>`;
     if(esFaltantePadron){
@@ -9367,7 +9367,7 @@ async function importarMasivaParticipantes(event){
         // Si viene en alguna fila, la usamos para actualizar la fecha de la cap
         let fechaCapActualizar=null;
         for(const r of filas){
-          const fv=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||'').trim();
+          const fv=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||r['Fecha evaluacion']||r['fechaEvaluacion']||r['FechaEvaluacion']||r['fecha_eval']||'').trim();
           if(fv&&fv!==''){
             let fp=null;
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fv)){const[d,m,y]=fv.split('/');fp=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
@@ -9406,8 +9406,8 @@ async function importarMasivaParticipantes(event){
           const completo=['si','sí','yes','1','true','x'].includes(String(r.completo||r.Completo||'').toLowerCase().trim());
           const nota=parseFloat(r.nota||r.Nota||'')||null;
 
-          // fecha_evaluacion a nivel participante
-          const fvPart=String(r['fecha_evaluacion']||r['Fecha Evaluación']||'').trim();
+          // fecha_evaluacion a nivel participante — soporta múltiples variantes de nombre de columna
+          const fvPart=String(r['fecha_evaluacion']||r['Fecha Evaluación']||r['fecha evaluacion']||r['Fecha evaluacion']||r['fechaEvaluacion']||r['FechaEvaluacion']||r['fecha_eval']||'').trim();
           let fechaEvalPart=null;
           if(fvPart){
             if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fvPart)){const[d,m,y]=fvPart.split('/');fechaEvalPart=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}

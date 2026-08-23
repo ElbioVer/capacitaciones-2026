@@ -4853,23 +4853,27 @@ function actualizarContadorAsis(capId){
 }
 async function eliminarAsisSeleccionados(capId){
   if(!canManageParticipants()) return;
-  const sel=getAsisSel(capId);
-  const ids=[...sel];
-  if(!ids.length){toast('No hay participantes seleccionados');return;}
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  // Obtener solo los checkboxes seleccionados que están visibles (no filtrados)
+  const idsVisibles=tbody?Array.from(tbody.querySelectorAll('.chk-asis-item:checked')).filter(chk=>chk.closest('tr').style.display!=='none').map(chk=>Number(chk.value)):[];
+  if(!idsVisibles.length){toast('No hay participantes seleccionados en la vista actual');return;}
   const c=caps.find(x=>x.id===capId);
-  const n=ids.length;
+  const n=idsVisibles.length;
   if(!confirm(`⚠️ Se eliminarán ${n} participante${n!==1?'s':''} seleccionado${n!==1?'s':''} de:\n\n"${c?c.titulo:''}"\n\nEsta acción no se puede deshacer.\n\n¿Continuar?`)) return;
   try{
     setSyncStatus('syncing');
     let ok=0,err=0;
-    for(const aid of ids){
+    for(const aid of idsVisibles){
       try{
         await api('DELETE','asistentes','',`?id=eq.${aid}`);
         asistentes=asistentes.filter(a=>a.id!==aid);
         ok++;
       }catch(e){err++;console.error('Error eliminando asistente',aid,e);}
     }
-    sel.clear();
+    // Limpiar selección de los eliminados
+    const sel=getAsisSel(capId);
+    idsVisibles.forEach(id=>sel.delete(id));
+    actualizarContadorAsis(capId);
     // Actualizar participantes_esperados si no es INDUCCION
     if(c&&c.tipo_codigo!=='INDUCCION'){
       const nuevoTotal=getA(capId).length;

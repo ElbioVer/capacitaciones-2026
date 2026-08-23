@@ -3468,7 +3468,7 @@ function buildDetail(id,resetScroll){
   const colSel=canManageParticipants()?`<th style="width:24px;text-align:center"><input type="checkbox" id="chk-todos-asis-${id}" onchange="toggleTodosAsis(this,${id})" title="Seleccionar/deseleccionar todos (de la vista actual)"></th>`:'';
   const colAntig=`<th class="th-sortable" id="th-antig-${id}" style="width:78px" onclick="ordenarAsistentes('antig',${id})" title="Ordenar por Fecha de antigüedad">F. Antigüedad</th>`;
   const colEstado=`<th style="width:70px" title="Estado del empleado según el Padrón">Estado</th>`;
-  const tableHead=`<thead><tr>${colSel}<th style="width:50px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:85px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:85px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}${colEstado}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
+  const tableHead=`<thead><tr>${colSel}<th style="width:50px;text-align:center">#</th><th class="th-sortable" id="th-legajo-${id}" style="width:52px" onclick="ordenarAsistentes('legajo',${id})" title="Ordenar por Legajo">Legajo</th><th class="th-sortable col-nombre" id="th-nombre-${id}" style="width:170px" onclick="ordenarAsistentes('nombre',${id})" title="Ordenar por Nombre">Nombre</th><th class="col-cuil" style="width:85px">CUIL</th><th class="th-sortable" id="th-depto-${id}" style="width:120px" onclick="ordenarAsistentes('depto',${id})" title="Ordenar por Depto">Depto</th>${colAntig}${colEstado}<th style="width:45px">Comp.</th>${colNota}<th class="th-sortable col-fevaluac" id="th-feval-${id}" style="width:120px" onclick="ordenarAsistentes('feval',${id})" title="Ordenar por Fecha de evaluación">F.Evaluac.</th>${colDel}</tr></thead>`;
 
   // Mapa legajo → fecha_calculo_antiguedad del padrón (se muestra en todas las capacitaciones)
   function getFechaAntiguedad(legajo){
@@ -3565,6 +3565,22 @@ function buildDetail(id,resetScroll){
         🚫 Excluir de capacitación (<span id="lbl-cant-xsel-${id}">${getPadronSel(id).size}</span>)
       </button>`:''}
     </div>
+
+    <!-- FILTRO DE F. ANTIGÜEDAD -->
+    <div style="background:#f4f4f2;padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid #e5e5e0">
+      <div style="font-size:11px;color:#777;font-weight:600;margin-bottom:8px;text-transform:uppercase">📅 Filtrar por F. Antigüedad</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:10px;color:#777;min-width:50px">Desde:</label>
+        <input type="date" id="filtro-antig-desde-${id}" style="padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px;background:#fff">
+
+        <label style="font-size:10px;color:#777;min-width:50px;margin-left:8px">Hasta:</label>
+        <input type="date" id="filtro-antig-hasta-${id}" style="padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px;background:#fff">
+
+        <button onclick="limpiarFiltroAntiguedad(${id})" style="background:#fff;color:#666;border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;margin-left:auto">✕ Limpiar filtro</button>
+      </div>
+      <div id="contador-antig-${id}" style="font-size:9px;color:#999;margin-top:6px">Mostrando todos los registros</div>
+    </div>
+
     <div id="tbl-asistentes-${id}" style="overflow-x:auto">
       ${a.length||faltantesSolopadron.length
         ?`<table class="legajo-table" id="tabla-asis-${id}">${tableHead}<tbody id="tbody-asis-${id}">${todasFilasLista.join('')}${filasFaltantesPadron.join('')}</tbody></table>`
@@ -3842,7 +3858,19 @@ function buildDetail(id,resetScroll){
     </div>
     ${tbl}
     <button class="btn-sec" style="width:100%;margin-top:14px" onclick="closeModal()">Cerrar</button>`);
-  requestAnimationFrame(()=>{ if(_modalBox) _modalBox.scrollTop=_prevModalScroll; });
+  requestAnimationFrame(()=>{
+    if(_modalBox) _modalBox.scrollTop=_prevModalScroll;
+
+    // Inicializar filtro de antigüedad
+    setTimeout(()=>{
+      const desdeInput=document.getElementById(`filtro-antig-desde-${id}`);
+      const hastaInput=document.getElementById(`filtro-antig-hasta-${id}`);
+      if(desdeInput && hastaInput){
+        desdeInput.addEventListener('change',()=>aplicarFiltroAntiguedad(id));
+        hastaInput.addEventListener('change',()=>aplicarFiltroAntiguedad(id));
+      }
+    },100);
+  });
 }
 
 // ===== ORDENAR ASISTENTES =====
@@ -4612,6 +4640,70 @@ function filtrarAsistentes(vista, capId){
     else newTitle='Todos';
     titleEl.textContent=newTitle;
   }
+}
+
+// ===== FILTRO DE F. ANTIGÜEDAD (Rango de fechas) =====
+function aplicarFiltroAntiguedad(capId){
+  const desdeInput=document.getElementById(`filtro-antig-desde-${capId}`);
+  const hastaInput=document.getElementById(`filtro-antig-hasta-${capId}`);
+  const contador=document.getElementById(`contador-antig-${capId}`);
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+
+  if(!desdeInput||!hastaInput||!tbody) return;
+
+  const desdeVal=desdeInput.value;
+  const hastaVal=hastaInput.value;
+
+  // Convertir a fechas para comparación
+  const desdeDate=desdeVal?new Date(desdeVal):null;
+  const hastaDate=hastaVal?new Date(hastaVal):null;
+
+  // Obtener todas las filas
+  const filas=tbody.querySelectorAll('tr');
+  let visibles=0;
+
+  filas.forEach(fila=>{
+    const fechaCell=fila.querySelector('[data-sortkey]');
+    if(!fechaCell) { fila.style.display=''; visibles++; return; }
+
+    const fechaStr=fechaCell.getAttribute('data-sortkey');
+    if(!fechaStr || fechaStr===''){
+      fila.style.display='';
+      visibles++;
+      return;
+    }
+
+    // Parsear fecha YYYY-MM-DD
+    const fechaDate=new Date(fechaStr);
+    let mostrar=true;
+
+    if(desdeDate && fechaDate < desdeDate) mostrar=false;
+    if(hastaDate && fechaDate > hastaDate) mostrar=false;
+
+    fila.style.display=mostrar?'':'none';
+    if(mostrar) visibles++;
+  });
+
+  // Actualizar contador
+  if(contador){
+    if(desdeVal || hastaVal){
+      contador.textContent=`Filtrado: ${visibles} de ${filas.length} registros (${desdeVal||'—'} a ${hastaVal||'—'})`;
+    } else {
+      contador.textContent='Mostrando todos los registros';
+    }
+  }
+}
+
+function limpiarFiltroAntiguedad(capId){
+  const desdeInput=document.getElementById(`filtro-antig-desde-${capId}`);
+  const hastaInput=document.getElementById(`filtro-antig-hasta-${capId}`);
+  const contador=document.getElementById(`contador-antig-${capId}`);
+
+  if(desdeInput) desdeInput.value='';
+  if(hastaInput) hastaInput.value='';
+  if(contador) contador.textContent='Mostrando todos los registros';
+
+  aplicarFiltroAntiguedad(capId);
 }
 
 // ===== SELECCIÓN MÚLTIPLE DE ASISTENTES (para depurar/eliminar en lote) =====

@@ -4692,6 +4692,18 @@ function aplicarFiltroAntiguedad(capId){
       contador.textContent='Mostrando todos los registros';
     }
   }
+
+  // Actualizar contador del botón "Eliminar seleccionados" para mostrar solo los visibles
+  const btnEliminar=document.getElementById(`btn-elim-sel-${capId}`);
+  if(btnEliminar){
+    const seleccionados=Array.from(tbody.querySelectorAll('.chk-asis-item:checked')).filter(chk=>chk.closest('tr').style.display!=='none').length;
+    if(seleccionados>0){
+      btnEliminar.textContent=`🗑 Eliminar seleccionados (${seleccionados})`;
+      btnEliminar.style.display='';
+    } else {
+      btnEliminar.style.display='none';
+    }
+  }
 }
 
 function limpiarFiltroAntiguedad(capId){
@@ -4828,11 +4840,16 @@ async function excluirPadronSeleccionados(capId){
   }
 }
 function actualizarContadorAsis(capId){
-  const n=getAsisSel(capId).size;
+  const tbody=document.getElementById(`tbody-asis-${capId}`);
+  // Contar solo los checkboxes seleccionados que están visibles (no filtrados)
+  const seleccionados=tbody?Array.from(tbody.querySelectorAll('.chk-asis-item:checked')).filter(chk=>chk.closest('tr').style.display!=='none').length:0;
   const btn=document.getElementById(`btn-elim-sel-${capId}`);
   const lbl=document.getElementById(`lbl-cant-sel-${capId}`);
-  if(btn) btn.style.display=n>0?'':'none';
-  if(lbl) lbl.textContent=n;
+  if(btn){
+    btn.style.display=seleccionados>0?'':'none';
+    btn.textContent=`🗑 Eliminar seleccionados (${seleccionados})`;
+  }
+  if(lbl) lbl.textContent=seleccionados;
 }
 async function eliminarAsisSeleccionados(capId){
   if(!canManageParticipants()) return;

@@ -258,16 +258,13 @@ select.form-input{cursor:pointer}
 .print-btn { display: inline-flex; align-items: center; gap: 5px; background: #1A2F6E; color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
 .print-btn:hover { background: #142555; }
 </style>
-  <link rel="manifest" href="manifest.webmanifest?v=2">
-  <link rel="icon" href="icons/favicon.ico?v=2" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png?v=2">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2">
+  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBsYW4gZGUgQ2FwYWNpdGFjaW9uIEVNQSIsCiAgInNob3J0X25hbWUiOiAiQ2FwYWNpdGFjaW9uIiwKICAiZGVzY3JpcHRpb24iOiAiUGxhbiBkZSBDYXBhY2l0YWNpb24gMjAyNiAtIEVNQSBTZXJ2aWNpb3MiLAogICJzdGFydF91cmwiOiAiLi8iLAogICJzY29wZSI6ICIuLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImRpc3BsYXlfb3ZlcnJpZGUiOiBbInN0YW5kYWxvbmUiLCAibWluaW1hbC11aSIsICJicm93c2VyIl0sCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2Y0ZjRmMiIsCiAgInRoZW1lX2NvbG9yIjogIiMxRDlFNzUiLAogICJvcmllbnRhdGlvbiI6ICJwb3J0cmFpdC1wcmltYXJ5IiwKICAicHJlZmVyX3JlbGF0ZWRfYXBwbGljYXRpb25zIjogZmFsc2UsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDE5MiAxOTInPjxyZWN0IHdpZHRoPScxOTInIGhlaWdodD0nMTkyJyByeD0nMjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzE0MCcgeD0nOTYnIGZvbnQtc2l6ZT0nMTIwJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmaWxsPSd3aGl0ZSc+RTwvdGV4dD48L3N2Zz4iLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiLAogICAgICAicHVycG9zZSI6ICJhbnkgbWFza2FibGUiCiAgICB9LAogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDUxMiA1MTInPjxyZWN0IHdpZHRoPSc1MTInIGhlaWdodD0nNTEyJyByeD0nNjQnIGZpbGw9JyUyMzFBMkY2RScvPjx0ZXh0IHk9JzM4MCcgeD0nMjU2JyBmb250LXNpemU9JzMyMCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nd2hpdGUnPkU8L3RleHQ+PC9zdmc+IiwKICAgICAgInNpemVzIjogIjUxMng1MTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwKICAgICAgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIgogICAgfQogIF0sCiAgImNhdGVnb3JpZXMiOiBbImJ1c2luZXNzIiwgInByb2R1Y3Rpdml0eSJdLAogICJsYW5nIjogImVzIgp9">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Capacitación">
   <meta name="theme-color" content="#1D9E75">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=2">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,&lt;svg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 100 100&#39;&gt;&lt;rect width=&#39;100&#39; height=&#39;100&#39; fill=&#39;%231A2F6E&#39;/&gt;&lt;text y=&#39;70&#39; x=&#39;50&#39; font-size=&#39;60&#39; text-anchor=&#39;middle&#39; fill=&#39;white&#39;&gt;E&lt;/text&gt;&lt;/svg&gt;">
 </head>
 <body>
 
@@ -423,6 +420,9 @@ const BIMESTRES=['1° Bimestre (Ene-Feb)','2° Bimestre (Mar-Abr)','3° Bimestre
 
 let caps=[],asistentes=[],uns=[],sectores=[],departamentos=[],usuarios=[],tipos=[],materiales=[],evaluaciones=[],preguntas=[],padron=[];
 let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='fecha';
+// Registro de importaciones del padrón (tabla padron_cargas).
+// null = todavía no consultado · false = tabla inexistente · objeto = {completo, ingresos}
+let padronCargas=null;
 // Estado del panel "Limpiar plan de capacitación" (persisten entre rerenders/auto-refresh)
 let _limpFltTipo='', _limpFltUN='';
 let _limpSel=new Set(); // ids de capacitaciones tildadas para borrar
@@ -950,6 +950,7 @@ async function loadAll(){
     guardarCache();   // la cache SOLO se escribe con datos verificados completos
     setSyncStatus('ok');updateSub();populateFilters();renderContent();
     try{ chequearRecordatorioBackup(); }catch(_){}
+    cargarPadronCargas();   // sin await: es un dato accesorio
   }catch(e){
     // Ninguna asignacion ocurrio: los arrays quedan como estaban (cache o vacio).
     // No se guarda cache y quedan bloqueados los borrados.
@@ -2144,6 +2145,7 @@ function renderPadron(filtro){
       `:''}
     </div>
   </div>
+  ${renderPadronActualizacion()}
   ${total===0?`<div style="text-align:center;padding:32px;color:#aaa;font-size:13px">No hay empleados cargados. Importá un Excel para comenzar.</div>`:`
   <div style="overflow:auto;border-radius:8px;border:1px solid #e0e0e0;max-height:calc(100vh - 310px)">
     <table style="width:100%;border-collapse:collapse;min-width:1200px">
@@ -2460,6 +2462,70 @@ async function recordarEnMasaPendientes(capId){
   },300*enviados+500);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ÚLTIMA ACTUALIZACIÓN DEL PADRÓN
+// Distingue la importación del padrón COMPLETO (Excel de RR.HH.) de la subida
+// diaria de ingresos nuevos (CSV "CARGA EN TU RECIBO"). Se consultan solo 2 filas
+// (la última de cada tipo) para no gastar egress. Si la tabla padron_cargas no
+// existe, el dato simplemente no se muestra: nada se rompe.
+// ═══════════════════════════════════════════════════════════════════════════
+async function cargarPadronCargas(){
+  if(!isAdmin()&&!isCapacitador()) return;
+  try{
+    const sel='select=fecha,tipo,registros,usuario&order=fecha.desc&limit=1';
+    const [comp,ing]=await Promise.all([
+      api('GET','padron_cargas','',`?tipo=eq.completo&${sel}`),
+      api('GET','padron_cargas','',`?tipo=eq.ingresos&${sel}`)
+    ]);
+    padronCargas={completo:(comp&&comp[0])||null,ingresos:(ing&&ing[0])||null};
+  }catch(e){
+    padronCargas=false;
+    console.warn('padron_cargas no disponible (¿falta crear la tabla?):',e&&e.message);
+  }
+  if(currentTab==='padron') renderContent();
+}
+async function registrarCargaPadron(tipo,registros,archivo){
+  try{
+    await api('POST','padron_cargas',{tipo,registros,
+      usuario:(currentUser&&(currentUser.nombre||currentUser.email))||null,
+      archivo:archivo||null},'',{'Prefer':'return=minimal'});
+  }catch(e){console.warn('No se pudo registrar la carga del padrón:',e&&e.message);}
+}
+function _haceTxt(iso){
+  const d=new Date(iso); if(isNaN(d)) return '';
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const dia=new Date(d); dia.setHours(0,0,0,0);
+  const n=Math.round((hoy-dia)/86400000);
+  return n<=0?'hoy':n===1?'ayer':`hace ${n} días`;
+}
+function _fechaCorta(iso){
+  const d=new Date(iso); if(isNaN(d)) return '';
+  return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+
+         d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function renderPadronActualizacion(){
+  if(padronCargas===null) return '';
+  const wrap=(html)=>`<div style="font-size:10px;color:#999;margin:-4px 0 8px 2px;line-height:1.5">${html}</div>`;
+  if(padronCargas===false){
+    return isAdmin()?wrap('Fecha de actualización del padrón no disponible: falta la tabla <em>padron_cargas</em> (ver 🔍 Diagnóstico).'):'';
+  }
+  const c=padronCargas.completo, i=padronCargas.ingresos;
+  let partes=[];
+  if(c){
+    const dias=Math.round((Date.now()-new Date(c.fecha))/86400000);
+    const viejo=dias>35;
+    const col=viejo?'#B7791F':'#777';
+    const tip=`Última importación del padrón completo${c.usuario?' por '+c.usuario:''}${c.registros?' ('+c.registros+' registros)':''}`;
+    partes.push(`<span title="${esc(tip)}">Padrón completo actualizado el <span style="color:${col};font-weight:600">${_fechaCorta(c.fecha)}</span> (${_haceTxt(c.fecha)})${viejo?' ⚠':''}</span>`);
+  } else {
+    partes.push('Padrón completo: sin registro todavía (se anota en la próxima importación completa)');
+  }
+  if(i){
+    partes.push(`<span title="${esc('Última subida del CSV de ingresos nuevos'+(i.usuario?' por '+i.usuario:''))}">últimos ingresos ${_haceTxt(i.fecha)}, ${_fechaCorta(i.fecha).split(' ')[1]}${i.registros?` (+${i.registros})`:''}</span>`);
+  }
+  return wrap(partes.join(' &nbsp;|&nbsp; '));
+}
+
 async function diagnosticarPadron(){
   if(!isAdmin()){toast('Sin permisos');return;}
   toast('Consultando estructura de la base de datos...',5000);
@@ -2503,6 +2569,14 @@ async function diagnosticarPadron(){
       reporte+='\n\n(Si acá NO aparece "Fecha cálculo antigüedad", "Teléfono" o "Correo", ese archivo no traía esos datos.)';
     } else {
       reporte+='\n─────────────────────\n\n📄 Todavía no importaste ningún archivo en esta sesión. Importá el padrón y volvé a tocar Diagnóstico para ver qué columnas trae.';
+    }
+    if(padronCargas===false){
+      reporte+='\n\n─────────────────────\n\n🕒 FALTA LA TABLA "padron_cargas" (fecha de última actualización del padrón).\nEJECUTÁ ESTE SQL EN SUPABASE:\n\n'
+        +'CREATE TABLE IF NOT EXISTS padron_cargas (\n  id BIGSERIAL PRIMARY KEY,\n  fecha TIMESTAMPTZ NOT NULL DEFAULT now(),\n  tipo TEXT NOT NULL CHECK (tipo IN (\'completo\',\'ingresos\',\'parcial\')),\n  registros INT,\n  usuario TEXT,\n  archivo TEXT\n);\n'
+        +'CREATE INDEX IF NOT EXISTS padron_cargas_tipo_fecha ON padron_cargas (tipo, fecha DESC);\n'
+        +'ALTER TABLE padron_cargas ENABLE ROW LEVEL SECURITY;\n'
+        +'CREATE POLICY padron_cargas_leer ON padron_cargas FOR SELECT TO anon USING (true);\n'
+        +'CREATE POLICY padron_cargas_anotar ON padron_cargas FOR INSERT TO anon WITH CHECK (true);';
     }
     alert(reporte);
   }catch(e){
@@ -2711,6 +2785,13 @@ async function importarPadron(event){
         });
         if(_celDup>0) console.warn(_celDup+' celulares duplicados en el archivo se dejaron vacíos');
       }
+      // Clasificación para el registro de actualizaciones:
+      //  · ingresos → CSV "CARGA EN TU RECIBO" (columnas con (*))
+      //  · completo → Excel de padrón que cubre al menos el 80% de los vigentes actuales
+      //  · parcial  → cualquier otro archivo (ej: solo teléfonos de un sector)
+      const _esRecibo=_hdrSlugs.some(h=>['numerolegajo(*)','nombre(*)','apellido(*)','dni(*)','cuil(*)','email(*)'].includes(h));
+      const _vigPrev=padron.filter(p=>!p.estado||p.estado==='Vigente').length;
+      const _cubreTodo=nuevos.length>=Math.round(_vigPrev*0.8);
       setSyncStatus('syncing');
       const CHUNK=500;
       let importados=0;
@@ -2725,6 +2806,10 @@ async function importarPadron(event){
         }catch(e){errores+=lote.length;ultimoError=(e&&e.message)||String(e);console.warn('Error en lote',i,e);}
       }
       await syncUNsSectoresDesde(nuevos);
+      if(importados>0){
+        const _tipoCarga=_esRecibo?'ingresos':(errores===0&&_cubreTodo?'completo':'parcial');
+        await registrarCargaPadron(_tipoCarga,importados,file.name);
+      }
       await loadAll();
       if(errores>0){
         // Mostrar el error real de Supabase para poder diagnosticar

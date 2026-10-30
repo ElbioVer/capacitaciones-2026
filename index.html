@@ -423,6 +423,15 @@ let currentTab='lista',fltBim='',fltUN='',fltSec='',fltTipo='',sortOrder='fecha'
 // Registro de importaciones del padrón (tabla padron_cargas).
 // null = todavía no consultado · false = tabla inexistente · objeto = {completo, ingresos}
 let padronCargas=null;
+// UN / sectores / departamentos marcados "(o)" en el Excel de RR.HH. son estructuras
+// viejas que ya no corresponden. No se muestran, no se crean al importar y se
+// pueden borrar de la base desde Configuración.
+function esObsoleto(n){ return /\(\s*o\s*\)\s*$/i.test(String(n||'').trim()); }
+function quitarObsoletosEnMemoria(){
+  uns=uns.filter(u=>!esObsoleto(u.nombre));
+  sectores=sectores.filter(x=>!esObsoleto(x.nombre)&&!esObsoleto(x.un));
+  departamentos=departamentos.filter(d=>!esObsoleto(d));
+}
 // Estado del panel "Limpiar plan de capacitación" (persisten entre rerenders/auto-refresh)
 let _limpFltTipo='', _limpFltUN='';
 let _limpSel=new Set(); // ids de capacitaciones tildadas para borrar
@@ -904,6 +913,7 @@ async function hidratarDesdeCache(){
     departamentos=s.departamentos||[]; tipos=s.tipos||[]; materiales=s.materiales||[];
     evaluaciones=s.evaluaciones||[]; preguntas=s.preguntas||[]; padron=s.padron||[];
     if(isAdmin()) usuarios=s.usuarios||[];
+    quitarObsoletosEnMemoria();
     aplicarEstadosEnMemoria(); updateSub(); populateFilters(); renderContent(); pintarEstadoCopia();
     _dataOk=false; _fullOk=false;  // datos de cache: sin verificar, borrado bloqueado
     const sub=document.getElementById('hdr-sub'); if(sub) sub.textContent='Mostrando \u00faltima copia \u2014 actualizando...';
@@ -942,6 +952,7 @@ async function loadAll(){
     padron=res[8]||[];
     if(isAdmin()) usuarios=res[9]||[];
     departamentos=[...new Set(padron.map(p=>p.departamento).filter(Boolean))].sort();
+    quitarObsoletosEnMemoria();
     aplicarEstadosEnMemoria();
     // Marca de agua para que el refresco siguiente sea incremental
     _wm.asistentes=_maxUpd(asistentes); _wm.capacitaciones=_maxUpd(caps);
@@ -1254,7 +1265,7 @@ function populateFilters(){
     const deptosFiltro=[...new Set(
       padron.filter(p=>!fltUN||p.un===fltUN)
         .map(p=>p.departamento||p.datos_extra?.Departamento)
-        .filter(Boolean)
+        .filter(d=>d&&!esObsoleto(d))
     )].sort();
     secEl.innerHTML='<option value="">Todos</option>'+deptosFiltro.map(d=>`<option value="${esc(d)}"${fltSec===d?' selected':''}>${esc(d)}</option>`).join('');
   }
@@ -2297,9 +2308,10 @@ async function exportarEstructura(){
 
 async function syncUNsSectoresDesde(registros){
   // Extraer UN únicas del padrón
-  const unNombres=[...new Set(registros.map(r=>r.un).filter(Boolean))];
+  // Las estructuras marcadas "(o)" no se vuelven a crear
+  const unNombres=[...new Set(registros.map(r=>r.un).filter(n=>n&&!esObsoleto(n)))];
   const secPares=[...new Map(
-    registros.filter(r=>r.sector&&r.un).map(r=>`${r.un}|||${r.sector}`)
+    registros.filter(r=>r.sector&&r.un&&!esObsoleto(r.sector)&&!esObsoleto(r.un)).map(r=>`${r.un}|||${r.sector}`)
     .filter((v,i,a)=>a.indexOf(v)===i)
     .map(v=>v.split('|||'))
     .map(([u,s])=>[`${u}|||${s}`,{un:u,nombre:s}])
@@ -2733,11 +2745,11 @@ async function importarPadron(event){
         // sector en el padrón (ignorando los que tienen "Por asignar")
         if(sectorCSV){
           if(!unVal){
-            const m=padron.find(p=>p.sector===sectorCSV&&p.un&&p.un!=='Por asignar');
+            const m=padron.find(p=>p.sector===sectorCSV&&p.un&&p.un!=='Por asignar'&&!esObsoleto(p.un));
             if(m) unVal=m.un;
           }
           if(!deptoVal){
-            const m=padron.find(p=>p.sector===sectorCSV&&p.departamento&&p.departamento!=='Por asignar');
+            const m=padron.find(p=>p.sector===sectorCSV&&p.departamento&&p.departamento!=='Por asignar'&&!esObsoleto(p.departamento));
             if(m) deptoVal=m.departamento;
           }
         }
@@ -3256,7 +3268,7 @@ function renderConfig(){
       La restauraci\u00f3n <strong>no borra</strong>: inserta o actualiza por id y conserva lo que hoy exista.
     </div>
   </div>
-  <div class="config-section"><div class="config-title">Unidades de negocio<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></div><div class="tag-list">${unTags}</div></div>
+  <div class="config-section"><div class="config-title">Unidades de negocio<span style="display:flex;gap:6px"><button class="btn-sm" style="font-size:11px;padding:4px 9px;background:#854F0B;color:#fff" onclick="limpiarEstructuraObsoleta()" title="Borra de la base las UN y sectores marcados (o)">🧹 Quitar los (o)</button><button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addUN()">+ Agregar</button></span></div><div class="tag-list">${unTags}</div></div>
   <div class="config-section"><div class="config-title">Departamentos<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addDepto()">+ Agregar</button></div><div style="font-size:11px;color:#888;margin-bottom:6px">Los departamentos se cargan automáticamente desde el padrón. También podés agregar manualmente.</div><div class="tag-list scrollable">${deptTags}</div></div>
   <div class="config-section"><div class="config-title">Sectores<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addSector()">+ Agregar</button></div><div class="tag-list scrollable">${secTags}</div></div>
   <div class="config-section"><div class="config-title">Tipos de capacitación<button class="btn-green" style="font-size:11px;padding:4px 9px" onclick="addTipo()">+ Nuevo tipo</button></div>${tipoRows}</div>
@@ -6644,6 +6656,28 @@ function delDepto(nombre){
 }
 
 async function addUN(){if(!isAdmin())return;const n=prompt('Nombre de la nueva UN:');if(!n||!n.trim())return;if(uns.find(u=>u.nombre===n.trim())){toast('Ya existe');return;}try{const r=await api('POST','unidades_negocio',{nombre:n.trim()},'');const nv=Array.isArray(r)?r[0]:r;if(nv)uns.push(nv);populateFilters();renderContent();toast('UN agregada');}catch(e){toast('Error');}}
+async function limpiarEstructuraObsoleta(){
+  if(!isAdmin()){toast('Sin permisos');return;}
+  if(!puedeBorrar()) return;
+  try{
+    // Se consulta la base directamente: en memoria ya están ocultos
+    const [unDB,secDB]=await Promise.all([getAll('unidades_negocio','?order=nombre.asc'),getAll('sectores','?order=nombre.asc')]);
+    const unObs=unDB.filter(u=>esObsoleto(u.nombre));
+    const secObs=secDB.filter(x=>esObsoleto(x.nombre)||esObsoleto(x.un));
+    if(!unObs.length&&!secObs.length){toast('No hay UN ni sectores marcados (o)');return;}
+    const lista=(a,f)=>a.slice(0,25).map(f).join('\n')+(a.length>25?`\n… y ${a.length-25} más`:'');
+    let msg=`Se van a borrar de la base:\n\n`;
+    if(unObs.length) msg+=`${unObs.length} UN:\n${lista(unObs,u=>'• '+u.nombre)}\n\n`;
+    if(secObs.length) msg+=`${secObs.length} sector(es):\n${lista(secObs,x=>'• '+x.nombre+' ('+x.un+')')}\n\n`;
+    msg+='Los empleados del padrón y las capacitaciones NO se tocan. ¿Continuar?';
+    if(!confirm(msg)) return;
+    const borrarIds=async(tabla,ids)=>{for(let i=0;i<ids.length;i+=100) await api('DELETE',tabla,'',`?id=in.(${ids.slice(i,i+100).join(',')})`);};
+    if(secObs.length) await borrarIds('sectores',secObs.map(x=>x.id));
+    if(unObs.length) await borrarIds('unidades_negocio',unObs.map(u=>u.id));
+    quitarObsoletosEnMemoria(); populateFilters(); renderContent();
+    toast(`✓ Borrados ${unObs.length} UN y ${secObs.length} sectores (o)`);
+  }catch(e){alert('No se pudo completar la limpieza:\n\n'+((e&&e.message)||String(e)));}
+}
 async function delUN(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar la UN "${nombre}"?`))return;try{await api('DELETE','unidades_negocio','',`?id=eq.${id}`);uns=uns.filter(u=>u.id!==id);populateFilters();renderContent();toast('UN eliminada');}catch(e){toast('Error');}}
 async function addSector(){if(!isAdmin())return;if(!uns.length){alert('Primero agregá una UN.');return;}const unN=prompt(`¿A qué UN pertenece?\nOpciones: ${uns.map(u=>u.nombre).join(', ')}`);if(!unN)return;const unReal=uns.find(u=>u.nombre.toLowerCase()===unN.trim().toLowerCase());if(!unReal){alert('UN no encontrada.');return;}const n=prompt('Nombre del sector:');if(!n||!n.trim())return;if(sectores.find(s=>s.nombre.toLowerCase()===n.trim().toLowerCase()&&s.un===unReal.nombre)){toast('Ya existe');return;}try{const r=await api('POST','sectores',{nombre:n.trim(),un:unReal.nombre},'');const nv=Array.isArray(r)?r[0]:r;if(nv)sectores.push(nv);populateFilters();renderContent();toast('Sector agregado');}catch(e){toast('Error');}}
 async function delSector(id,nombre){if(!isAdmin()||!confirm(`¿Eliminar "${nombre}"?`))return;try{await api('DELETE','sectores','',`?id=eq.${id}`);sectores=sectores.filter(s=>s.id!==id);populateFilters();renderContent();toast('Sector eliminado');}catch(e){toast('Error');}}
@@ -6659,7 +6693,7 @@ function _deptosDelPadronParaUN(un){
   return [...new Set(
     padron.filter(p=>!un||p.un===un)
       .map(p=>p.departamento||p.datos_extra?.Departamento)
-      .filter(Boolean)
+      .filter(d=>d&&!esObsoleto(d))
   )].sort();
 }
 function _parDeptosCheckboxHtml(i,un,selected){
